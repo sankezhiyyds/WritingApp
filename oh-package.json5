@@ -1,18 +1,8 @@
 {
-  "app": {
-    "buildModeSet": [
-      {
-        "name": "debug"
-      },
-      {
-        "name": "release"
-      }
-    ]
-  },
-  "modules": [
-    {
-      "buildOption": {},
-      "name": "entry"
-    }
-  ]
+  "modelVersion": "5.0.0",
+  "name": "writingapp",
+  "version": "1.0.0",
+  "description": "专业写作助手，提供多种写作模板与创作指导",
+  "dependencies": {},
+  "devDependencies": {}
 }

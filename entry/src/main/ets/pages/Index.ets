@@ -1,51 +1,74 @@
-import { templateList } from '../model/TemplateModel';
+import { templateList, TemplateInfo, TemplateField } from '../model/TemplateModel';
+import { workManager, WorkItem } from '../model/WorkManager';
+import { settingsManager } from '../model/SettingsManager';
 import router from '@ohos.router';
+import promptAction from '@ohos.promptAction';
 
 @Entry
 @Component
 struct Index {
-  @State activeTab: number = 0;
+  @State currentIndex: number = 0;
+  private controller: TabsController = new TabsController();
 
   build() {
     Column() {
-      NavDestination() {
-        Stack() {
-          TabRow({ activeIndex: this.activeTab, barWidth: '100%' }) {
-            TabContent() {
-              TemplateListPage()
-            }
-            TabContent() {
-              WorkManagerPage()
-            }
-            TabContent() {
-              SettingsPage()
-            }
-          }
-          .barHeight(56)
-          .barBackgroundColor('#FFFFFF')
-          .barShadow('0px 2px 8px rgba(0,0,0,0.08)')
-          .selectedIndex(this.activeTab)
-          .onChange((index: number) => {
-            this.activeTab = index;
-          })
+      Tabs({ barPosition: BarPosition.End, controller: this.controller }) {
+        TabContent() {
+          TemplateListTab()
         }
-        .layoutWeight(1)
+        .tabBar(this.TabBuilder('模板库', '📚', 0))
+
+        TabContent() {
+          WorkManagerTab()
+        }
+        .tabBar(this.TabBuilder('我的作品', '📝', 1))
+
+        TabContent() {
+          SettingsTab()
+        }
+        .tabBar(this.TabBuilder('设置', '⚙️', 2))
       }
+      .barHeight(56)
+      .barBackgroundColor('#FFFFFF')
+      .onChange((index: number) => {
+        this.currentIndex = index;
+      })
     }
     .width('100%')
     .height('100%')
     .backgroundColor('#F5F6FA')
   }
+
+  @Builder
+  TabBuilder(title: string, icon: string, index: number) {
+    Column() {
+      Text(icon)
+        .fontSize(20)
+      Text(title)
+        .fontSize(10)
+        .fontColor(this.currentIndex === index ? '#FF2D55' : '#9CA3AF')
+        .margin({ top: 2 })
+    }
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+  }
 }
 
+// ========== 模板库 Tab ==========
 @Component
-struct TemplateListPage {
+struct TemplateListTab {
   @State templates: TemplateInfo[] = templateList;
-  @State searchText: string = '';
+  @State activeCategory: string = '全部';
+  @State filteredTemplates: TemplateInfo[] = templateList;
+
+  aboutToAppear() {
+    this.filterTemplates('全部');
+  }
 
   build() {
     Column() {
-      // 顶部标题栏
       Row() {
         Text('写书助手')
           .fontSize(22)
@@ -63,19 +86,17 @@ struct TemplateListPage {
       .padding({ left: 16, right: 16, top: 12, bottom: 12 })
       .backgroundColor('#FFFFFF')
 
-      // 分类筛选
       Row() {
-        this.CategoryChip('全部', true)
-        this.CategoryChip('剧本类', false)
-        this.CategoryChip('叙事类', false)
-        this.CategoryChip('喜剧类', false)
+        this.CategoryChip('全部')
+        this.CategoryChip('剧本类')
+        this.CategoryChip('叙事类')
+        this.CategoryChip('喜剧类')
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 12, bottom: 8 })
 
-      // 模板网格
       Grid() {
-        ForEach(this.templates, (item: TemplateInfo) => {
+        ForEach(this.filteredTemplates, (item: TemplateInfo) => {
           GridItem() {
             TemplateCard({ template: item })
           }
@@ -84,7 +105,7 @@ struct TemplateListPage {
       .columnsTemplate('1fr 1fr 1fr')
       .rowsGap(12)
       .columnsGap(12)
-      .padding({ left: 16, right: 16, top: 8 })
+      .padding({ left: 16, right: 16 })
       .layoutWeight(1)
     }
     .width('100%')
@@ -92,15 +113,28 @@ struct TemplateListPage {
     .backgroundColor('#F5F6FA')
   }
 
-  CategoryChip(text: string, active: boolean): Button {
+  @Builder
+  CategoryChip(text: string) {
     Button(text)
       .fontSize(12)
-      .fontColor(active ? '#FFFFFF' : '#6B7280')
-      .backgroundColor(active ? '#FF2D55' : '#E5E7EB')
+      .fontColor(this.activeCategory === text ? '#FFFFFF' : '#6B7280')
+      .backgroundColor(this.activeCategory === text ? '#FF2D55' : '#E5E7EB')
       .borderRadius(12)
       .height(28)
       .padding({ left: 12, right: 12 })
       .margin({ right: 8 })
+      .onClick(() => {
+        this.activeCategory = text;
+        this.filterTemplates(text);
+      })
+  }
+
+  filterTemplates(category: string) {
+    if (category === '全部') {
+      this.filteredTemplates = this.templates;
+    } else {
+      this.filteredTemplates = this.templates.filter(t => t.category === category);
+    }
   }
 }
 
@@ -153,9 +187,15 @@ struct TemplateCard {
   }
 }
 
+// ========== 我的作品 Tab ==========
 @Component
-struct WorkManagerPage {
+struct WorkManagerTab {
   @State works: WorkItem[] = [];
+  @State activeFilter: number = 0;
+
+  aboutToAppear() {
+    this.loadWorks();
+  }
 
   build() {
     Column() {
@@ -179,6 +219,14 @@ struct WorkManagerPage {
       .width('100%')
       .padding({ left: 16, right: 16, top: 12, bottom: 12 })
       .backgroundColor('#FFFFFF')
+
+      Row() {
+        this.FilterChip('全部', 0)
+        this.FilterChip('今日', 1)
+        this.FilterChip('本周', 2)
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 8, bottom: 8 })
 
       if (this.works.length === 0) {
         Column() {
@@ -211,6 +259,47 @@ struct WorkManagerPage {
     .height('100%')
     .backgroundColor('#F5F6FA')
   }
+
+  @Builder
+  FilterChip(text: string, index: number) {
+    Button(text)
+      .fontSize(12)
+      .fontColor(this.activeFilter === index ? '#FFFFFF' : '#6B7280')
+      .backgroundColor(this.activeFilter === index ? '#FF2D55' : '#E5E7EB')
+      .borderRadius(12)
+      .height(28)
+      .padding({ left: 12, right: 12 })
+      .margin({ right: 8 })
+      .onClick(() => {
+        this.activeFilter = index;
+        this.loadWorks();
+      })
+  }
+
+  loadWorks() {
+    let allWorks = workManager.getAllWorks();
+    if (this.activeFilter === 1) {
+      const today = this.formatToday();
+      allWorks = allWorks.filter(w => w.createTime.startsWith(today));
+    } else if (this.activeFilter === 2) {
+      const weekAgo = this.formatWeekAgo();
+      allWorks = allWorks.filter(w => w.createTime >= weekAgo);
+    }
+    this.works = allWorks;
+  }
+
+  private formatToday(): string {
+    const now = new Date();
+    const pad = (n: number): string => n < 10 ? '0' + n : '' + n;
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  }
+
+  private formatWeekAgo(): string {
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const pad = (n: number): string => n < 10 ? '0' + n : '' + n;
+    return `${weekAgo.getFullYear()}-${pad(weekAgo.getMonth() + 1)}-${pad(weekAgo.getDate())}`;
+  }
 }
 
 @Component
@@ -220,7 +309,7 @@ struct WorkCard {
   build() {
     Row() {
       Column() {
-        Text(this.work.title)
+        Text(this.work.title || '未命名作品')
           .fontSize(15)
           .fontWeight(FontWeight.Medium)
           .fontColor('#1A1A2E')
@@ -235,7 +324,7 @@ struct WorkCard {
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
-      
+
       Text('>')
         .fontSize(18)
         .fontColor('#D1D5DB')
@@ -255,11 +344,18 @@ struct WorkCard {
   }
 }
 
+// ========== 设置 Tab ==========
 @Component
-struct SettingsPage {
+struct SettingsTab {
   @State apiKey: string = '';
   @State selectedModel: string = 'deepseek';
   @State customUrl: string = '';
+  @State showApiKeyInput: boolean = false;
+  @State apiKeyInput: string = '';
+
+  aboutToAppear() {
+    this.loadSettings();
+  }
 
   build() {
     Column() {
@@ -275,89 +371,122 @@ struct SettingsPage {
 
       List() {
         ListItem() {
-          SettingSection(title: 'AI 模型配置', items: [
-            SettingItem(label: 'API Key', value: this.apiKey ? '已配置' : '未配置',
-              action: () => this.showApiKeyDialog())
+          this.SettingSection('AI 模型配置', [
+            { label: 'API Key', value: this.apiKey ? '已配置' : '未配置', editable: true }
           ])
         }
-        
+        .onClick(() => {
+          this.apiKeyInput = this.apiKey;
+          this.showApiKeyInput = true;
+        })
+
         ListItem() {
-          SettingSection(title: '模型选择', items: [
-            SettingItem(label: '当前模型', value: this.getModelName(),
-              action: () => this.showModelPicker())
+          this.SettingSection('模型选择', [
+            { label: '当前模型', value: this.getModelName(), editable: true }
+          ])
+        }
+        .onClick(() => this.showModelPicker())
+
+        ListItem() {
+          this.SettingSection('写作技巧', [
+            { label: 'Token压缩', value: '用42字写5个有效信息', editable: false },
+            { label: '行为锚定', value: '多写具体行为，少写空洞情绪词', editable: false },
+            { label: '视觉化描述', value: '用画面代替抽象概念', editable: false }
           ])
         }
 
         ListItem() {
-          SettingSection(title: '使用提示', items: [
-            SettingItem(label: 'Token压缩', value: '用42字写5个有效信息', editable: false),
-            SettingItem(label: '行为锚定', value: '多写具体行为，少写空洞情绪词', editable: false),
-            SettingItem(label: '视觉化描述', value: '用画面代替抽象概念', editable: false)
+          this.SettingSection('关于', [
+            { label: '版本', value: '1.0.0', editable: false },
+            { label: '开发者', value: '个人开发者', editable: false }
           ])
         }
       }
       .layoutWeight(1)
       .padding({ top: 8 })
+
+      // API Key 输入弹层
+      if (this.showApiKeyInput) {
+        Column() {
+          Column() {
+            Text('设置 API Key')
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#1A1A2E')
+              .margin({ bottom: 8 })
+            Text('仅本地存储，不会上传到任何服务器')
+              .fontSize(12)
+              .fontColor('#9CA3AF')
+              .margin({ bottom: 12 })
+            TextInput({ placeholder: '请输入 API Key', text: this.apiKeyInput })
+              .width('100%')
+              .height(44)
+              .fontSize(14)
+              .backgroundColor('#F9FAFB')
+              .borderRadius(8)
+              .padding({ left: 12, right: 12 })
+              .onChange((value: string) => {
+                this.apiKeyInput = value;
+              })
+            Row() {
+              Button('取消')
+                .fontSize(14)
+                .fontColor('#6B7280')
+                .backgroundColor('#F3F4F6')
+                .borderRadius(20)
+                .height(40)
+                .layoutWeight(1)
+                .margin({ right: 12 })
+                .onClick(() => {
+                  this.showApiKeyInput = false;
+                })
+              Button('保存')
+                .fontSize(14)
+                .fontColor('#FFFFFF')
+                .backgroundColor('#FF2D55')
+                .borderRadius(20)
+                .height(40)
+                .layoutWeight(1)
+                .onClick(() => {
+                  this.apiKey = this.apiKeyInput.trim();
+                  this.saveSettings();
+                  this.showApiKeyInput = false;
+                  promptAction.showToast({ message: '已保存', duration: 2000 });
+                })
+            }
+            .width('100%')
+            .margin({ top: 16 })
+          }
+          .width('100%')
+          .padding(20)
+          .backgroundColor('#FFFFFF')
+          .borderRadius(16)
+          .margin({ left: 24, right: 24 })
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0,0,0,0.5)')
+        .justifyContent(FlexAlign.Center)
+        .position({ x: 0, y: 0 })
+        .onClick(() => {
+          this.showApiKeyInput = false;
+        })
+      }
     }
     .width('100%')
     .height('100%')
     .backgroundColor('#F5F6FA')
   }
 
-  getModelName(): string {
-    switch (this.selectedModel) {
-      case 'deepseek': return 'DeepSeek';
-      case 'glm': return '智谱 GLM';
-      case 'baidu': return '百度文心';
-      case 'custom': return '自定义接口';
-      default: return 'DeepSeek';
-    }
-  }
-
-  showApiKeyDialog() {
-    promptAction.showDialog({
-      title: '设置 API Key',
-      message: '请输入您的 API Key（仅本地存储，不会上传）',
-      primaryButton: {
-        value: '取消',
-        action: () => {}
-      },
-      secondaryButton: {
-        value: '保存',
-        action: () => {
-          // 实际项目中应保存到 LocalStorage
-          promptAction.showToast({ message: '已保存', duration: 2000 });
-        }
-      }
-    });
-  }
-
-  showModelPicker() {
-    promptAction.showActionSheet({
-      menu: ['DeepSeek', '智谱 GLM', '百度文心', '自定义接口']
-    }).then((value) => {
-      const models = ['deepseek', 'glm', 'baidu', 'custom'];
-      const index = value.index;
-      if (index >= 0 && index < models.length) {
-        this.selectedModel = models[index];
-      }
-    });
-  }
-}
-
-@Component
-struct SettingSection {
-  @Param title: string;
-  @Param items: SettingItemData[];
-
-  build() {
+  @Builder
+  SettingSection(title: string, items: SettingItemData[]) {
     Column() {
-      Text(this.title)
+      Text(title)
         .fontSize(12)
         .fontColor('#9CA3AF')
         .padding({ left: 16, bottom: 8 })
-      
-      ForEach(this.items, (item: SettingItemData) => {
+
+      ForEach(items, (item: SettingItemData) => {
         Row() {
           Column() {
             Text(item.label)
@@ -370,84 +499,67 @@ struct SettingSection {
           }
           .alignItems(HorizontalAlign.Start)
           .layoutWeight(1)
-          
-          if (item.action) {
+
+          if (item.editable) {
             Text('>')
               .fontSize(16)
               .fontColor('#D1D5DB')
-              .onClick(item.action)
           }
         }
         .width('100%')
         .padding({ left: 16, right: 16, top: 14, bottom: 14 })
         .backgroundColor('#FFFFFF')
-        
+
         Divider().color('#F3F4F6').strokeWidth(0.5).margin({ left: 16, right: 16 })
       }, (item: SettingItemData) => item.label)
     }
     .backgroundColor('#FFFFFF')
+  }
+
+  getModelName(): string {
+    switch (this.selectedModel) {
+      case 'deepseek': return 'DeepSeek';
+      case 'glm': return '智谱 GLM';
+      case 'baidu': return '百度文心';
+      case 'custom': return '自定义接口';
+      default: return 'DeepSeek';
+    }
+  }
+
+  showModelPicker() {
+    promptAction.showActionMenu({
+      title: '选择模型',
+      buttons: [
+        { text: 'DeepSeek', color: '#1A1A2E' },
+        { text: '智谱 GLM', color: '#1A1A2E' },
+        { text: '百度文心', color: '#1A1A2E' },
+        { text: '自定义接口', color: '#1A1A2E' }
+      ]
+    }).then((result) => {
+      const models = ['deepseek', 'glm', 'baidu', 'custom'];
+      if (result.index >= 0 && result.index < models.length) {
+        this.selectedModel = models[result.index];
+        this.saveSettings();
+      }
+    });
+  }
+
+  loadSettings() {
+    this.apiKey = settingsManager.settings.apiKey;
+    this.selectedModel = settingsManager.settings.selectedModel;
+    this.customUrl = settingsManager.settings.customUrl;
+  }
+
+  saveSettings() {
+    settingsManager.settings.apiKey = this.apiKey;
+    settingsManager.settings.selectedModel = this.selectedModel;
+    settingsManager.settings.customUrl = this.customUrl;
+    settingsManager.save();
   }
 }
 
 interface SettingItemData {
   label: string;
   value: string;
-  action?: () => void;
   editable: boolean;
-}
-
-@Component
-struct SettingItem {
-  @Param label: string;
-  @Param value: string;
-  @Param action: () => void;
-  @Param editable: boolean = true;
-
-  build() {
-    Row() {
-      Text(this.label)
-        .fontSize(14)
-        .fontColor('#1A1A2E')
-        .layoutWeight(1)
-      
-      Text(this.value)
-        .fontSize(13)
-        .fontColor('#6B7280')
-    }
-    .width('100%')
-    .padding(16)
-  }
-}
-
-// ========== 数据模型 ==========
-
-interface TemplateInfo {
-  id: string;
-  name: string;
-  icon: string;
-  desc: string;
-  category: string;
-  color: string;
-  fields: TemplateField[];
-  format: string;
-  tips: string[];
-}
-
-interface TemplateField {
-  key: string;
-  label: string;
-  type: 'text' | 'textarea' | 'select' | 'number';
-  required: boolean;
-  placeholder: string;
-  options?: string[];
-}
-
-interface WorkItem {
-  id: string;
-  title: string;
-  templateId: string;
-  templateName: string;
-  content: string;
-  createTime: string;
-  updateTime: string;
 }

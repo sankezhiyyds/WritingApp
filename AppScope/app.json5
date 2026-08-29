@@ -1,26 +1,9 @@
 {
   "app": {
-    "signingConfigs": [],
-    "products": [
-      {
-        "name": "default",
-        "signingConfig": "default",
-        "compatibleSdkVersion": "7.0.0(26)",
-        "targetSdkVersion": "7.0.0(26)",
-        "minSdkVersion": "12",
-        "distributionExtra": {
-          "icon": "",
-          "profile": ""
-        }
-      }
-    ],
-    "buildModeSet": [
-      {
-        "name": "debug"
-      },
-      {
-        "name": "release"
-      }
-    ]
+    "bundleName": "com.writingapp.helper",
+    "versionCode": 1000001,
+    "versionName": "1.0.0",
+    "icon": "$media:app_icon",
+    "label": "$string:app_name"
   }
 }

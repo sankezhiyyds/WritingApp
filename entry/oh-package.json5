@@ -1,11 +1,9 @@
-module  = {
+{
   "name": "entry",
-  "type": "entry",
+  "version": "1.0.0",
   "description": "写书助手主模块",
-  "main": "ets/entryability/EntryAbility.ets",
-  "window": {
-    "designWidth": 750,
-    "autoDesignWidth": false
-  },
-  "dependencies": []
+  "main": "",
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {}
 }

@@ -1,7 +1,0 @@
-{
-  "src": [
-    "ability/EntryAbility"
-  ],
-  "background": false,
-  "description": "入口能力"
-}

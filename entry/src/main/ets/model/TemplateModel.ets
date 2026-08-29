@@ -110,7 +110,7 @@ export const templateList: TemplateInfo[] = [
       { key: 'ultimate', label: '终极考验', type: 'textarea', required: true, placeholder: '最艰难的挑战是什么？' },
       { key: 'return', label: '归来与变化', type: 'textarea', required: true, placeholder: '主角如何带着收获回归？' }
     ],
-    format: `【英雄之旅：{title}】
+    format: `【英雄之旅】
 
 【第一幕：启程】
 普通世界：{hero}
@@ -149,16 +149,17 @@ export const templateList: TemplateInfo[] = [
       { key: 'obstacle', label: '阻碍', type: 'textarea', required: true, placeholder: '什么让他们无法在一起/分开？' },
       { key: 'turning_point', label: '关键转折', type: 'textarea', required: true, placeholder: '关系发生转变的具体事件' }
     ],
-    format: `【情感拉扯：{title}】
+    format: `【情感拉扯】
 
 【角色A】{person_a}
 【角色B】{person_b}
 
 【渴望】
-A想要：{core_desire.split('\n')[0]}
-B想要：{core_desire.split('\n')[1]}
+{core_desire}
 
 【阻碍】{obstacle}
+
+【关键转折】{turning_point}
 
 【拉扯节奏】
 靠近 → 推开 → 再靠近 → 真相 → 抉择`,
@@ -183,7 +184,7 @@ B想要：{core_desire.split('\n')[1]}
       { key: 'clues', label: '线索设计', type: 'textarea', required: true, placeholder: '真假线索分别是什么？' },
       { key: 'twist', label: '反转', type: 'textarea', required: true, placeholder: '真相如何出人意料？' }
     ],
-    format: `【悬疑：{title}】
+    format: `【悬疑推理】
 
 【案件】{crime}
 
@@ -219,16 +220,14 @@ B想要：{core_desire.split('\n')[1]}
       { key: 'escalation', label: '升级方向', type: 'textarea', required: true, placeholder: '喜剧效果如何一步步升级？' },
       { key: 'button', label: '结尾按钮', type: 'text', required: false, placeholder: '最后的笑点/收尾方式' }
     ],
-    format: `【素描喜剧：{title}】
+    format: `【素描喜剧】
 
 【前提】如果{premise}？
 
 【角色】{characters}
 
 【升级路径】
-第1层：{escalation.split('\n')[0]}
-第2层：{escalation.split('\n')[1]}
-第3层（最高）：{escalation.split('\n')[2]}
+{escalation}
 
 【结尾】{button}`,
     tips: [
@@ -258,9 +257,9 @@ B想要：{core_desire.split('\n')[1]}
 【时长】{duration}秒
 
 【分镜脚本】
-0-3秒（钩子）：{hook}
-3-{duration-5}秒（主体）：{content}
-{duration-5}-{duration}秒（引导）：{cta}
+开场钩子：{hook}
+正文内容：{content}
+结尾引导：{cta}
 
 【画面描述】
 （镜头角度/景别/运镜）
@@ -291,7 +290,7 @@ B想要：{core_desire.split('\n')[1]}
       { key: 'truth', label: '真相', type: 'textarea', required: true, placeholder: '完整的推理过程和真相' },
       { key: 'mechanics', label: '机制设计', type: 'textarea', required: false, placeholder: '特殊玩法/道具/时间线' }
     ],
-    format: `【剧本杀：{title}】
+    format: `【剧本杀】
 
 【背景】{background}
 
@@ -389,7 +388,7 @@ B想要：{core_desire.split('\n')[1]}
       { key: 'act2_confront', label: '第二幕：对抗', type: 'textarea', required: true, placeholder: '中间高潮、一切归零时刻' },
       { key: 'act3_resolve', label: '第三幕：解决', type: 'textarea', required: true, placeholder: '最终对决、结局' }
     ],
-    format: `【三幕式：{title}】
+    format: `【三幕式结构】
 
 【第一幕：铺垫】（25%）
 {act1_setup}
@@ -421,7 +420,7 @@ B想要：{core_desire.split('\n')[1]}
       { key: 'falling', label: '下降行动', type: 'textarea', required: true, placeholder: '后果展开' },
       { key: 'resolution', label: '结局', type: 'textarea', required: true, placeholder: '冲突解决' }
     ],
-    format: `【五幕剧：{title}】
+    format: `【五幕剧】
 
 【第一幕：铺垫】{exposition}
 【第二幕：上升行动】{rising}
@@ -480,7 +479,7 @@ B想要：{core_desire.split('\n')[1]}
       { key: 'logic', label: '荒诞逻辑', type: 'textarea', required: true, placeholder: '什么是不合理的？为什么合理？' },
       { key: 'ending', label: '结局方式', type: 'select', required: true, placeholder: '选择结局风格', options: ['循环', '开放', '突然中断', '无声无息'] }
     ],
-    format: `【荒诞派：{title}】
+    format: `【荒诞派剧本】
 
 【场景】{setting}
 
@@ -514,11 +513,7 @@ B想要：{core_desire.split('\n')[1]}
 【起始】{first_event}
 
 【连锁】
-1. {chain.split('\n')[0]}
-2. {chain.split('\n')[1]}
-3. {chain.split('\n')[2]}
-4. ...
-5. {chain.split('\n')[3]}
+{chain}
 
 【高潮】{climax}
 

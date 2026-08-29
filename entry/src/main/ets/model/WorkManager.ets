@@ -1,28 +1,56 @@
+import preferences from '@ohos.data.preferences';
+import common from '@ohos.app.ability.common';
 import { TemplateInfo } from './TemplateModel';
+
+export interface WorkItem {
+  id: string;
+  title: string;
+  templateId: string;
+  templateName: string;
+  content: string;
+  createTime: string;
+  updateTime: string;
+}
 
 export class WorkManager {
   private works: WorkItem[] = [];
   private storageKey: string = 'writing_app_works';
+  private prefs: preferences.Preferences | null = null;
+  private context: common.UIAbilityContext | null = null;
 
-  async init() {
-    // 从本地存储加载作品列表
+  async init(context: common.UIAbilityContext): Promise<void> {
+    this.context = context;
     try {
-      const stored = await this.loadFromStorage();
-      if (stored) {
-        this.works = stored;
-      }
+      this.prefs = await preferences.getPreferences(context, 'writing_app');
+      await this.loadFromStorage();
     } catch (e) {
-      console.error('[WorkManager] 初始化失败', e);
+      console.error('[WorkManager] 初始化失败: ' + JSON.stringify(e));
     }
   }
 
-  async loadFromStorage(): Promise<WorkItem[] | null> {
-    // 使用 LocalStorage 持久化
-    return null;
+  private async loadFromStorage(): Promise<void> {
+    if (!this.prefs) return;
+    try {
+      const stored = await this.prefs.get(this.storageKey, '') as string;
+      if (stored) {
+        const parsed = JSON.parse(stored) as WorkItem[];
+        if (Array.isArray(parsed)) {
+          this.works = parsed;
+        }
+      }
+    } catch (e) {
+      console.error('[WorkManager] 读取作品失败: ' + JSON.stringify(e));
+    }
   }
 
-  async saveToStorage() {
-    // 持久化到本地
+  private async saveToStorage(): Promise<void> {
+    if (!this.prefs) return;
+    try {
+      await this.prefs.put(this.storageKey, JSON.stringify(this.works));
+      await this.prefs.flush();
+    } catch (e) {
+      console.error('[WorkManager] 保存作品失败: ' + JSON.stringify(e));
+    }
   }
 
   createWork(template: TemplateInfo, title: string, content: string): WorkItem {
@@ -74,28 +102,14 @@ export class WorkManager {
   }
 
   private generateId(): string {
-    return 'work_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    return 'work_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11);
   }
 
   private formatDate(date: Date): string {
-    return date.toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    const pad = (n: number): string => n < 10 ? '0' + n : '' + n;
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
+      `${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }
-}
-
-export interface WorkItem {
-  id: string;
-  title: string;
-  templateId: string;
-  templateName: string;
-  content: string;
-  createTime: string;
-  updateTime: string;
 }
 
 export const workManager = new WorkManager();

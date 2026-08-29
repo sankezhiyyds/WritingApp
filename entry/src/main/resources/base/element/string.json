@@ -1,12 +1,20 @@
 {
   "string": [
     {
-      "name": "app_name",
+      "name": "module_desc",
+      "value": "写书助手主模块"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "专业写作助手，多模板创作"
+    },
+    {
+      "name": "EntryAbility_label",
       "value": "写书助手"
     },
     {
-      "name": "entry_description",
-      "value": "专业写作助手，多模板创作"
+      "name": "app_name",
+      "value": "写书助手"
     },
     {
       "name": "home_title",

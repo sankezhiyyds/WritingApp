@@ -1,29 +1,34 @@
-import { templateList } from '../../model/TemplateModel';
-import promptAction from '@ohos.promptAction';
+import UIAbility from '@ohos.app.ability.UIAbility';
+import window from '@ohos.window';
+import { workManager } from '../model/WorkManager';
+import { settingsManager } from '../model/SettingsManager';
 
-export default class EntryAbility {
-  onCreate() {
-    console.log('[EntryAbility] onCreate');
+export default class EntryAbility extends UIAbility {
+  onCreate(): void {
+    console.info('[EntryAbility] onCreate');
+    workManager.init(this.context);
+    settingsManager.init(this.context);
   }
 
-  onDestroy() {
-    console.log('[EntryAbility] onDestroy');
+  onDestroy(): void {
+    console.info('[EntryAbility] onDestroy');
   }
 
-  onWindowStageCreate(windowStage) {
+  onWindowStageCreate(windowStage: window.WindowStage): void {
     windowStage.loadContent('pages/Index', (err) => {
       if (err.code) {
-        promptAction.showToast({ message: '加载失败', duration: 2000 });
+        console.error('[EntryAbility] loadContent failed: ' + JSON.stringify(err));
         return;
       }
+      console.info('[EntryAbility] loadContent succeeded');
     });
   }
 
-  onForeground() {
-    console.log('[EntryAbility] onForeground');
+  onForeground(): void {
+    console.info('[EntryAbility] onForeground');
   }
 
-  onBackground() {
-    console.log('[EntryAbility] onBackground');
+  onBackground(): void {
+    console.info('[EntryAbility] onBackground');
   }
 }

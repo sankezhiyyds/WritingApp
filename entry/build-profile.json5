@@ -1,41 +1,25 @@
 {
-  "modelVersion": "4.0.0",
-  "name": "entry",
-  "versionCode": "1000001",
-  "versionName": "1.0.0",
-  "description": "写书App - 主模块",
-  "mainElement": "EntryAbility",
-  "deviceTypes": ["phone", "tablet", "foldable"],
-  "deliveryWithInstall": true,
-  "installationFree": false,
-  "bundleName": "com.writingapp.helper",
-  "sdk": {
-    "compileSdkVersion": "7.0.0(26)",
-    "compatibleSdkVersion": "5.0.0(12)",
-    "targetSdkVersion": "7.0.0(26)"
+  "apiType": "stageMode",
+  "buildOption": {
   },
-  "abilities": [
+  "buildOptionSet": [
     {
-      "name": "EntryAbility",
-      "srcEntry": "./ets/entryability/EntryAbility.ets",
-      "description": "写书助手主入口",
-      "icon": "$media:icon",
-      "label": "$string:entry_description",
-      "startWindowBackground": "#FFFFFF",
-      "startWindowIcon": "$media:icon",
-      "visible": true,
-      "skills": [
-        {
-          "entities": ["entity.system.home"],
-          "actions": ["action.system.home"]
+      "name": "release",
+      "arkOptions": {
+        "obfuscation": {
+          "ruleOptions": {
+            "enable": false,
+            "files": [
+              "./obfuscation-rules.txt"
+            ]
+          }
         }
-      ]
+      }
     }
   ],
-  "supportsScreens": [
+  "targets": [
     {
-      "supportsSplitScreen": true,
-      "supportsFloatingWindow": true
+      "name": "default"
     }
   ]
 }
