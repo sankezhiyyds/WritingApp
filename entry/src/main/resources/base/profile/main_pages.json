@@ -1,0 +1,11 @@
+{
+  "src": [
+    "pages/Index",
+    "pages/TemplateListPage",
+    "pages/WorkEditorPage",
+    "pages/SettingsPage",
+    "pages/TemplateDetailPage"
+  ],
+  "background": false,
+  "description": "页面路由表"
+}

@@ -1,0 +1,11 @@
+module  = {
+  "name": "entry",
+  "type": "entry",
+  "description": "写书助手主模块",
+  "main": "ets/entryability/EntryAbility.ets",
+  "window": {
+    "designWidth": 750,
+    "autoDesignWidth": false
+  },
+  "dependencies": []
+}

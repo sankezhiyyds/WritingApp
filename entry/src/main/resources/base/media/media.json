@@ -1,0 +1,8 @@
+{
+  "src": [
+    "media/icon.png",
+    "media/icon_default.png"
+  ],
+  "background": false,
+  "description": "写书助手图标"
+}

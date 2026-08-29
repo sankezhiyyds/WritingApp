@@ -1,0 +1,7 @@
+{
+  "src": [
+    "rawfile/templates.json"
+  ],
+  "background": false,
+  "description": "写作模板数据"
+}

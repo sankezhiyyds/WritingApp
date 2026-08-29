@@ -1,0 +1,172 @@
+{
+  "string": [
+    {
+      "name": "app_name",
+      "value": "写书助手"
+    },
+    {
+      "name": "entry_description",
+      "value": "专业写作助手，多模板创作"
+    },
+    {
+      "name": "home_title",
+      "value": "写书助手"
+    },
+    {
+      "name": "tab_template",
+      "value": "模板库"
+    },
+    {
+      "name": "tab_works",
+      "value": "我的作品"
+    },
+    {
+      "name": "tab_settings",
+      "value": "设置"
+    },
+    {
+      "name": "template_short_drama",
+      "value": "短剧剧本"
+    },
+    {
+      "name": "template_manzai",
+      "value": "漫才"
+    },
+    {
+      "name": "template_hero_journey",
+      "value": "英雄之旅"
+    },
+    {
+      "name": "template_emotional_tension",
+      "value": "情感拉扯"
+    },
+    {
+      "name": "template_mystery",
+      "value": "悬疑推理"
+    },
+    {
+      "name": "template_sketch",
+      "value": "素描喜剧"
+    },
+    {
+      "name": "template_short_video",
+      "value": "短视频脚本"
+    },
+    {
+      "name": "template_script_murder",
+      "value": "剧本杀"
+    },
+    {
+      "name": "template_story_nucleus",
+      "value": "故事核"
+    },
+    {
+      "name": "template_viral_formula",
+      "value": "爆款公式"
+    },
+    {
+      "name": "template_three_act",
+      "value": "三幕式"
+    },
+    {
+      "name": "template_five_act",
+      "value": "五幕剧"
+    },
+    {
+      "name": "template_monologue",
+      "value": "戏剧独白"
+    },
+    {
+      "name": "template_absurdist",
+      "value": "荒诞派"
+    },
+    {
+      "name": "template_comedy_chain",
+      "value": "喜剧冲突链"
+    },
+    {
+      "name": "template_sitcom",
+      "value": "情景喜剧"
+    },
+    {
+      "name": "btn_new_work",
+      "value": "新建作品"
+    },
+    {
+      "name": "btn_save",
+      "value": "保存"
+    },
+    {
+      "name": "btn_delete",
+      "value": "删除"
+    },
+    {
+      "name": "input_title",
+      "value": "作品标题"
+    },
+    {
+      "name": "input_content",
+      "value": "正文内容"
+    },
+    {
+      "name": "setting_api_hint",
+      "value": "请输入您的 API Key（仅本地存储）"
+    },
+    {
+      "name": "setting_api_placeholder",
+      "value": "sk-xxxxxxxxxxxx"
+    },
+    {
+      "name": "setting_api_saved",
+      "value": "API Key 已保存"
+    },
+    {
+      "name": "setting_select_model",
+      "value": "选择 AI 模型"
+    },
+    {
+      "name": "setting_deepseek",
+      "value": "DeepSeek"
+    },
+    {
+      "name": "setting_glm",
+      "value": "智谱 GLM"
+    },
+    {
+      "name": "setting_baidu",
+      "value": "百度文心"
+    },
+    {
+      "name": "setting_custom",
+      "value": "自定义接口"
+    },
+    {
+      "name": "setting_custom_url",
+      "value": "自定义接口地址"
+    },
+    {
+      "name": "empty_works_hint",
+      "value": "还没有作品，点击上方按钮创建"
+    },
+    {
+      "name": "confirm_delete",
+      "value": "确定删除该作品吗？此操作不可恢复"
+    },
+    {
+      "name": "work_created_success",
+      "value": "作品创建成功"
+    },
+    {
+      "name": "work_saved_success",
+      "value": "作品已保存"
+    },
+    {
+      "name": "tip_token_compression",
+      "value": "提示：用简洁语言描述角色行为，避免空洞情绪词"
+    },
+    {
+      "name": "tip_behavioral_anchor",
+      "value": "技巧：用具体动作代替抽象形容词"
+    }
+  ]
+}

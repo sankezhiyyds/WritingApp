@@ -1,0 +1,29 @@
+{
+  "name": "writing_app",
+  "versionCode": "1000001",
+  "versionName": "1.0.0",
+  "description": "专业写作助手，提供多种写作模板与创作指导",
+  "bundleName": "com.writingapp.helper",
+  "signingConfigs": [
+    {
+      "name": "default",
+      "material": {
+        "storePassword": "0000001A9B5C4D6E...",
+        "keyAlias": "debugKey",
+        "keyPassword": "0000001A7D8E9F...",
+        "profile": "default.p12",
+        "signAlg": "SHA256withECDSA",
+        "storeFile": "debug.p12"
+      }
+    }
+  ],
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "entry",
+      "targets": [
+        { "name": "default", "applyToProducts": ["default"] }
+      ]
+    }
+  ]
+}

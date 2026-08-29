@@ -1,0 +1,18 @@
+{
+  "app": {
+    "buildModeSet": [
+      {
+        "name": "debug"
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "buildOption": {},
+      "name": "entry"
+    }
+  ]
+}

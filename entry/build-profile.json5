@@ -1,0 +1,41 @@
+{
+  "modelVersion": "4.0.0",
+  "name": "entry",
+  "versionCode": "1000001",
+  "versionName": "1.0.0",
+  "description": "写书App - 主模块",
+  "mainElement": "EntryAbility",
+  "deviceTypes": ["phone", "tablet", "foldable"],
+  "deliveryWithInstall": true,
+  "installationFree": false,
+  "bundleName": "com.writingapp.helper",
+  "sdk": {
+    "compileSdkVersion": "7.0.0(26)",
+    "compatibleSdkVersion": "7.0.0(26)",
+    "targetSdkVersion": "7.0.0(26)"
+  },
+  "abilities": [
+    {
+      "name": "EntryAbility",
+      "srcEntry": "./ets/entryability/EntryAbility.ets",
+      "description": "写书助手主入口",
+      "icon": "$media:icon",
+      "label": "$string:entry_description",
+      "startWindowBackground": "#FFFFFF",
+      "startWindowIcon": "$media:icon",
+      "visible": true,
+      "skills": [
+        {
+          "entities": ["entity.system.home"],
+          "actions": ["action.system.home"]
+        }
+      ]
+    }
+  ],
+  "supportsScreens": [
+    {
+      "supportsSplitScreen": true,
+      "supportsFloatingWindow": true
+    }
+  ]
+}
