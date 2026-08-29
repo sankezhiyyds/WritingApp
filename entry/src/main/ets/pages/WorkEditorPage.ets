@@ -1,5 +1,5 @@
-import { workManager, WorkItem } from '../model/WorkManager';
-import { templateList, TemplateInfo } from '../model/TemplateModel';
+import { WorkItem, workManager } from '../model/WorkManager';
+import { TemplateInfo, templateList } from '../model/TemplateModel';
 import router from '@ohos.router';
 import promptAction from '@ohos.promptAction';
 
