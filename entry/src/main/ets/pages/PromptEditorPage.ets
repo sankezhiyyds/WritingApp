@@ -28,6 +28,13 @@ struct PromptEditorPage {
   @State originalContent: string = '';
   @State modifiedRanges: Array<{start: number, end: number}> = [];
   @State previousContent: string = '';
+  @State showCreateChapterDialog: boolean = false;
+  @State showEditChapterDialog: boolean = false;
+  @State newChapterTitle: string = '';
+  @State newChapterCategory: string = '大纲';
+  @State newChapterContent: string = '';
+  @State editingChapter: Chapter | null = null;
+  @State editingChapterContent: string = '';
 
   get isWide(): boolean {
     return this.currentBreakpoint === 'md' || this.currentBreakpoint === 'lg';
@@ -139,6 +146,16 @@ struct PromptEditorPage {
       // 章节列表面板
       if (this.showChapterList) {
         this.ChapterListView()
+      }
+
+      // 创建章节对话框
+      if (this.showCreateChapterDialog) {
+        this.CreateChapterDialog()
+      }
+
+      // 编辑章节对话框
+      if (this.showEditChapterDialog) {
+        this.EditChapterDialog()
       }
 
       // 版本历史面板
@@ -610,6 +627,55 @@ struct PromptEditorPage {
     return result;
   }
 
+  createChapter() {
+    if (!this.work) {
+      promptAction.showToast({ message: '请先保存作品', duration: 2000 });
+      return;
+    }
+    if (!this.newChapterTitle.trim()) {
+      promptAction.showToast({ message: '请输入章节标题', duration: 2000 });
+      return;
+    }
+    const chapter = workManager.addChapter(
+      this.work.id,
+      this.newChapterTitle,
+      this.newChapterCategory,
+      this.newChapterContent
+    );
+    if (chapter) {
+      promptAction.showToast({ message: '章节创建成功', duration: 2000 });
+      this.showCreateChapterDialog = false;
+      this.newChapterTitle = '';
+      this.newChapterCategory = '大纲';
+      this.newChapterContent = '';
+      // 刷新章节列表
+      this.work = workManager.getWork(this.work.id);
+    }
+  }
+
+  editChapter() {
+    if (!this.work || !this.editingChapter) {
+      return;
+    }
+    workManager.updateChapter(this.work.id, this.editingChapter.id, this.editingChapterContent);
+    promptAction.showToast({ message: '章节已保存', duration: 2000 });
+    this.showEditChapterDialog = false;
+    this.editingChapter = null;
+    this.editingChapterContent = '';
+    // 刷新作品数据
+    this.work = workManager.getWork(this.work.id);
+  }
+
+  deleteChapter(chapter: Chapter) {
+    if (!this.work) {
+      return;
+    }
+    workManager.deleteChapter(this.work.id, chapter.id);
+    promptAction.showToast({ message: '章节已删除', duration: 2000 });
+    // 刷新章节列表
+    this.work = workManager.getWork(this.work.id);
+  }
+
   async saveWork() {
     if (this.generatedContent.trim().length === 0) {
       promptAction.showToast({ message: '内容不能为空', duration: 2000 });
@@ -751,6 +817,13 @@ struct PromptEditorPage {
           .fontWeight(FontWeight.Bold)
           .fontColor('#1A1A2E')
         Blank()
+        Text('+')
+          .fontSize(24)
+          .fontColor('#FF2D55')
+          .margin({ right: 16 })
+          .onClick(() => {
+            this.showCreateChapterDialog = true;
+          })
         Text('×')
           .fontSize(24)
           .fontColor('#9CA3AF')
@@ -808,15 +881,33 @@ struct PromptEditorPage {
                   .alignItems(HorizontalAlign.Start)
                   .layoutWeight(1)
 
-                  Text('查看')
-                    .fontSize(13)
-                    .fontColor('#FF2D55')
-                    .onClick(() => {
-                      this.currentChapter = chapter;
-                      this.generatedContent = chapter.content;
-                      this.showChapterList = false;
-                      promptAction.showToast({ message: '已加载章节内容', duration: 2000 });
-                    })
+                  Row() {
+                    Text('查看')
+                      .fontSize(13)
+                      .fontColor('#FF2D55')
+                      .onClick(() => {
+                        this.currentChapter = chapter;
+                        this.generatedContent = chapter.content;
+                        this.showChapterList = false;
+                        promptAction.showToast({ message: '已加载章节内容', duration: 2000 });
+                      })
+                    Text('编辑')
+                      .fontSize(13)
+                      .fontColor('#3B82F6')
+                      .margin({ left: 12 })
+                      .onClick(() => {
+                        this.editingChapter = chapter;
+                        this.editingChapterContent = chapter.content;
+                        this.showEditChapterDialog = true;
+                      })
+                    Text('删除')
+                      .fontSize(13)
+                      .fontColor('#EF4444')
+                      .margin({ left: 12 })
+                      .onClick(() => {
+                        this.deleteChapter(chapter);
+                      })
+                  }
                 }
                 .width('100%')
               }
@@ -833,6 +924,172 @@ struct PromptEditorPage {
     .width('100%')
     .height('100%')
     .backgroundColor('#F5F6FA')
+    .position({ x: 0, y: 0 })
+  }
+
+  @Builder
+  CreateChapterDialog() {
+    Column() {
+      Column() {
+        Text('创建章节')
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#1A1A2E')
+          .margin({ bottom: 16 })
+
+        Text('章节标题')
+          .fontSize(14)
+          .fontColor('#6B7280')
+          .margin({ bottom: 8 })
+        TextInput({ placeholder: '请输入章节标题' })
+          .fontSize(14)
+          .height(40)
+          .backgroundColor('#F5F6FA')
+          .borderRadius(8)
+          .onChange((value: string) => {
+            this.newChapterTitle = value;
+          })
+
+        Text('章节分类')
+          .fontSize(14)
+          .fontColor('#6B7280')
+          .margin({ top: 16, bottom: 8 })
+        Row() {
+          ForEach(['大纲', '人设', '思维链路', '最终方案'], (category: string) => {
+            Button(category)
+              .fontSize(13)
+              .fontColor(this.newChapterCategory === category ? '#FFFFFF' : '#6B7280')
+              .backgroundColor(this.newChapterCategory === category ? '#FF2D55' : '#F5F6FA')
+              .borderRadius(16)
+              .height(32)
+              .padding({ left: 12, right: 12 })
+              .margin({ right: 8 })
+              .onClick(() => {
+                this.newChapterCategory = category;
+              })
+          }, (category: string) => category)
+        }
+
+        Text('章节内容')
+          .fontSize(14)
+          .fontColor('#6B7280')
+          .margin({ top: 16, bottom: 8 })
+        TextArea({ placeholder: '请输入章节内容（可选）' })
+          .fontSize(14)
+          .height(150)
+          .backgroundColor('#F5F6FA')
+          .borderRadius(8)
+          .onChange((value: string) => {
+            this.newChapterContent = value;
+          })
+
+        Row() {
+          Button('取消')
+            .fontSize(14)
+            .fontColor('#6B7280')
+            .backgroundColor('#F5F6FA')
+            .borderRadius(8)
+            .height(40)
+            .layoutWeight(1)
+            .margin({ right: 8 })
+            .onClick(() => {
+              this.showCreateChapterDialog = false;
+              this.newChapterTitle = '';
+              this.newChapterCategory = '大纲';
+              this.newChapterContent = '';
+            })
+          Button('创建')
+            .fontSize(14)
+            .fontColor('#FFFFFF')
+            .backgroundColor('#FF2D55')
+            .borderRadius(8)
+            .height(40)
+            .layoutWeight(1)
+            .margin({ left: 8 })
+            .onClick(() => {
+              this.createChapter();
+            })
+        }
+        .width('100%')
+        .margin({ top: 20 })
+      }
+      .width('90%')
+      .padding(20)
+      .backgroundColor('#FFFFFF')
+      .borderRadius(16)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('rgba(0,0,0,0.5)')
+    .justifyContent(FlexAlign.Center)
+    .position({ x: 0, y: 0 })
+  }
+
+  @Builder
+  EditChapterDialog() {
+    Column() {
+      Column() {
+        Text('编辑章节')
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#1A1A2E')
+          .margin({ bottom: 8 })
+
+        if (this.editingChapter) {
+          Text(this.editingChapter.title)
+            .fontSize(14)
+            .fontColor('#6B7280')
+            .margin({ bottom: 16 })
+        }
+
+        TextArea({ placeholder: '请输入章节内容' })
+          .fontSize(14)
+          .height(300)
+          .backgroundColor('#F5F6FA')
+          .borderRadius(8)
+          .text(this.editingChapterContent)
+          .onChange((value: string) => {
+            this.editingChapterContent = value;
+          })
+
+        Row() {
+          Button('取消')
+            .fontSize(14)
+            .fontColor('#6B7280')
+            .backgroundColor('#F5F6FA')
+            .borderRadius(8)
+            .height(40)
+            .layoutWeight(1)
+            .margin({ right: 8 })
+            .onClick(() => {
+              this.showEditChapterDialog = false;
+              this.editingChapter = null;
+              this.editingChapterContent = '';
+            })
+          Button('保存')
+            .fontSize(14)
+            .fontColor('#FFFFFF')
+            .backgroundColor('#FF2D55')
+            .borderRadius(8)
+            .height(40)
+            .layoutWeight(1)
+            .margin({ left: 8 })
+            .onClick(() => {
+              this.editChapter();
+            })
+        }
+        .width('100%')
+        .margin({ top: 20 })
+      }
+      .width('90%')
+      .padding(20)
+      .backgroundColor('#FFFFFF')
+      .borderRadius(16)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('rgba(0,0,0,0.5)')
+    .justifyContent(FlexAlign.Center)
     .position({ x: 0, y: 0 })
   }
 

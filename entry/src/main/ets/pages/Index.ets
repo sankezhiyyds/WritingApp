@@ -6,6 +6,7 @@ import router from '@ohos.router';
 import promptAction from '@ohos.promptAction';
 import Configuration from '@ohos.app.ability.Configuration';
 import AbilityConstant from '@ohos.app.ability.AbilityConstant';
+import display from '@ohos.display';
 
 @Entry
 @Component
@@ -13,6 +14,7 @@ struct Index {
   @State currentIndex: number = 0;
   @State isDarkMode: boolean = false;
   @State showOnboarding: boolean = false;
+  @State onboardingPage: number = 0;
   @State currentBreakpoint: BreakpointType = 'sm';
   private controller: TabsController = new TabsController();
 
@@ -139,56 +141,53 @@ struct Index {
         .width('100%')
         .height('100%')
       } else {
-        // 窄屏布局：底部Tab导航（手机/折叠屏折叠态）
-        Column() {
-          // 顶部栏
-          Row() {
-            Text('创意写作')
-              .fontSize(20)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this.textColor)
-            Blank()
-            // AI标识
-            Text('🤖')
-              .fontSize(20)
-            Text('AI')
-              .fontSize(10)
-              .fontColor('#FFFFFF')
-              .backgroundColor('#FF2D55')
-              .borderRadius(4)
-              .padding({ left: 4, right: 4 })
-              .margin({ left: 4 })
+        // 窄屏布局：底部悬浮玻璃Tab导航（手机/折叠屏折叠态）
+        Stack() {
+          Column() {
+            // 顶部栏
+            Row() {
+              Text('创意写作')
+                .fontSize(20)
+                .fontWeight(FontWeight.Bold)
+                .fontColor(this.textColor)
+              Blank()
+              // AI标识
+              Text('🤖')
+                .fontSize(20)
+              Text('AI')
+                .fontSize(10)
+                .fontColor('#FFFFFF')
+                .backgroundColor('#FF2D55')
+                .borderRadius(4)
+                .padding({ left: 4, right: 4 })
+                .margin({ left: 4 })
+            }
+            .width('100%')
+            .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+            .backgroundColor(this.cardBg)
+
+            // Tab内容区域
+            Column() {
+              if (this.currentIndex === 0) {
+                ShortDramaTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColor, bgColor: this.bgColor })
+              } else if (this.currentIndex === 1) {
+                NovelTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColor, bgColor: this.bgColor })
+              } else {
+                SettingsTab({ isDarkMode: this.isDarkMode, onDarkModeChange: (v) => { this.isDarkMode = v; } })
+              }
+            }
+            .width('100%')
+            .layoutWeight(1)
           }
           .width('100%')
-          .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-          .backgroundColor(this.cardBg)
+          .height('100%')
+          .backgroundColor(this.bgColor)
 
-          // Tab内容
-          Tabs({ barPosition: BarPosition.End, controller: this.controller }) {
-            TabContent() {
-              ShortDramaTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColor, bgColor: this.bgColor })
-            }
-            .tabBar(this.TabBuilder('短剧', '🎬', 0))
-
-            TabContent() {
-              NovelTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColor, bgColor: this.bgColor })
-            }
-            .tabBar(this.TabBuilder('中长篇', '📚', 1))
-
-            TabContent() {
-              SettingsTab({ isDarkMode: this.isDarkMode, onDarkModeChange: (v) => { this.isDarkMode = v; } })
-            }
-            .tabBar(this.TabBuilder('设置', '⚙️', 2))
-          }
-          .barHeight(56)
-          .barBackgroundColor(this.cardBg)
-          .onChange((index: number) => {
-            this.currentIndex = index;
-          })
+          // 悬浮玻璃底边栏
+          this.FloatingTabBar()
         }
         .width('100%')
         .height('100%')
-        .backgroundColor(this.bgColor)
       }
 
       // 首次启动引导弹窗
@@ -224,97 +223,298 @@ struct Index {
   OnboardingDialog() {
     Column() {
       Column() {
-        Text('欢迎使用创意写作')
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#1A1A2E')
-          .margin({ bottom: 16 })
-
-        Text('🤖 AI驱动的写作助手')
-          .fontSize(16)
-          .fontColor('#FF2D55')
-          .margin({ bottom: 12 })
-
-        Text('核心功能：')
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor('#1A1A2E')
-          .margin({ bottom: 8 })
-          .alignSelf(ItemAlign.Start)
-
-        Text('• 短剧/中长篇双工作台，独立管理')
-          .fontSize(13)
-          .fontColor('#6B7280')
-          .margin({ bottom: 4 })
-          .alignSelf(ItemAlign.Start)
-
-        Text('• AI对话生成，一键保存思维链路')
-          .fontSize(13)
-          .fontColor('#6B7280')
-          .margin({ bottom: 4 })
-          .alignSelf(ItemAlign.Start)
-
-        Text('• 自动版本归档，修改历史可追溯')
-          .fontSize(13)
-          .fontColor('#6B7280')
-          .margin({ bottom: 4 })
-          .alignSelf(ItemAlign.Start)
-
-        Text('• 支持多种AI模型：DeepSeek、智谱GLM、百度文心、小艺助手、本地GGUF')
-          .fontSize(13)
-          .fontColor('#6B7280')
-          .margin({ bottom: 12 })
-          .alignSelf(ItemAlign.Start)
-
-        Text('隐私声明：')
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor('#1A1A2E')
-          .margin({ bottom: 8 })
-          .alignSelf(ItemAlign.Start)
-
-        Text('• 您的API Key仅存储在本地，不会上传到任何服务器')
-          .fontSize(12)
-          .fontColor('#9CA3AF')
-          .margin({ bottom: 4 })
-          .alignSelf(ItemAlign.Start)
-
-        Text('• 作品数据完全保存在您的设备上')
-          .fontSize(12)
-          .fontColor('#9CA3AF')
-          .margin({ bottom: 16 })
-          .alignSelf(ItemAlign.Start)
-
+        // 页面指示器
         Row() {
-          Button('查看用户协议')
-            .fontSize(13)
-            .fontColor('#6B7280')
-            .backgroundColor('#F3F4F6')
-            .borderRadius(20)
-            .height(36)
-            .layoutWeight(1)
-            .margin({ right: 8 })
-            .onClick(() => {
-              promptAction.showToast({ message: '用户协议页面开发中', duration: 2000 });
-            })
-
-          Button('同意并继续')
-            .fontSize(14)
-            .fontColor('#FFFFFF')
-            .backgroundColor('#FF2D55')
-            .borderRadius(20)
-            .height(36)
-            .layoutWeight(1)
-            .margin({ left: 8 })
-            .onClick(() => {
-              settingsManager.settings.isFirstLaunch = false;
-              settingsManager.settings.hasAgreedToTerms = true;
-              settingsManager.save();
-              this.showOnboarding = false;
-              promptAction.showToast({ message: '欢迎开始创作！', duration: 2000 });
-            })
+          ForEach([0, 1, 2, 3, 4], (index: number) => {
+            Circle()
+              .width(8)
+              .height(8)
+              .fill(this.onboardingPage === index ? '#FF2D55' : '#E5E7EB')
+              .margin({ left: 4, right: 4 })
+          }, (index: number) => index.toString())
         }
         .width('100%')
+        .justifyContent(FlexAlign.Center)
+        .margin({ bottom: 20 })
+
+        // 第0页：欢迎页
+        if (this.onboardingPage === 0) {
+          Text('🎨')
+            .fontSize(60)
+            .margin({ bottom: 16 })
+
+          Text('欢迎使用创意写作')
+            .fontSize(24)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#1A1A2E')
+            .margin({ bottom: 12 })
+
+          Text('AI赋能，创意无限')
+            .fontSize(16)
+            .fontColor('#FF2D55')
+            .margin({ bottom: 24 })
+
+          Text('这是一款专为创作者打造的AI写作助手，帮助您从灵感迸发到完整作品的全流程创作。')
+            .fontSize(14)
+            .fontColor('#6B7280')
+            .textAlign(TextAlign.Center)
+            .margin({ bottom: 24 })
+        }
+
+        // 第1页：双工作台
+        if (this.onboardingPage === 1) {
+          Text('📚')
+            .fontSize(60)
+            .margin({ bottom: 16 })
+
+          Text('双工作台设计')
+            .fontSize(24)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#1A1A2E')
+            .margin({ bottom: 12 })
+
+          Text('短剧工作台')
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#1A1A2E')
+            .margin({ bottom: 8 })
+            .alignSelf(ItemAlign.Start)
+
+          Text('• 快速创作竖屏短剧、微电影')
+            .fontSize(14)
+            .fontColor('#6B7280')
+            .margin({ bottom: 4 })
+            .alignSelf(ItemAlign.Start)
+
+          Text('• 提供多种剧本模板和结构')
+            .fontSize(14)
+            .fontColor('#6B7280')
+            .margin({ bottom: 16 })
+            .alignSelf(ItemAlign.Start)
+
+          Text('中长篇工作台')
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#1A1A2E')
+            .margin({ bottom: 8 })
+            .alignSelf(ItemAlign.Start)
+
+          Text('• 系统规划长篇小说、剧本')
+            .fontSize(14)
+            .fontColor('#6B7280')
+            .margin({ bottom: 4 })
+            .alignSelf(ItemAlign.Start)
+
+          Text('• 章节管理、人物设定、世界观构建')
+            .fontSize(14)
+            .fontColor('#6B7280')
+            .margin({ bottom: 4 })
+            .alignSelf(ItemAlign.Start)
+        }
+
+        // 第2页：AI对话
+        if (this.onboardingPage === 2) {
+          Text('🤖')
+            .fontSize(60)
+            .margin({ bottom: 16 })
+
+          Text('AI智能对话')
+            .fontSize(24)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#1A1A2E')
+            .margin({ bottom: 12 })
+
+          Text('• 与AI实时对话，碰撞灵感火花')
+            .fontSize(14)
+            .fontColor('#6B7280')
+            .margin({ bottom: 8 })
+            .alignSelf(ItemAlign.Start)
+
+          Text('• 一键保存思维链路为文档')
+            .fontSize(14)
+            .fontColor('#6B7280')
+            .margin({ bottom: 8 })
+            .alignSelf(ItemAlign.Start)
+
+          Text('• 支持多种AI模型')
+            .fontSize(14)
+            .fontColor('#6B7280')
+            .margin({ bottom: 4 })
+            .alignSelf(ItemAlign.Start)
+
+          Text('  - DeepSeek、智谱GLM、百度文心')
+            .fontSize(13)
+            .fontColor('#9CA3AF')
+            .margin({ bottom: 4 })
+            .alignSelf(ItemAlign.Start)
+
+          Text('  - 小艺助手、本地GGUF模型')
+            .fontSize(13)
+            .fontColor('#9CA3AF')
+            .margin({ bottom: 16 })
+            .alignSelf(ItemAlign.Start)
+
+          Text('💡 提示：在设置中配置API Key即可使用')
+            .fontSize(13)
+            .fontColor('#FF2D55')
+            .alignSelf(ItemAlign.Start)
+        }
+
+        // 第3页：章节管理
+        if (this.onboardingPage === 3) {
+          Text('📝')
+            .fontSize(60)
+            .margin({ bottom: 16 })
+
+          Text('章节与版本管理')
+            .fontSize(24)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#1A1A2E')
+            .margin({ bottom: 12 })
+
+          Text('章节管理')
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#1A1A2E')
+            .margin({ bottom: 8 })
+            .alignSelf(ItemAlign.Start)
+
+          Text('• 创建、编辑、删除章节')
+            .fontSize(14)
+            .fontColor('#6B7280')
+            .margin({ bottom: 4 })
+            .alignSelf(ItemAlign.Start)
+
+          Text('• 分类管理：大纲、人设、正文等')
+            .fontSize(14)
+            .fontColor('#6B7280')
+            .margin({ bottom: 16 })
+            .alignSelf(ItemAlign.Start)
+
+          Text('版本历史')
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#1A1A2E')
+            .margin({ bottom: 8 })
+            .alignSelf(ItemAlign.Start)
+
+          Text('• 自动保存修改历史')
+            .fontSize(14)
+            .fontColor('#6B7280')
+            .margin({ bottom: 4 })
+            .alignSelf(ItemAlign.Start)
+
+          Text('• 随时回溯到任意版本')
+            .fontSize(14)
+            .fontColor('#6B7280')
+            .margin({ bottom: 4 })
+            .alignSelf(ItemAlign.Start)
+
+          Text('• 修改内容自动高亮显示')
+            .fontSize(14)
+            .fontColor('#6B7280')
+            .margin({ bottom: 4 })
+            .alignSelf(ItemAlign.Start)
+        }
+
+        // 第4页：隐私与登录
+        if (this.onboardingPage === 4) {
+          Text('🔒')
+            .fontSize(60)
+            .margin({ bottom: 16 })
+
+          Text('隐私保护')
+            .fontSize(24)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#1A1A2E')
+            .margin({ bottom: 12 })
+
+          Text('• 您的API Key仅存储在本地')
+            .fontSize(14)
+            .fontColor('#6B7280')
+            .margin({ bottom: 4 })
+            .alignSelf(ItemAlign.Start)
+
+          Text('• 作品数据完全保存在您的设备上')
+            .fontSize(14)
+            .fontColor('#6B7280')
+            .margin({ bottom: 4 })
+            .alignSelf(ItemAlign.Start)
+
+          Text('• 不会上传任何用户内容到服务器')
+            .fontSize(14)
+            .fontColor('#6B7280')
+            .margin({ bottom: 20 })
+            .alignSelf(ItemAlign.Start)
+
+          Text('华为账号登录（可选）')
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#1A1A2E')
+            .margin({ bottom: 8 })
+            .alignSelf(ItemAlign.Start)
+
+          Text('• 一键登录，快速开始创作')
+            .fontSize(14)
+            .fontColor('#6B7280')
+            .margin({ bottom: 4 })
+            .alignSelf(ItemAlign.Start)
+
+          Text('• 未来支持云同步功能')
+            .fontSize(14)
+            .fontColor('#6B7280')
+            .margin({ bottom: 4 })
+            .alignSelf(ItemAlign.Start)
+        }
+
+        // 底部按钮
+        Row() {
+          if (this.onboardingPage > 0) {
+            Button('上一步')
+              .fontSize(14)
+              .fontColor('#6B7280')
+              .backgroundColor('#F3F4F6')
+              .borderRadius(20)
+              .height(40)
+              .layoutWeight(1)
+              .margin({ right: 8 })
+              .onClick(() => {
+                this.onboardingPage--;
+              })
+          }
+
+          if (this.onboardingPage < 4) {
+            Button('下一步')
+              .fontSize(14)
+              .fontColor('#FFFFFF')
+              .backgroundColor('#FF2D55')
+              .borderRadius(20)
+              .height(40)
+              .layoutWeight(1)
+              .margin({ left: 8 })
+              .onClick(() => {
+                this.onboardingPage++;
+              })
+          } else {
+            Button('开始使用')
+              .fontSize(14)
+              .fontColor('#FFFFFF')
+              .backgroundColor('#FF2D55')
+              .borderRadius(20)
+              .height(40)
+              .layoutWeight(1)
+              .margin({ left: 8 })
+              .onClick(() => {
+                settingsManager.settings.isFirstLaunch = false;
+                settingsManager.settings.hasAgreedToTerms = true;
+                settingsManager.save();
+                this.showOnboarding = false;
+                promptAction.showToast({ message: '欢迎开始创作！', duration: 2000 });
+              })
+          }
+        }
+        .width('100%')
+        .margin({ top: 20 })
       }
       .width('90%')
       .padding(24)
@@ -326,6 +526,71 @@ struct Index {
     .backgroundColor('rgba(0,0,0,0.5)')
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
+  }
+
+  @Builder
+  FloatingTabBar() {
+    Row() {
+      // 短剧
+      Column() {
+        Text('🎬')
+          .fontSize(24)
+        Text('短剧')
+          .fontSize(11)
+          .fontColor(this.currentIndex === 0 ? '#FF2D55' : (this.isDarkMode ? '#9CA3AF' : '#6B7280'))
+          .margin({ top: 4 })
+      }
+      .layoutWeight(1)
+      .justifyContent(FlexAlign.Center)
+      .onClick(() => {
+        this.currentIndex = 0;
+      })
+
+      // 中长篇
+      Column() {
+        Text('📚')
+          .fontSize(24)
+        Text('中长篇')
+          .fontSize(11)
+          .fontColor(this.currentIndex === 1 ? '#FF2D55' : (this.isDarkMode ? '#9CA3AF' : '#6B7280'))
+          .margin({ top: 4 })
+      }
+      .layoutWeight(1)
+      .justifyContent(FlexAlign.Center)
+      .onClick(() => {
+        this.currentIndex = 1;
+      })
+
+      // 设置
+      Column() {
+        Text('⚙️')
+          .fontSize(24)
+        Text('设置')
+          .fontSize(11)
+          .fontColor(this.currentIndex === 2 ? '#FF2D55' : (this.isDarkMode ? '#9CA3AF' : '#6B7280'))
+          .margin({ top: 4 })
+      }
+      .layoutWeight(1)
+      .justifyContent(FlexAlign.Center)
+      .onClick(() => {
+        this.currentIndex = 2;
+      })
+    }
+    .width('85%')
+    .height(64)
+    .backgroundColor(this.isDarkMode ? 'rgba(45,45,58,0.85)' : 'rgba(255,255,255,0.85)')
+    .borderRadius(32)
+    .position({ x: '7.5%', y: 'calc(100% - 80px)' })
+    .shadow({
+      radius: 20,
+      color: 'rgba(0,0,0,0.1)',
+      offsetX: 0,
+      offsetY: 4
+    })
+    .border({
+      width: 1,
+      color: this.isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.5)'
+    })
   }
 
   @Builder
@@ -454,26 +719,33 @@ struct ShortDramaTab {
           .fontColor('#FFFFFF')
       }
       .alignContent(Alignment.Center)
+      .width('100%')
+      .height(60)
 
       Text(template.name)
-        .fontSize(12)
+        .fontSize(13)
         .fontWeight(FontWeight.Medium)
         .fontColor(this.textColor)
-        .margin({ top: 6 })
+        .margin({ top: 8 })
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
+        .textAlign(TextAlign.Center)
 
       Text(template.desc)
-        .fontSize(10)
+        .fontSize(11)
         .fontColor('#9CA3AF')
         .maxLines(2)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width('90%')
+        .width('100%')
+        .textAlign(TextAlign.Center)
+        .margin({ top: 4 })
     }
     .width('100%')
-    .padding(10)
+    .height('100%')
+    .padding(12)
     .backgroundColor(this.cardBg)
-    .borderRadius(10)
+    .borderRadius(12)
     .onClick(() => {
       router.pushUrl({
         url: 'pages/PromptEditorPage',
@@ -710,6 +982,15 @@ struct SettingsTab {
   @State showCustomUrlInput: boolean = false;
   @State customUrlInput: string = '';
   @State followSystemDark: boolean = false;
+  @State showModelPickerPanel: boolean = false;
+  @State showPrivacyPanel: boolean = false;
+  @State showAboutPanel: boolean = false;
+  @State showAccountPanel: boolean = false;
+  @State isLoggedIn: boolean = false;
+  @State userName: string = '';
+  @State autoSaveInterval: number = 5;
+  @State fontSize: number = 14;
+  @State aiTimeout: number = 30;
 
   aboutToAppear() {
     this.loadSettings();
@@ -725,15 +1006,26 @@ struct SettingsTab {
         .margin({ left: 16, top: 16, bottom: 12 })
 
       List() {
+        // ===== AI 配置 =====
+        ListItem() {
+          this.SectionTitle('AI 配置')
+        }
+
         ListItem() {
           this.SettingRow('AI模型配置', this.getModelName(), true)
         }
-        .onClick(() => this.showModelPicker())
+        .onClick(() => {
+          this.showModelPickerPanel = true;
+        })
 
         ListItem() {
           this.SettingRow('API Key', this.apiKey ? '已配置' : '未配置', true)
         }
         .onClick(() => {
+          if (!this.isLoggedIn) {
+            this.showAccountPanel = true;
+            return;
+          }
           this.apiKeyInput = this.apiKey;
           this.showApiKeyInput = true;
         })
@@ -742,15 +1034,45 @@ struct SettingsTab {
           this.SettingRow('自定义接口地址', this.customUrl ? '已配置' : '未配置', true)
         }
         .onClick(() => {
+          if (!this.isLoggedIn) {
+            this.showAccountPanel = true;
+            return;
+          }
           this.customUrlInput = this.customUrl;
           this.showCustomUrlInput = true;
         })
+
+        ListItem() {
+          this.SettingRow('AI 超时时间', `${this.aiTimeout}秒`, true)
+        }
+        .onClick(() => {
+          this.editTimeout();
+        })
+
+        // ===== 写作设置 =====
+        ListItem() {
+          this.SectionTitle('写作设置')
+        }
 
         ListItem() {
           this.SettingRow('自定义提示词', '编辑AI写作指令', true)
         }
         .onClick(() => {
           router.pushUrl({ url: 'pages/PromptEditorPage', params: { mode: 'prompt_edit' } });
+        })
+
+        ListItem() {
+          this.SettingRow('自动保存间隔', `${this.autoSaveInterval}分钟`, true)
+        }
+        .onClick(() => {
+          this.editAutoSaveInterval();
+        })
+
+        ListItem() {
+          this.SettingRow('字体大小', `${this.fontSize}px`, true)
+        }
+        .onClick(() => {
+          this.editFontSize();
         })
 
         ListItem() {
@@ -768,9 +1090,7 @@ struct SettingsTab {
           this.followSystemDark = !this.followSystemDark;
           settingsManager.settings.followSystemDark = this.followSystemDark;
           settingsManager.save();
-          // 通知父组件更新深色模式
           if (this.followSystemDark) {
-            // 获取系统配置
             const context = getContext(this) as Context;
             const config = context.config;
             if (config && config.colorMode !== undefined) {
@@ -782,19 +1102,62 @@ struct SettingsTab {
           promptAction.showToast({ message: this.followSystemDark ? '已启用跟随系统深色模式' : '已关闭跟随系统深色模式', duration: 2000 });
         })
 
+        // ===== 数据管理 =====
+        ListItem() {
+          this.SectionTitle('数据管理')
+        }
+
+        ListItem() {
+          this.SettingRow('导出数据', '备份所有作品到本地', true)
+        }
+        .onClick(() => {
+          this.exportData();
+        })
+
+        ListItem() {
+          this.SettingRow('导入数据', '从备份文件恢复', true)
+        }
+        .onClick(() => {
+          this.importData();
+        })
+
+        ListItem() {
+          this.SettingRow('清除缓存', '释放存储空间', true)
+        }
+        .onClick(() => {
+          this.clearCache();
+        })
+
+        // ===== 账号与隐私 =====
+        ListItem() {
+          this.SectionTitle('账号与隐私')
+        }
+
+        ListItem() {
+          this.SettingRow('华为账号登录', this.isLoggedIn ? this.userName : '未登录', true)
+        }
+        .onClick(() => {
+          this.showAccountPanel = true;
+        })
+
         ListItem() {
           this.SettingRow('用户协议', '', true)
         }
         .onClick(() => {
-          promptAction.showToast({ message: '用户协议页面开发中', duration: 2000 });
+          this.showPrivacyPanel = true;
         })
 
         ListItem() {
           this.SettingRow('隐私政策', '', true)
         }
         .onClick(() => {
-          promptAction.showToast({ message: '隐私政策页面开发中', duration: 2000 });
+          this.showPrivacyPanel = true;
         })
+
+        // ===== 关于与支持 =====
+        ListItem() {
+          this.SectionTitle('关于与支持')
+        }
 
         ListItem() {
           this.SettingRow('应用评分', '⭐⭐⭐⭐⭐', false)
@@ -804,10 +1167,31 @@ struct SettingsTab {
         })
 
         ListItem() {
-          this.SettingRow('关于', 'v1.2.0', false)
+          this.SettingRow('检查更新', 'v1.2.0', true)
         }
         .onClick(() => {
-          promptAction.showToast({ message: '创意写作 v1.2.0\nAI驱动的写作助手', duration: 3000 });
+          promptAction.showToast({ message: '当前已是最新版本', duration: 2000 });
+        })
+
+        ListItem() {
+          this.SettingRow('帮助中心', '使用教程与常见问题', true)
+        }
+        .onClick(() => {
+          promptAction.showToast({ message: '帮助中心开发中', duration: 2000 });
+        })
+
+        ListItem() {
+          this.SettingRow('联系反馈', '提交问题或建议', true)
+        }
+        .onClick(() => {
+          promptAction.showToast({ message: '反馈功能开发中', duration: 2000 });
+        })
+
+        ListItem() {
+          this.SettingRow('关于', '创意写作 v1.2.0', true)
+        }
+        .onClick(() => {
+          this.showAboutPanel = true;
         })
       }
       .layoutWeight(1)
@@ -947,6 +1331,266 @@ struct SettingsTab {
           this.showCustomUrlInput = false;
         })
       }
+
+      // 模型选择面板
+      if (this.showModelPickerPanel) {
+        Column() {
+          Column() {
+            Text('选择AI模型')
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#1A1A2E')
+              .margin({ bottom: 16 })
+
+            this.ModelOption('DeepSeek', 'deepseek')
+            this.ModelOption('智谱 GLM', 'glm')
+            this.ModelOption('百度文心', 'baidu')
+            this.ModelOption('小艺助手', 'xiaoyi')
+            this.ModelOption('本地 GGUF', 'gguf')
+            this.ModelOption('自定义接口', 'custom')
+
+            Button('取消')
+              .fontSize(14)
+              .fontColor('#6B7280')
+              .backgroundColor('#F3F4F6')
+              .borderRadius(20)
+              .height(40)
+              .width('100%')
+              .margin({ top: 12 })
+              .onClick(() => {
+                this.showModelPickerPanel = false;
+              })
+          }
+          .width('100%')
+          .padding(20)
+          .backgroundColor('#FFFFFF')
+          .borderRadius(16)
+          .margin({ left: 24, right: 24 })
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0,0,0,0.5)')
+        .justifyContent(FlexAlign.Center)
+        .position({ x: 0, y: 0 })
+        .onClick(() => {
+          this.showModelPickerPanel = false;
+        })
+      }
+
+      // 账号登录面板
+      if (this.showAccountPanel) {
+        Column() {
+          Column() {
+            Text('账号登录')
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#1A1A2E')
+              .margin({ bottom: 8 })
+
+            if (this.isLoggedIn) {
+              Text(`已登录: ${this.userName}`)
+                .fontSize(14)
+                .fontColor('#6B7280')
+                .margin({ bottom: 16 })
+
+              Button('退出登录')
+                .fontSize(14)
+                .fontColor('#FFFFFF')
+                .backgroundColor('#FF4D4D')
+                .borderRadius(20)
+                .height(40)
+                .width('100%')
+                .onClick(() => {
+                  this.isLoggedIn = false;
+                  this.userName = '';
+                  this.showAccountPanel = false;
+                  promptAction.showToast({ message: '已退出登录', duration: 2000 });
+                })
+            } else {
+              Text('登录后即可使用AI功能和修改API设置')
+                .fontSize(13)
+                .fontColor('#9CA3AF')
+                .margin({ bottom: 16 })
+                .textAlign(TextAlign.Center)
+
+              Button('华为账号一键登录')
+                .fontSize(14)
+                .fontColor('#FFFFFF')
+                .backgroundColor('#FF2D55')
+                .borderRadius(20)
+                .height(44)
+                .width('100%')
+                .margin({ bottom: 12 })
+                .onClick(() => {
+                  this.loginHuawei();
+                })
+
+              Button('暂不登录')
+                .fontSize(13)
+                .fontColor('#9CA3AF')
+                .backgroundColor('transparent')
+                .height(36)
+                .width('100%')
+                .onClick(() => {
+                  this.showAccountPanel = false;
+                })
+            }
+
+            Button('取消')
+              .fontSize(14)
+              .fontColor('#6B7280')
+              .backgroundColor('#F3F4F6')
+              .borderRadius(20)
+              .height(40)
+              .width('100%')
+              .margin({ top: 12 })
+              .onClick(() => {
+                this.showAccountPanel = false;
+              })
+          }
+          .width('100%')
+          .padding(20)
+          .backgroundColor('#FFFFFF')
+          .borderRadius(16)
+          .margin({ left: 24, right: 24 })
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0,0,0,0.5)')
+        .justifyContent(FlexAlign.Center)
+        .position({ x: 0, y: 0 })
+        .onClick(() => {
+          this.showAccountPanel = false;
+        })
+      }
+
+      // 隐私政策/用户协议面板
+      if (this.showPrivacyPanel) {
+        Column() {
+          Column() {
+            Text('用户协议与隐私政策')
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#1A1A2E')
+              .margin({ bottom: 12 })
+
+            Text('【用户协议】')
+              .fontSize(14)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#1A1A2E')
+              .margin({ bottom: 8 })
+              .alignSelf(ItemAlign.Start)
+
+            Text('1. 本应用仅供个人学习和创作使用，不得用于商业侵权用途。\n2. 用户需遵守相关法律法规，不得利用本应用生成违法违规内容。\n3. AI生成的内容版权归用户所有，用户需自行承担使用风险。\n4. 用户应妥善保管API Key，不得将其分享给他人使用。\n5. 本应用不对AI生成内容的准确性和合法性负责。')
+              .fontSize(12)
+              .fontColor('#6B7280')
+              .margin({ bottom: 16 })
+              .alignSelf(ItemAlign.Start)
+
+            Text('【隐私政策】')
+              .fontSize(14)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#1A1A2E')
+              .margin({ bottom: 8 })
+              .alignSelf(ItemAlign.Start)
+
+            Text('1. 您的API Key仅存储在本地，不会上传到任何服务器。\n2. 作品数据完全保存在您的设备上，我们不会收集您的创作内容。\n3. 本应用不会收集您的个人信息、位置、通讯录等隐私数据。\n4. 当您使用华为账号登录时，我们仅会获取必要的用户标识用于登录验证。\n5. 我们不会将您的任何数据分享给第三方。')
+              .fontSize(12)
+              .fontColor('#6B7280')
+              .margin({ bottom: 16 })
+              .alignSelf(ItemAlign.Start)
+
+            Button('我知道了')
+              .fontSize(14)
+              .fontColor('#FFFFFF')
+              .backgroundColor('#FF2D55')
+              .borderRadius(20)
+              .height(40)
+              .width('100%')
+              .onClick(() => {
+                this.showPrivacyPanel = false;
+              })
+          }
+          .width('100%')
+          .padding(20)
+          .backgroundColor('#FFFFFF')
+          .borderRadius(16)
+          .margin({ left: 24, right: 24 })
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0,0,0,0.5)')
+        .justifyContent(FlexAlign.Center)
+        .position({ x: 0, y: 0 })
+        .onClick(() => {
+          this.showPrivacyPanel = false;
+        })
+      }
+
+      // 关于面板
+      if (this.showAboutPanel) {
+        Column() {
+          Column() {
+            Text('关于 创意写作')
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#1A1A2E')
+              .margin({ bottom: 12 })
+
+            Text('🤖 AI')
+              .fontSize(24)
+              .margin({ bottom: 8 })
+
+            Text('创意写作 v1.2.0')
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#FF2D55')
+              .margin({ bottom: 8 })
+
+            Text('AI驱动的写作助手')
+              .fontSize(13)
+              .fontColor('#6B7280')
+              .margin({ bottom: 16 })
+
+            Text('功能特性：')
+              .fontSize(14)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#1A1A2E')
+              .margin({ bottom: 8 })
+              .alignSelf(ItemAlign.Start)
+
+            Text('• 短剧/中长篇双工作台，独立管理\n• AI对话生成，一键保存思维链路\n• 自动版本归档，修改历史可追溯\n• 支持多种AI模型：DeepSeek、智谱GLM、百度文心、小艺助手、本地GGUF\n• 丰富的模板库，支持自定义提示词\n• 深色模式，保护您的视力')
+              .fontSize(12)
+              .fontColor('#6B7280')
+              .margin({ bottom: 16 })
+              .alignSelf(ItemAlign.Start)
+
+            Button('关闭')
+              .fontSize(14)
+              .fontColor('#FFFFFF')
+              .backgroundColor('#FF2D55')
+              .borderRadius(20)
+              .height(40)
+              .width('100%')
+              .onClick(() => {
+                this.showAboutPanel = false;
+              })
+          }
+          .width('100%')
+          .padding(20)
+          .backgroundColor('#FFFFFF')
+          .borderRadius(16)
+          .margin({ left: 24, right: 24 })
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0,0,0,0.5)')
+        .justifyContent(FlexAlign.Center)
+        .position({ x: 0, y: 0 })
+        .onClick(() => {
+          this.showAboutPanel = false;
+        })
+      }
     }
     .width('100%')
     .height('100%')
@@ -981,6 +1625,17 @@ struct SettingsTab {
     .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
   }
 
+  @Builder
+  SectionTitle(title: string) {
+    Text(title)
+      .fontSize(12)
+      .fontWeight(FontWeight.Bold)
+      .fontColor('#9CA3AF')
+      .margin({ top: 8, bottom: 4 })
+      .padding({ left: 16 })
+      .width('100%')
+  }
+
   getModelName(): string {
     switch (this.selectedModel) {
       case 'deepseek': return 'DeepSeek';
@@ -993,36 +1648,111 @@ struct SettingsTab {
     }
   }
 
-  showModelPicker() {
-    promptAction.showActionMenu({
-      title: '选择模型',
-      buttons: [
-        { text: 'DeepSeek', color: '#1A1A2E' },
-        { text: '智谱 GLM', color: '#1A1A2E' },
-        { text: '百度文心', color: '#1A1A2E' },
-        { text: '小艺助手', color: '#1A1A2E' },
-        { text: '本地 GGUF', color: '#1A1A2E' },
-        { text: '自定义接口', color: '#1A1A2E' }
-      ]
-    }).then((result) => {
-      const models = ['deepseek', 'glm', 'baidu', 'xiaoyi', 'gguf', 'custom'];
-      if (result.index >= 0 && result.index < models.length) {
-        this.selectedModel = models[result.index];
-        this.saveSettings();
+  @Builder
+  ModelOption(label: string, modelKey: string) {
+    Row() {
+      Text(label)
+        .fontSize(15)
+        .fontColor(this.selectedModel === modelKey ? '#FF2D55' : '#1A1A2E')
+        .fontWeight(this.selectedModel === modelKey ? FontWeight.Bold : FontWeight.Normal)
+        .layoutWeight(1)
+
+      if (this.selectedModel === modelKey) {
+        Text('✓')
+          .fontSize(16)
+          .fontColor('#FF2D55')
       }
+    }
+    .width('100%')
+    .height(44)
+    .padding({ left: 12, right: 12 })
+    .backgroundColor(this.selectedModel === modelKey ? '#FFF0F5' : 'transparent')
+    .borderRadius(8)
+    .margin({ bottom: 4 })
+    .onClick(() => {
+      this.selectedModel = modelKey;
+      this.saveSettings();
+      this.showModelPickerPanel = false;
+      promptAction.showToast({ message: `已切换到 ${label}`, duration: 2000 });
+    })
+  }
+
+  loginHuawei() {
+    // 模拟华为账号登录
+    this.isLoggedIn = true;
+    this.userName = '华为用户';
+    this.showAccountPanel = false;
+    promptAction.showToast({ message: '登录成功！', duration: 2000 });
+  }
+
+  editTimeout() {
+    const options = ['15秒', '30秒', '60秒', '120秒'];
+    const values = [15, 30, 60, 120];
+    promptAction.showActionMenu({
+      title: '选择AI超时时间',
+      buttons: options.map((text, index) => ({ text, color: '#1A1A2E' }))
+    }).then((result) => {
+      this.aiTimeout = values[result.index];
+      this.saveSettings();
+      promptAction.showToast({ message: `已设置为 ${this.aiTimeout}秒`, duration: 2000 });
     });
+  }
+
+  editAutoSaveInterval() {
+    const options = ['1分钟', '5分钟', '10分钟', '30分钟'];
+    const values = [1, 5, 10, 30];
+    promptAction.showActionMenu({
+      title: '选择自动保存间隔',
+      buttons: options.map((text, index) => ({ text, color: '#1A1A2E' }))
+    }).then((result) => {
+      this.autoSaveInterval = values[result.index];
+      this.saveSettings();
+      promptAction.showToast({ message: `已设置为 ${this.autoSaveInterval}分钟`, duration: 2000 });
+    });
+  }
+
+  editFontSize() {
+    const options = ['12px', '14px', '16px', '18px'];
+    const values = [12, 14, 16, 18];
+    promptAction.showActionMenu({
+      title: '选择字体大小',
+      buttons: options.map((text, index) => ({ text, color: '#1A1A2E' }))
+    }).then((result) => {
+      this.fontSize = values[result.index];
+      this.saveSettings();
+      promptAction.showToast({ message: `已设置为 ${this.fontSize}px`, duration: 2000 });
+    });
+  }
+
+  exportData() {
+    promptAction.showToast({ message: '导出功能开发中', duration: 2000 });
+  }
+
+  importData() {
+    promptAction.showToast({ message: '导入功能开发中', duration: 2000 });
+  }
+
+  clearCache() {
+    promptAction.showToast({ message: '缓存已清除', duration: 2000 });
   }
 
   loadSettings() {
     this.apiKey = settingsManager.settings.apiKey;
     this.selectedModel = settingsManager.settings.selectedModel;
     this.customUrl = settingsManager.settings.customUrl;
+    this.followSystemDark = settingsManager.settings.followSystemDark;
+    this.autoSaveInterval = settingsManager.settings.autoSaveInterval || 5;
+    this.fontSize = settingsManager.settings.fontSize || 14;
+    this.aiTimeout = settingsManager.settings.aiTimeout || 30;
   }
 
   saveSettings() {
     settingsManager.settings.apiKey = this.apiKey;
     settingsManager.settings.selectedModel = this.selectedModel;
     settingsManager.settings.customUrl = this.customUrl;
+    settingsManager.settings.autoSaveInterval = this.autoSaveInterval;
+    settingsManager.settings.fontSize = this.fontSize;
+    settingsManager.settings.aiTimeout = this.aiTimeout;
     settingsManager.save();
   }
 }

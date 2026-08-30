@@ -162,6 +162,20 @@ export class WorkManager {
     return null;
   }
 
+  deleteChapter(workId: string, chapterId: string): boolean {
+    const work = this.works.find(w => w.id === workId);
+    if (work && work.chapters) {
+      const index = work.chapters.findIndex(c => c.id === chapterId);
+      if (index !== -1) {
+        work.chapters.splice(index, 1);
+        work.updateTime = this.formatDate(new Date());
+        this.saveToStorage();
+        return true;
+      }
+    }
+    return false;
+  }
+
   addConversation(workId: string, userMessage: string, aiResponse: string): Conversation | null {
     const work = this.works.find(w => w.id === workId);
     if (work) {

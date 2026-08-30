@@ -9,19 +9,25 @@ export interface SettingsData {
   isFirstLaunch: boolean;
   hasAgreedToTerms: boolean;
   followSystemDark: boolean;
+  autoSaveInterval: number;
+  fontSize: number;
+  aiTimeout: number;
 }
 
 export class SettingsManager {
   private prefs: preferences.Preferences | null = null;
   private storageKey: string = 'writing_app_settings';
-  settings: SettingsData = {
+ private defaultSettings: SettingsData = {
     apiKey: '',
     selectedModel: 'deepseek',
     customUrl: '',
     customPrompt: '',
     isFirstLaunch: true,
     hasAgreedToTerms: false,
-    followSystemDark: false
+    followSystemDark: false,
+    autoSaveInterval: 5,
+    fontSize: 14,
+    aiTimeout: 30
   };
 
   async init(context: common.UIAbilityContext): Promise<void> {
