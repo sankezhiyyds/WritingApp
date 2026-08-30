@@ -2,12 +2,16 @@ import UIAbility from '@ohos.app.ability.UIAbility';
 import window from '@ohos.window';
 import { workManager } from '../model/WorkManager';
 import { settingsManager } from '../model/SettingsManager';
+import { responsiveManager } from '../model/ResponsiveManager';
+import { aiService } from '../model/AIService';
 
 export default class EntryAbility extends UIAbility {
   onCreate(): void {
     console.info('[EntryAbility] onCreate');
     workManager.init(this.context);
     settingsManager.init(this.context);
+    responsiveManager.init(this.context);
+    aiService.setContext(this.context);
   }
 
   onDestroy(): void {

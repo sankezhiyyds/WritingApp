@@ -1,0 +1,27 @@
+.git/
+*.class
+
+# Build outputs
+build/
+entry/build/
+*.hap
+*.hsp
+*.har
+
+# IDE & tools
+.idea/
+.codegenie/
+.hvigor/
+.vscode/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+oh_modules/
+
+# Local config
+local.properties

@@ -1,5 +1,7 @@
 import { settingsManager } from './SettingsManager';
 import http from '@ohos.net.http';
+import common from '@ohos.app.ability.common';
+import { Want } from '@kit.AbilityKit';
 
 export interface AIResponse {
   content: string;
@@ -8,8 +10,38 @@ export interface AIResponse {
   error?: string;
 }
 
+interface ChatMessage {
+  role: string;
+  content: string;
+}
+
+interface ChatRequestBody {
+  model: string;
+  messages: ChatMessage[];
+  temperature: number;
+  max_tokens?: number;
+}
+
+interface ChatChoice {
+  message: ChatMessage;
+}
+
+interface ChatResponseData {
+  choices: ChatChoice[];
+}
+
+interface BaiduResponseData {
+  result: string;
+}
+
+interface CustomResponseData {
+  content?: string;
+  response?: string;
+}
+
 export class AIService {
   private static instance: AIService | null = null;
+  private context: common.UIAbilityContext | null = null;
 
   static getInstance(): AIService {
     if (!AIService.instance) {
@@ -18,8 +50,17 @@ export class AIService {
     return AIService.instance;
   }
 
+  setContext(context: common.UIAbilityContext): void {
+    this.context = context;
+  }
+
   async callAI(prompt: string, context?: string): Promise<AIResponse> {
     const settings = settingsManager.settings;
+
+    // 小艺助手不需要API Key，使用系统内置能力
+    if (settings.selectedModel === 'xiaoyi') {
+      return await this.callXiaoyi(prompt, context);
+    }
 
     if (!settings.apiKey) {
       return {
@@ -60,7 +101,7 @@ export class AIService {
     const settings = settingsManager.settings;
     const url = settings.customUrl || 'https://api.deepseek.com/v1/chat/completions';
 
-    const messages = [
+    const messages: ChatMessage[] = [
       {
         role: 'system',
         content: this.buildSystemPrompt()
@@ -79,7 +120,7 @@ export class AIService {
       content: prompt
     });
 
-    const requestBody = {
+    const requestBody: ChatRequestBody = {
       model: 'deepseek-chat',
       messages: messages,
       temperature: 0.7,
@@ -100,8 +141,8 @@ export class AIService {
       httpRequest.destroy();
 
       if (response.responseCode === 200) {
-        const data = JSON.parse(response.result as string);
-        const content = data.choices[0].message.content;
+        const data = JSON.parse(response.result as string) as ChatResponseData;
+        const content: string = data.choices[0].message.content;
 
         // 提取思维链路（如果有的话）
         const thoughtChain = this.extractThoughtChain(content);
@@ -132,7 +173,7 @@ export class AIService {
     const settings = settingsManager.settings;
     const url = settings.customUrl || 'https://open.bigmodel.cn/api/paas/v4/chat/completions';
 
-    const messages = [
+    const messages: ChatMessage[] = [
       { role: 'system', content: this.buildSystemPrompt() }
     ];
 
@@ -159,7 +200,7 @@ export class AIService {
       httpRequest.destroy();
 
       if (response.responseCode === 200) {
-        const data = JSON.parse(response.result as string);
+        const data = JSON.parse(response.result as string) as ChatResponseData;
         return {
           content: data.choices[0].message.content,
           thoughtChain: this.extractThoughtChain(data.choices[0].message.content),
@@ -177,7 +218,7 @@ export class AIService {
     const settings = settingsManager.settings;
     const url = settings.customUrl || 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions_pro';
 
-    const messages = [
+    const messages: ChatMessage[] = [
       { role: 'user', content: context ? `${context}\n\n${prompt}` : prompt }
     ];
 
@@ -192,7 +233,7 @@ export class AIService {
       httpRequest.destroy();
 
       if (response.responseCode === 200) {
-        const data = JSON.parse(response.result as string);
+        const data = JSON.parse(response.result as string) as BaiduResponseData;
         return {
           content: data.result,
           thoughtChain: this.extractThoughtChain(data.result),
@@ -206,11 +247,67 @@ export class AIService {
   }
 
   private async callXiaoyi(prompt: string, context?: string): Promise<AIResponse> {
-    // 小艺Agent API实现（示例）
-    return {
-      content: '[小艺Agent接口需要配置]\n\n当前提示: ' + prompt,
-      success: true
-    };
+    if (!this.context) {
+      return {
+        content: '',
+        success: false,
+        error: '小艺助手未初始化，请重启应用'
+      };
+    }
+
+    try {
+      // 通过Want拉起系统小艺助手，传入提示词
+      const params: Record<string, string> = { 'query': prompt, 'type': 'text' };
+      const wantParam: Want = {
+        action: 'ohos.want.action.voiceAssistant',
+        parameters: params
+      };
+      await this.context.startAbility(wantParam);
+      return {
+        content: '已打开系统小艺助手，请在小艺中查看生成结果，\n完成后可复制内容回到本应用。',
+        success: true
+      };
+    } catch (e) {
+      // 部分设备可能不支持voiceAssistant action，尝试备用方案
+      try {
+        const fallbackParams: Record<string, string> = { 'query': prompt };
+        const fallbackWant: Want = {
+          action: 'ohos.want.action.home',
+          parameters: fallbackParams
+        };
+        await this.context.startAbility(fallbackWant);
+        return {
+          content: '已尝试打开系统助手，请手动输入提示词。',
+          success: true
+        };
+      } catch (e2) {
+        return {
+          content: '',
+          success: false,
+          error: '无法启动小艺助手，请确认设备支持该功能'
+        };
+      }
+    }
+  }
+
+  /**
+   * 直接打开系统小艺助手（公开方法，供UI调用）
+   */
+  async openXiaoyiAssistant(prompt?: string): Promise<boolean> {
+    if (!this.context) {
+      return false;
+    }
+    try {
+      const params: Record<string, string> = prompt ? { 'query': prompt, 'type': 'text' } : {};
+      const wantParam: Want = {
+        action: 'ohos.want.action.voiceAssistant',
+        parameters: params
+      };
+      await this.context.startAbility(wantParam);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   private async callLocalGGUF(prompt: string, context?: string): Promise<AIResponse> {
@@ -244,7 +341,7 @@ export class AIService {
       httpRequest.destroy();
 
       if (response.responseCode === 200) {
-        const data = JSON.parse(response.result as string);
+        const data = JSON.parse(response.result as string) as CustomResponseData;
         return {
           content: data.content || data.response || JSON.stringify(data),
           thoughtChain: this.extractThoughtChain(data.content || data.response || ''),

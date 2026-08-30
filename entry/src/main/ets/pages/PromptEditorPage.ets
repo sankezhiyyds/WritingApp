@@ -2,6 +2,7 @@ import { TemplateField, TemplateInfo, templateList } from '../model/TemplateMode
 import { WorkItem, workManager, Chapter, Conversation } from '../model/WorkManager';
 import { settingsManager } from '../model/SettingsManager';
 import { aiService } from '../model/AIService';
+import { responsiveManager, BreakpointType } from '../model/ResponsiveManager';
 import router from '@ohos.router';
 import promptAction from '@ohos.promptAction';
 
@@ -21,6 +22,20 @@ struct PromptEditorPage {
   @State currentChapter: Chapter | null = null;
   @State promptText: string = '';
   @State isGenerating: boolean = false;
+  @State currentBreakpoint: BreakpointType = 'sm';
+
+  get isWide(): boolean {
+    return this.currentBreakpoint === 'md' || this.currentBreakpoint === 'lg';
+  }
+
+  get contentMaxWidth(): number {
+    if (this.currentBreakpoint === 'lg') {
+      return 1200;
+    } else if (this.currentBreakpoint === 'md') {
+      return 840;
+    }
+    return 10000;
+  }
 
   aboutToAppear() {
     const params = router.getParams() as Record<string, string>;
@@ -53,6 +68,18 @@ struct PromptEditorPage {
         }
       }
     }
+
+    // 初始化断点
+    this.currentBreakpoint = responsiveManager.getBreakpoint();
+    responsiveManager.onBreakpointChange((bp: BreakpointType) => {
+      this.currentBreakpoint = bp;
+    });
+  }
+
+  aboutToDisappear() {
+    responsiveManager.offBreakpointChange((bp: BreakpointType) => {
+      this.currentBreakpoint = bp;
+    });
   }
 
   build() {
@@ -149,6 +176,18 @@ struct PromptEditorPage {
               .margin({ left: 12 })
               .onClick(() => this.generateWithAi())
           }
+
+          // 小艺助手按钮
+          Button('小艺')
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#FFFFFF')
+            .backgroundColor('#007DFF')
+            .borderRadius(20)
+            .height(36)
+            .padding({ left: 16, right: 16 })
+            .margin({ left: 12 })
+            .onClick(() => this.openXiaoyi())
         }
         .width('100%')
         .height(56)
@@ -159,6 +198,7 @@ struct PromptEditorPage {
     .width('100%')
     .height('100%')
     .backgroundColor('#F5F6FA')
+    .constraintSize({ maxWidth: this.contentMaxWidth })
   }
 
   @Builder
@@ -498,6 +538,22 @@ struct PromptEditorPage {
     }
 
     router.back();
+  }
+
+  async openXiaoyi() {
+    // 构建提示词
+    let prompt = this.generatedContent;
+    if (this.template) {
+      prompt = `请根据以下模板信息生成内容：\n模板：${this.template.name}\n\n${this.generatedContent}`;
+    }
+    if (!prompt) {
+      prompt = this.title || '请帮我创作内容';
+    }
+
+    const success = await aiService.openXiaoyiAssistant(prompt);
+    if (!success) {
+      promptAction.showToast({ message: '无法启动小艺助手，请确认设备支持', duration: 2000 });
+    }
   }
 
   async generateWithAi() {

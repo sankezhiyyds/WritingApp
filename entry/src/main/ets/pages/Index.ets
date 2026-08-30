@@ -1,6 +1,7 @@
 import { TemplateField, TemplateInfo, templateList } from '../model/TemplateModel';
 import { WorkItem, workManager } from '../model/WorkManager';
 import { settingsManager } from '../model/SettingsManager';
+import { responsiveManager, BreakpointType } from '../model/ResponsiveManager';
 import router from '@ohos.router';
 import promptAction from '@ohos.promptAction';
 
@@ -10,7 +11,34 @@ struct Index {
   @State currentIndex: number = 0;
   @State isDarkMode: boolean = false;
   @State showOnboarding: boolean = false;
+  @State currentBreakpoint: BreakpointType = 'sm';
   private controller: TabsController = new TabsController();
+
+  get isWide(): boolean {
+    return this.currentBreakpoint === 'md' || this.currentBreakpoint === 'lg';
+  }
+
+  get templateColumns(): string {
+    if (this.currentBreakpoint === 'lg') {
+      return '1fr 1fr 1fr 1fr';
+    } else if (this.currentBreakpoint === 'md') {
+      return '1fr 1fr 1fr';
+    }
+    return '1fr 1fr 1fr';
+  }
+
+  get navWidth(): number {
+    return this.currentBreakpoint === 'lg' ? 240 : 200;
+  }
+
+  get contentMaxWidth(): number {
+    if (this.currentBreakpoint === 'lg') {
+      return 1200;
+    } else if (this.currentBreakpoint === 'md') {
+      return 840;
+    }
+    return 10000;
+  }
 
   get bgColor(): string {
     return this.isDarkMode ? '#1A1A2E' : '#F5F6FA';
@@ -29,59 +57,121 @@ struct Index {
     if (settingsManager.settings.isFirstLaunch) {
       this.showOnboarding = true;
     }
+    // 初始化断点
+    this.currentBreakpoint = responsiveManager.getBreakpoint();
+    responsiveManager.onBreakpointChange((bp: BreakpointType) => {
+      this.currentBreakpoint = bp;
+    });
+  }
+
+  aboutToDisappear() {
+    responsiveManager.offBreakpointChange((bp: BreakpointType) => {
+      this.currentBreakpoint = bp;
+    });
   }
 
   build() {
     Stack() {
-      Column() {
-        // 顶部栏
+      if (this.isWide) {
+        // 宽屏布局：侧边导航 + 内容区
         Row() {
-          Text('创意写作')
-            .fontSize(20)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(this.textColor)
-          Blank()
-          // AI标识
-          Text('🤖')
-            .fontSize(20)
-          Text('AI')
-            .fontSize(10)
-            .fontColor('#FFFFFF')
-            .backgroundColor('#FF2D55')
-            .borderRadius(4)
-            .padding({ left: 4, right: 4 })
-            .margin({ left: 4 })
+          // 侧边导航栏
+          Column() {
+            Text('创意写作')
+              .fontSize(18)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this.textColor)
+              .margin({ top: 20, bottom: 24 })
+            Text('🤖')
+              .fontSize(16)
+              .margin({ bottom: 20 })
+
+            this.SideNavItem('短剧', '🎬', 0)
+            this.SideNavItem('中长篇', '📚', 1)
+            this.SideNavItem('设置', '⚙️', 2)
+
+            Blank()
+            Text('AI')
+              .fontSize(10)
+              .fontColor('#FFFFFF')
+              .backgroundColor('#FF2D55')
+              .borderRadius(4)
+              .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+              .margin({ bottom: 16 })
+          }
+          .width(this.navWidth)
+          .height('100%')
+          .backgroundColor(this.cardBg)
+          .justifyContent(FlexAlign.Start)
+
+          // 内容区
+          Column() {
+            if (this.currentIndex === 0) {
+              ShortDramaTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColor, bgColor: this.bgColor })
+            } else if (this.currentIndex === 1) {
+              NovelTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColor, bgColor: this.bgColor })
+            } else {
+              SettingsTab({ isDarkMode: this.isDarkMode, onDarkModeChange: (v) => { this.isDarkMode = v; } })
+            }
+          }
+          .layoutWeight(1)
+          .height('100%')
+          .backgroundColor(this.bgColor)
         }
         .width('100%')
-        .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-        .backgroundColor(this.cardBg)
-
-        // Tab内容
-        Tabs({ barPosition: BarPosition.End, controller: this.controller }) {
-          TabContent() {
-            ShortDramaTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColor, bgColor: this.bgColor })
+        .height('100%')
+      } else {
+        // 窄屏布局：底部Tab导航（手机/折叠屏折叠态）
+        Column() {
+          // 顶部栏
+          Row() {
+            Text('创意写作')
+              .fontSize(20)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this.textColor)
+            Blank()
+            // AI标识
+            Text('🤖')
+              .fontSize(20)
+            Text('AI')
+              .fontSize(10)
+              .fontColor('#FFFFFF')
+              .backgroundColor('#FF2D55')
+              .borderRadius(4)
+              .padding({ left: 4, right: 4 })
+              .margin({ left: 4 })
           }
-          .tabBar(this.TabBuilder('短剧', '🎬', 0))
+          .width('100%')
+          .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+          .backgroundColor(this.cardBg)
 
-          TabContent() {
-            NovelTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColor, bgColor: this.bgColor })
-          }
-          .tabBar(this.TabBuilder('中长篇', '📚', 1))
+          // Tab内容
+          Tabs({ barPosition: BarPosition.End, controller: this.controller }) {
+            TabContent() {
+              ShortDramaTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColor, bgColor: this.bgColor })
+            }
+            .tabBar(this.TabBuilder('短剧', '🎬', 0))
 
-          TabContent() {
-            SettingsTab({ isDarkMode: this.isDarkMode, onDarkModeChange: (v) => { this.isDarkMode = v; } })
+            TabContent() {
+              NovelTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColor, bgColor: this.bgColor })
+            }
+            .tabBar(this.TabBuilder('中长篇', '📚', 1))
+
+            TabContent() {
+              SettingsTab({ isDarkMode: this.isDarkMode, onDarkModeChange: (v) => { this.isDarkMode = v; } })
+            }
+            .tabBar(this.TabBuilder('设置', '⚙️', 2))
           }
-          .tabBar(this.TabBuilder('设置', '⚙️', 2))
+          .barHeight(56)
+          .barBackgroundColor(this.cardBg)
+          .onChange((index: number) => {
+            this.currentIndex = index;
+          })
         }
-        .barHeight(56)
-        .barBackgroundColor(this.cardBg)
-        .onChange((index: number) => {
-          this.currentIndex = index;
-        })
+        .width('100%')
+        .height('100%')
+        .backgroundColor(this.bgColor)
       }
-      .width('100%')
-      .height('100%')
-      .backgroundColor(this.bgColor)
 
       // 首次启动引导弹窗
       if (this.showOnboarding) {
@@ -90,6 +180,26 @@ struct Index {
     }
     .width('100%')
     .height('100%')
+  }
+
+  @Builder
+  SideNavItem(label: string, icon: string, index: number) {
+    Row() {
+      Text(icon)
+        .fontSize(20)
+        .margin({ right: 12 })
+      Text(label)
+        .fontSize(15)
+        .fontColor(this.currentIndex === index ? '#FF6B35' : this.textColor)
+        .fontWeight(this.currentIndex === index ? FontWeight.Bold : FontWeight.Normal)
+    }
+    .width('100%')
+    .height(48)
+    .padding({ left: 20 })
+    .backgroundColor(this.currentIndex === index ? (this.isDarkMode ? '#3D3D4A' : '#FFF0E5') : 'transparent')
+    .onClick(() => {
+      this.currentIndex = index;
+    })
   }
 
   @Builder
@@ -132,7 +242,7 @@ struct Index {
           .margin({ bottom: 4 })
           .alignSelf(ItemAlign.Start)
 
-        Text('• 支持多种AI模型：DeepSeek、智谱GLM、百度文心、小艺Agent、本地GGUF')
+        Text('• 支持多种AI模型：DeepSeek、智谱GLM、百度文心、小艺助手、本地GGUF')
           .fontSize(13)
           .fontColor('#6B7280')
           .margin({ bottom: 12 })
@@ -227,6 +337,15 @@ struct ShortDramaTab {
   @State templates: TemplateInfo[] = [];
   @State works: WorkItem[] = [];
 
+  get templateColumns(): string {
+    const cols = responsiveManager.getTemplateColumns();
+    let result = '';
+    for (let i = 0; i < cols; i++) {
+      result += '1fr ';
+    }
+    return result.trim();
+  }
+
   aboutToAppear() {
     this.templates = templateList.filter(t => t.category === '剧本类' || t.category === '喜剧类');
     this.works = workManager.getAllWorks().filter(w => this.templates.some(t => t.id === w.templateId));
@@ -269,7 +388,7 @@ struct ShortDramaTab {
             }
           }, (item: TemplateInfo) => item.id)
         }
-        .columnsTemplate('1fr 1fr 1fr')
+        .columnsTemplate(this.templateColumns)
         .rowsGap(12)
         .columnsGap(12)
         .padding({ left: 16, right: 16 })
@@ -394,6 +513,15 @@ struct NovelTab {
   @State templates: TemplateInfo[] = [];
   @State works: WorkItem[] = [];
 
+  get templateColumns(): string {
+    const cols = responsiveManager.getTemplateColumns();
+    let result = '';
+    for (let i = 0; i < cols; i++) {
+      result += '1fr ';
+    }
+    return result.trim();
+  }
+
   aboutToAppear() {
     this.templates = templateList.filter(t => t.category === '叙事类');
     this.works = workManager.getAllWorks().filter(w => this.templates.some(t => t.id === w.templateId));
@@ -436,7 +564,7 @@ struct NovelTab {
             }
           }, (item: TemplateInfo) => item.id)
         }
-        .columnsTemplate('1fr 1fr 1fr')
+        .columnsTemplate(this.templateColumns)
         .rowsGap(12)
         .columnsGap(12)
         .padding({ left: 16, right: 16 })
@@ -555,7 +683,7 @@ struct NovelTab {
 @Component
 struct SettingsTab {
   @Prop isDarkMode: boolean;
-  @Prop onDarkModeChange: (value: boolean) => void;
+  onDarkModeChange: (value: boolean) => void = (value: boolean) => {};
   @State apiKey: string = '';
   @State selectedModel: string = 'deepseek';
   @State showApiKeyInput: boolean = false;
@@ -739,7 +867,7 @@ struct SettingsTab {
       case 'deepseek': return 'DeepSeek';
       case 'glm': return '智谱 GLM';
       case 'baidu': return '百度文心';
-      case 'xiaoyi': return '小艺 Agent';
+      case 'xiaoyi': return '小艺助手';
       case 'gguf': return '本地 GGUF';
       case 'custom': return '自定义接口';
       default: return 'DeepSeek';
@@ -753,7 +881,7 @@ struct SettingsTab {
         { text: 'DeepSeek', color: '#1A1A2E' },
         { text: '智谱 GLM', color: '#1A1A2E' },
         { text: '百度文心', color: '#1A1A2E' },
-        { text: '小艺 Agent', color: '#1A1A2E' },
+        { text: '小艺助手', color: '#1A1A2E' },
         { text: '本地 GGUF', color: '#1A1A2E' },
         { text: '自定义接口', color: '#1A1A2E' }
       ]

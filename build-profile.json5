@@ -1,6 +1,20 @@
 {
   "app": {
-    "signingConfigs": [],
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "C:\\Users\\taxia\\.ohos\\config\\default_WritingApp_C1btk0Hzb3vxgotuXLO5Rz7Th_t6qEJI55SbzrGUY4Q=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001A68982380B1C171140D59AB8DB66DC1C6988C6C6228B29A6A44281352BB31D6DA36EBD35C5F65",
+          "profile": "C:\\Users\\taxia\\.ohos\\config\\default_WritingApp_C1btk0Hzb3vxgotuXLO5Rz7Th_t6qEJI55SbzrGUY4Q=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "C:\\Users\\taxia\\.ohos\\config\\default_WritingApp_C1btk0Hzb3vxgotuXLO5Rz7Th_t6qEJI55SbzrGUY4Q=.p12",
+          "storePassword": "0000001ABA6BF61D1696A5FF4DA01DEA0DCEA3A1EED3215D6239E5CCAFE9A89C563E2EAC5FC83B565058"
+        }
+      }
+    ],
     "products": [
       {
         "name": "default",
