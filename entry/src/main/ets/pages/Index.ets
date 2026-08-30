@@ -36,7 +36,7 @@ struct Index {
       Column() {
         // 顶部栏
         Row() {
-          Text('文字创意工坊')
+          Text('创意写作')
             .fontSize(20)
             .fontWeight(FontWeight.Bold)
             .fontColor(this.textColor)
@@ -96,7 +96,7 @@ struct Index {
   OnboardingDialog() {
     Column() {
       Column() {
-        Text('欢迎使用文字创意工坊')
+        Text('欢迎使用创意写作')
           .fontSize(20)
           .fontWeight(FontWeight.Bold)
           .fontColor('#1A1A2E')
@@ -628,7 +628,7 @@ struct SettingsTab {
           this.SettingRow('关于', 'v1.1.0', false)
         }
         .onClick(() => {
-          promptAction.showToast({ message: '文字创意工坊 v1.1.0\nAI驱动的写作助手', duration: 3000 });
+          promptAction.showToast({ message: '创意写作 v1.2.0\nAI驱动的写作助手', duration: 3000 });
         })
       }
       .layoutWeight(1)

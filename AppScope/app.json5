@@ -1,8 +1,8 @@
 {
   "app": {
-    "bundleName": "com.writingworkshop.ai",
-    "versionCode": 1000002,
-    "versionName": "1.1.0",
+    "bundleName": "com.creativewriting.ai",
+    "versionCode": 1000003,
+    "versionName": "1.2.0",
     "icon": "$media:app_icon",
     "label": "$string:app_name"
   }
