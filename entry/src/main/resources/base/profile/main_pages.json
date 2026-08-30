@@ -1,7 +1,6 @@
 {
   "src": [
     "pages/Index",
-    "pages/TemplateDetailPage",
-    "pages/WorkEditorPage"
+    "pages/PromptEditorPage"
   ]
 }

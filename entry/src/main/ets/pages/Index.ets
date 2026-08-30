@@ -8,35 +8,71 @@ import promptAction from '@ohos.promptAction';
 @Component
 struct Index {
   @State currentIndex: number = 0;
+  @State isDarkMode: boolean = false;
   private controller: TabsController = new TabsController();
+
+  get bgColor(): string {
+    return this.isDarkMode ? '#1A1A2E' : '#F5F6FA';
+  }
+
+  get cardBg(): string {
+    return this.isDarkMode ? '#2D2D3A' : '#FFFFFF';
+  }
+
+  get textColor(): string {
+    return this.isDarkMode ? '#FFFFFF' : '#1A1A2E';
+  }
 
   build() {
     Column() {
+      // 顶部栏
+      Row() {
+        Text('文字创意工坊')
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.textColor)
+        Blank()
+        // AI标识
+        Text('🤖')
+          .fontSize(20)
+        Text('AI')
+          .fontSize(10)
+          .fontColor('#FFFFFF')
+          .backgroundColor('#FF2D55')
+          .borderRadius(4)
+          .padding({ left: 4, right: 4 })
+          .margin({ left: 4 })
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+      .backgroundColor(this.cardBg)
+
+      // Tab内容
       Tabs({ barPosition: BarPosition.End, controller: this.controller }) {
         TabContent() {
-          TemplateListTab()
+          ShortDramaTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColoir })
         }
-        .tabBar(this.TabBuilder('模板库', '📚', 0))
+        .tabBar(this.TabBuilder('短剧', '🎬', 0))
 
         TabContent() {
-          WorkManagerTab()
+          NovelTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColor })
         }
-        .tabBar(this.TabBuilder('我的作品', '📝', 1))
+        .tabBar(this.TabBuilder('中长篇', '📚', 1))
 
         TabContent() {
-          SettingsTab()
+          SettingsTab({ isDarkMode: this.isDarkMode, onDarkModeChange: (v) => { this.isDarkMode = v; } })
         }
         .tabBar(this.TabBuilder('设置', '⚙️', 2))
       }
       .barHeight(56)
-      .barBackgroundColor('#FFFFFF')
+      .barBackgroundColor(this.cardBg)
       .onChange((index: number) => {
         this.currentIndex = index;
       })
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#F5F6FA')
+    .backgroundColor(this.bgColor)
   }
 
   @Builder
@@ -56,156 +92,29 @@ struct Index {
   }
 }
 
-// ========== 模板库 Tab ==========
+// ========== 短剧工作台 ==========
 @Component
-struct TemplateListTab {
-  @State templates: TemplateInfo[] = templateList;
-  @State activeCategory: string = '全部';
-  @State filteredTemplates: TemplateInfo[] = templateList;
-
-  aboutToAppear() {
-    this.filterTemplates('全部');
-  }
-
-  build() {
-    Column() {
-      Row() {
-        Text('写书助手')
-          .fontSize(22)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#1A1A2E')
-        Blank()
-        Text('+ 新建作品')
-          .fontSize(14)
-          .fontColor('#FF2D55')
-          .onClick(() => {
-            router.pushUrl({ url: 'pages/WorkEditorPage' });
-          })
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-      .backgroundColor('#FFFFFF')
-
-      Row() {
-        this.CategoryChip('全部')
-        this.CategoryChip('剧本类')
-        this.CategoryChip('叙事类')
-        this.CategoryChip('喜剧类')
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16, top: 12, bottom: 8 })
-
-      Grid() {
-        ForEach(this.filteredTemplates, (item: TemplateInfo) => {
-          GridItem() {
-            TemplateCard({ template: item })
-          }
-        }, (item: TemplateInfo) => item.id)
-      }
-      .columnsTemplate('1fr 1fr 1fr')
-      .rowsGap(12)
-      .columnsGap(12)
-      .padding({ left: 16, right: 16 })
-      .layoutWeight(1)
-    }
-    .width('100%')
-    .height('100%')
-    .backgroundColor('#F5F6FA')
-  }
-
-  @Builder
-  CategoryChip(text: string) {
-    Button(text)
-      .fontSize(12)
-      .fontColor(this.activeCategory === text ? '#FFFFFF' : '#6B7280')
-      .backgroundColor(this.activeCategory === text ? '#FF2D55' : '#E5E7EB')
-      .borderRadius(12)
-      .height(28)
-      .padding({ left: 12, right: 12 })
-      .margin({ right: 8 })
-      .onClick(() => {
-        this.activeCategory = text;
-        this.filterTemplates(text);
-      })
-  }
-
-  filterTemplates(category: string) {
-    if (category === '全部') {
-      this.filteredTemplates = this.templates;
-    } else {
-      this.filteredTemplates = this.templates.filter(t => t.category === category);
-    }
-  }
-}
-
-@Component
-struct TemplateCard {
-  @Prop template: TemplateInfo;
-
-  build() {
-    Column() {
-      Stack() {
-        Circle()
-          .width(44)
-          .height(44)
-          .fill(this.template.color)
-        Text(this.template.icon)
-          .fontSize(20)
-          .fontColor('#FFFFFF')
-      }
-      .alignContent(Alignment.Center)
-      .margin({ top: 12 })
-
-      Text(this.template.name)
-        .fontSize(13)
-        .fontWeight(FontWeight.Medium)
-        .fontColor('#1A1A2E')
-        .margin({ top: 8 })
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-      Text(this.template.desc)
-        .fontSize(10)
-        .fontColor('#9CA3AF')
-        .margin({ top: 4 })
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width('90%')
-    }
-    .width('100%')
-    .height(110)
-    .backgroundColor('#FFFFFF')
-    .borderRadius(12)
-    .padding(12)
-    .alignItems(HorizontalAlign.Center)
-    .onClick(() => {
-      router.pushUrl({
-        url: 'pages/TemplateDetailPage',
-        params: { templateId: this.template.id }
-      });
-    })
-  }
-}
-
-// ========== 我的作品 Tab ==========
-@Component
-struct WorkManagerTab {
+struct ShortDramaTab {
+  @Prop isDarkMode: boolean;
+  @Prop cardBg: string;
+  @Prop textColor: string;
+  @State templates: TemplateInfo[] = templateList.filter(t => t.category === '短剧类' || t.id === 'short_drama' || t.id === 'manzai' || t.id === 'sketch' || t.id === 'short_video' || t.id === 'script_murder' || t.id === 'monologue' || t.id === 'absurdist' || t.id === 'sitcom');
   @State works: WorkItem[] = [];
-  @State activeFilter: number = 0;
 
   aboutToAppear() {
-    this.loadWorks();
+    this.works = workManager.getAllWorks().filter(w => this.templates.some(t => t.id === w.templateId));
   }
 
   build() {
     Column() {
+      // 头部操作栏
       Row() {
-        Text('我的作品')
-          .fontSize(22)
+        Text('短剧工作台')
+          .fontSize(18)
           .fontWeight(FontWeight.Bold)
-          .fontColor('#1A1A2E')
+          .fontColor(this.textColor)
         Blank()
-        Button('+ 新建')
+        Button('新建')
           .fontSize(14)
           .fontColor('#FFFFFF')
           .backgroundColor('#FF2D55')
@@ -213,143 +122,316 @@ struct WorkManagerTab {
           .height(36)
           .padding({ left: 16, right: 16 })
           .onClick(() => {
-            router.pushUrl({ url: 'pages/WorkEditorPage' });
+            router.pushUrl({ url: 'pages/PromptEditorPage', params: { mode: 'short_drama' } });
           })
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-      .backgroundColor('#FFFFFF')
+      .backgroundColor(this.cardBg)
 
-      Row() {
-        this.FilterChip('全部', 0)
-        this.FilterChip('今日', 1)
-        this.FilterChip('本周', 2)
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+      // 模板选择区
+      Column() {
+        Text('选择模板开始创作')
+          .fontSize(14)
+          .fontColor('#9CA3AF')
+          .alignSelf(ItemAlign.Start)
+          .margin({ left: 16, top: 12, bottom: 8 })
 
-      if (this.works.length === 0) {
-        Column() {
-          Text('📝')
-            .fontSize(48)
-          Text('还没有作品')
-            .fontSize(16)
-            .fontColor('#6B7280')
-            .margin({ top: 8 })
-          Text('点击上方按钮开始创作')
-            .fontSize(13)
-            .fontColor('#9CA3AF')
-            .margin({ top: 4 })
-        }
-        .layoutWeight(1)
-        .justifyContent(FlexAlign.Center)
-      } else {
-        List() {
-          ForEach(this.works, (work: WorkItem) => {
-            ListItem() {
-              WorkCard({ work: work })
+        Grid() {
+          ForEach(this.templates, (item: TemplateInfo) => {
+            GridItem() {
+              this.TemplateCard(item)
             }
-          }, (work: WorkItem) => work.id)
+          }, (item: TemplateInfo) => item.id)
         }
+        .columnsTemplate('1fr 1fr 1fr')
+        .rowsGap(12)
+        .columnsGap(12)
+        .padding({ left: 16, right: 16 })
         .layoutWeight(1)
-        .padding({ left: 16, right: 16, top: 8 })
+      }
+      .layoutWeight(1)
+
+      // 作品列表
+      if (this.works.length > 0) {
+        Column() {
+          Text('最近作品')
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.textColor)
+            .alignSelf(ItemAlign.Start)
+            .margin({ left: 16, top: 12, bottom: 8 })
+
+          List() {
+            ForEach(this.works.slice(0, 5), (work: WorkItem) => {
+              ListItem() {
+                this.WorkCard(work)
+              }
+            }, (work: WorkItem) => work.id)
+          }
+          .layoutWeight(1)
+          .padding({ left: 16, right: 16 })
+        }
+        .width('100%')
       }
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#F5F6FA')
+    .backgroundColor(this.bgColor)
   }
 
   @Builder
-  FilterChip(text: string, index: number) {
-    Button(text)
-      .fontSize(12)
-      .fontColor(this.activeFilter === index ? '#FFFFFF' : '#6B7280')
-      .backgroundColor(this.activeFilter === index ? '#FF2D55' : '#E5E7EB')
-      .borderRadius(12)
-      .height(28)
-      .padding({ left: 12, right: 12 })
-      .margin({ right: 8 })
-      .onClick(() => {
-        this.activeFilter = index;
-        this.loadWorks();
-      })
-  }
+  TemplateCard(template: TemplateInfo) {
+    Column() {
+      Stack() {
+        Circle()
+          .width(40)
+          .height(40)
+          .fill(template.color)
+        Text(template.icon)
+          .fontSize(18)
+          .fontColor('#FFFFFF')
+      }
+      .alignContent(Alignment.Center)
 
-  loadWorks() {
-    let allWorks = workManager.getAllWorks();
-    if (this.activeFilter === 1) {
-      const today = this.formatToday();
-      allWorks = allWorks.filter(w => w.createTime.startsWith(today));
-    } else if (this.activeFilter === 2) {
-      const weekAgo = this.formatWeekAgo();
-      allWorks = allWorks.filter(w => w.createTime >= weekAgo);
+      Text(template.name)
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.textColor)
+        .margin({ top: 6 })
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+      Text(template.desc)
+        .fontSize(10)
+        .fontColor('#9CA3AF')
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('90%')
     }
-    this.works = allWorks;
+    .width('100%')
+    .padding(10)
+    .backgroundColor(this.cardBg)
+    .borderRadius(10)
+    .onClick(() => {
+      router.pushUrl({
+        url: 'pages/PromptEditorPage',
+        params: { templateId: template.id, mode: 'short_drama' }
+      });
+    })
   }
 
-  private formatToday(): string {
-    const now = new Date();
-    const pad = (n: number): string => n < 10 ? '0' + n : '' + n;
-    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-  }
-
-  private formatWeekAgo(): string {
-    const now = new Date();
-    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const pad = (n: number): string => n < 10 ? '0' + n : '' + n;
-    return `${weekAgo.getFullYear()}-${pad(weekAgo.getMonth() + 1)}-${pad(weekAgo.getDate())}`;
-  }
-}
-
-@Component
-struct WorkCard {
-  @Prop work: WorkItem;
-
-  build() {
+  @Builder
+  WorkCard(work: WorkItem) {
     Row() {
       Column() {
-        Text(this.work.title || '未命名作品')
-          .fontSize(15)
+        Text(work.title || '未命名作品')
+          .fontSize(14)
           .fontWeight(FontWeight.Medium)
-          .fontColor('#1A1A2E')
-        Text(this.work.templateName)
-          .fontSize(12)
-          .fontColor('#FF2D55')
-          .margin({ top: 4 })
-        Text(this.work.updateTime)
+          .fontColor(this.textColor)
+        Text(work.templateName)
           .fontSize(11)
+          .fontColor('#FF2D55')
+          .margin({ top: 2 })
+        Text(work.updateTime)
+          .fontSize(10)
           .fontColor('#9CA3AF')
-          .margin({ top: 4 })
+          .margin({ top: 2 })
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
 
       Text('>')
-        .fontSize(18)
+        .fontSize(16)
         .fontColor('#D1D5DB')
     }
     .width('100%')
-    .height(72)
-    .backgroundColor('#FFFFFF')
-    .borderRadius(12)
-    .padding({ left: 16, right: 12 })
+    .height(60)
+    .backgroundColor(this.cardBg)
+    .borderRadius(10)
+    .padding({ left: 12, right: 12 })
     .margin({ bottom: 8 })
     .onClick(() => {
       router.pushUrl({
         url: 'pages/WorkEditorPage',
-        params: { workId: this.work.id }
+        params: { workId: work.id, mode: 'short_drama' }
       });
     })
   }
 }
 
-// ========== 设置 Tab ==========
+// ========== 中长篇工作台 ==========
+@Component
+struct NovelTab {
+  @Prop isDarkMode: boolean;
+  @Prop cardBg: string;
+  @Prop textColor: string;
+  @State templates: TemplateInfo[] = templateList.filter(t => t.category === '中长篇类' || t.id === 'hero_journey' || t.id === 'emotional_tension' || t.id === 'mystery' || t.id === 'story_nucleus' || t.id === 'viral_formula' || t.id === 'three_act' || t.id === 'five_act');
+  @State works: WorkItem[] = [];
+
+  aboutToAppear() {
+    this.works = workManager.getAllWorks().filter(w => this.templates.some(t => t.id === w.templateId));
+  }
+
+  build() {
+    Column() {
+      Row() {
+        Text('中长篇工作台')
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.textColor)
+        Blank()
+        Button('新建')
+          .fontSize(14)
+          .fontColor('#FFFFFF')
+          .backgroundColor('#FF2D55')
+          .borderRadius(20)
+          .height(36)
+          .padding({ left: 16, right: 16 })
+          .onClick(() => {
+            router.pushUrl({ url: 'pages/PromptEditorPage', params: { mode: 'novel' } });
+          })
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+      .backgroundColor(this.cardBg)
+
+      Column() {
+        Text('选择模板开始创作')
+          .fontSize(14)
+          .fontColor('#9CA3AF')
+          .alignSelf(ItemAlign.Start)
+          .margin({ left: 16, top: 12, bottom: 8 })
+
+        Grid() {
+          ForEach(this.templates, (item: TemplateInfo) => {
+            GridItem() {
+              this.TemplateCard(item)
+            }
+          }, (item: TemplateInfo) => item.id)
+        }
+        .columnsTemplate('1fr 1fr 1fr')
+        .rowsGap(12)
+        .columnsGap(12)
+        .padding({ left: 16, right: 16 })
+        .layoutWeight(1)
+      }
+      .layoutWeight(1)
+
+      if (this.works.length > 0) {
+        Column() {
+          Text('最近作品')
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.textColor)
+            .alignSelf(ItemAlign.Start)
+            .margin({ left: 16, top: 12, bottom: 8 })
+
+          List() {
+            ForEach(this.works.slice(0, 5), (work: WorkItem) => {
+              ListItem() {
+                this.WorkCard(work)
+              }
+            }, (work: WorkItem) => work.id)
+          }
+          .layoutWeight(1)
+          .padding({ left: 16, right: 16 })
+        }
+        .width('100%')
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(this.bgColor)
+  }
+
+  @Builder
+  TemplateCard(template: TemplateInfo) {
+    Column() {
+      Stack() {
+        Circle()
+          .width(40)
+          .height(40)
+          .fill(template.color)
+        Text(template.icon)
+          .fontSize(18)
+          .fontColor('#FFFFFF')
+      }
+      .alignContent(Alignment.Center)
+
+      Text(template.name)
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.textColor)
+        .margin({ top: 6 })
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+      Text(template.desc)
+        .fontSize(10)
+        .fontColor('#9CA3AF')
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('90%')
+    }
+    .width('100%')
+    .padding(10)
+    .backgroundColor(this.cardBg)
+    .borderRadius(10)
+    .onClick(() => {
+      router.pushUrl({
+        url: 'pages/PromptEditorPage',
+        params: { templateId: template.id, mode: 'novel' }
+      });
+    })
+  }
+
+  @Builder
+  WorkCard(work: WorkItem) {
+    Row() {
+      Column() {
+        Text(work.title || '未命名作品')
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.textColor)
+        Text(work.templateName)
+          .fontSize(11)
+          .fontColor('#FF2D55')
+          .margin({ top: 2 })
+        Text(work.updateTime)
+          .fontSize(10)
+          .fontColor('#9CA3AF')
+          .margin({ top: 2 })
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+
+      Text('>')
+        .fontSize(16)
+        .fontColor('#D1D5DB')
+    }
+    .width('100%')
+    .height(60)
+    .backgroundColor(this.cardBg)
+    .borderRadius(10)
+    .padding({ left: 12, right: 12 })
+    .margin({ bottom: 8 })
+    .onClick(() => {
+      router.pushUrl({
+        url: 'pages/WorkEditorPage',
+        params: { workId: work.id, mode: 'novel' }
+      });
+    })
+  }
+}
+
+// ========== 设置Tab ==========
 @Component
 struct SettingsTab {
+  @Prop isDarkMode: boolean;
+  @Prop onDarkModeChange: (value: boolean) => void;
   @State apiKey: string = '';
   @State selectedModel: string = 'deepseek';
-  @State customUrl: string = '';
   @State showApiKeyInput: boolean = false;
   @State apiKeyInput: string = '';
 
@@ -359,161 +441,116 @@ struct SettingsTab {
 
   build() {
     Column() {
-      Row() {
-        Text('设置')
-          .fontSize(22)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#1A1A2E')
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-      .backgroundColor('#FFFFFF')
+      Text('设置')
+        .fontSize(20)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+        .alignSelf(ItemAlign.Start)
+        .margin({ left: 16, top: 16, bottom: 12 })
 
       List() {
+        // AI模型配置
         ListItem() {
-          this.SettingSection('AI 模型配置', [
-            { label: 'API Key', value: this.apiKey ? '已配置' : '未配置', editable: true }
-          ])
+          this.SettingRow('AI模型配置', this.getModelName(), true)
+        }
+        .onClick(() => this.showModelPicker())
+
+        ListItem() {
+          this.SettingRow('API Key', this.apiKey ? '已配置' : '未配置', true)
         }
         .onClick(() => {
           this.apiKeyInput = this.apiKey;
           this.showApiKeyInput = true;
         })
 
+        // 外观设置
         ListItem() {
-          this.SettingSection('模型选择', [
-            { label: '当前模型', value: this.getModelName(), editable: true }
-          ])
+          this.SettingRow('深色模式', this.isDarkMode ? '开' : '关', false)
         }
-        .onClick(() => this.showModelPicker())
-
-        ListItem() {
-          this.SettingSection('写作技巧', [
-            { label: 'Token压缩', value: '用42字写5个有效信息', editable: false },
-            { label: '行为锚定', value: '多写具体行为，少写空洞情绪词', editable: false },
-            { label: '视觉化描述', value: '用画面代替抽象概念', editable: false }
-          ])
-        }
-
-        ListItem() {
-          this.SettingSection('关于', [
-            { label: '版本', value: '1.0.0', editable: false },
-            { label: '开发者', value: '个人开发者', editable: false }
-          ])
-        }
-      }
-      .layoutWeight(1)
-      .padding({ top: 8 })
-
-      // API Key 输入弹层
-      if (this.showApiKeyInput) {
-        Column() {
-          Column() {
-            Text('设置 API Key')
-              .fontSize(16)
-              .fontWeight(FontWeight.Bold)
-              .fontColor('#1A1A2E')
-              .margin({ bottom: 8 })
-            Text('仅本地存储，不会上传到任何服务器')
-              .fontSize(12)
-              .fontColor('#9CA3AF')
-              .margin({ bottom: 12 })
-            TextInput({ placeholder: '请输入 API Key', text: this.apiKeyInput })
-              .width('100%')
-              .height(44)
-              .fontSize(14)
-              .backgroundColor('#F9FAFB')
-              .borderRadius(8)
-              .padding({ left: 12, right: 12 })
-              .onChange((value: string) => {
-                this.apiKeyInput = value;
-              })
-            Row() {
-              Button('取消')
-                .fontSize(14)
-                .fontColor('#6B7280')
-                .backgroundColor('#F3F4F6')
-                .borderRadius(20)
-                .height(40)
-                .layoutWeight(1)
-                .margin({ right: 12 })
-                .onClick(() => {
-                  this.showApiKeyInput = false;
-                })
-              Button('保存')
-                .fontSize(14)
-                .fontColor('#FFFFFF')
-                .backgroundColor('#FF2D55')
-                .borderRadius(20)
-                .height(40)
-                .layoutWeight(1)
-                .onClick(() => {
-                  this.apiKey = this.apiKeyInput.trim();
-                  this.saveSettings();
-                  this.showApiKeyInput = false;
-                  promptAction.showToast({ message: '已保存', duration: 2000 });
-                })
-            }
-            .width('100%')
-            .margin({ top: 16 })
-          }
-          .width('100%')
-          .padding(20)
-          .backgroundColor('#FFFFFF')
-          .borderRadius(16)
-          .margin({ left: 24, right: 24 })
-        }
-        .width('100%')
-        .height('100%')
-        .backgroundColor('rgba(0,0,0,0.5)')
-        .justifyContent(FlexAlign.Center)
-        .position({ x: 0, y: 0 })
         .onClick(() => {
-          this.showApiKeyInput = false;
+          this.isDarkMode = !this.isDarkMode;
+          this.onDarkModeChange(this.isDarkMode);
+        })
+
+        ListItem() {
+          this.SettingRow('跟随系统', this.isDarkMode ? '是' : '否', false)
+        }
+        .onClick(() => {
+          // 实际项目中可读取系统主题设置
+          this.isDarkMode = !this.isDarkMode;
+          this.onDarkModeChange(this.isDarkMode);
+        })
+
+        // 功能设置
+        ListItem() {
+          this.SettingRow('写作提示词', '编辑AI提示词', true)
+        }
+        .onClick(() => {
+          router.pushUrl({ url: 'pages/PromptEditorPage' });
+        })
+
+        ListItem() {
+          this.SettingRow('用户协议', '', true)
+        }
+        .onClick(() => {
+          promptAction.showToast({ message: '用户协议页面开发中', duration: 2000 });
+        })
+
+        ListItem() {
+          this.SettingRow('隐私政策', '', true)
+        }
+        .onClick(() => {
+          promptAction.showToast({ message: '隐私政策页面开发中', duration: 2000 });
+        })
+
+        // 关于
+        ListItem() {
+          this.SettingRow('应用评分', '⭐⭐⭐⭐⭐', false)
+        }
+        .onClick(() => {
+          promptAction.showToast({ message: '感谢您的五星好评！', duration: 2000 });
+        })
+
+        ListItem() {
+          this.SettingRow('关于', 'v1.1.0', false)
+        }
+        .onClick(() => {
+          promptAction.showToast({ message: '文字创意工坊 v1.1.0\nAI驱动的写作助手', duration: 3000 });
         })
       }
+      .layoutWeight(1)
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#F5F6FA')
+    .backgroundColor(this.isDarkMode ? '#1A1A2E' : '#F5F6FA')
   }
 
   @Builder
-  SettingSection(title: string, items: SettingItemData[]) {
-    Column() {
-      Text(title)
-        .fontSize(12)
-        .fontColor('#9CA3AF')
-        .padding({ left: 16, bottom: 8 })
-
-      ForEach(items, (item: SettingItemData) => {
-        Row() {
-          Column() {
-            Text(item.label)
-              .fontSize(14)
-              .fontColor('#1A1A2E')
-            Text(item.value)
-              .fontSize(12)
-              .fontColor('#9CA3AF')
-              .margin({ top: 2 })
-          }
-          .alignItems(HorizontalAlign.Start)
-          .layoutWeight(1)
-
-          if (item.editable) {
-            Text('>')
-              .fontSize(16)
-              .fontColor('#D1D5DB')
-          }
+  SettingRow(title: string, subtitle: string, hasArrow: boolean) {
+    Row() {
+      Column() {
+        Text(title)
+          .fontSize(15)
+          .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+        if (subtitle) {
+          Text(subtitle)
+            .fontSize(12)
+            .fontColor('#9CA3AF')
+            .margin({ top: 2 })
         }
-        .width('100%')
-        .padding({ left: 16, right: 16, top: 14, bottom: 14 })
-        .backgroundColor('#FFFFFF')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
 
-        Divider().color('#F3F4F6').strokeWidth(0.5).margin({ left: 16, right: 16 })
-      }, (item: SettingItemData) => item.label)
+      if (hasArrow) {
+        Text('›')
+          .fontSize(20)
+          .fontColor('#D1D5DB')
+      }
     }
-    .backgroundColor('#FFFFFF')
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 16, bottom: 16 })
+    .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
   }
 
   getModelName(): string {
@@ -521,6 +558,8 @@ struct SettingsTab {
       case 'deepseek': return 'DeepSeek';
       case 'glm': return '智谱 GLM';
       case 'baidu': return '百度文心';
+      case 'xiaoyi': return '小艺 Agent';
+      case 'gguf': return '本地 GGUF';
       case 'custom': return '自定义接口';
       default: return 'DeepSeek';
     }
@@ -533,10 +572,12 @@ struct SettingsTab {
         { text: 'DeepSeek', color: '#1A1A2E' },
         { text: '智谱 GLM', color: '#1A1A2E' },
         { text: '百度文心', color: '#1A1A2E' },
+        { text: '小艺 Agent', color: '#1A1A2E' },
+        { text: '本地 GGUF', color: '#1A1A2E' },
         { text: '自定义接口', color: '#1A1A2E' }
       ]
     }).then((result) => {
-      const models = ['deepseek', 'glm', 'baidu', 'custom'];
+      const models = ['deepseek', 'glm', 'baidu', 'xiaoyi', 'gguf', 'custom'];
       if (result.index >= 0 && result.index < models.length) {
         this.selectedModel = models[result.index];
         this.saveSettings();
@@ -547,19 +588,11 @@ struct SettingsTab {
   loadSettings() {
     this.apiKey = settingsManager.settings.apiKey;
     this.selectedModel = settingsManager.settings.selectedModel;
-    this.customUrl = settingsManager.settings.customUrl;
   }
 
   saveSettings() {
     settingsManager.settings.apiKey = this.apiKey;
     settingsManager.settings.selectedModel = this.selectedModel;
-    settingsManager.settings.customUrl = this.customUrl;
     settingsManager.save();
   }
-}
-
-interface SettingItemData {
-  label: string;
-  value: string;
-  editable: boolean;
 }
