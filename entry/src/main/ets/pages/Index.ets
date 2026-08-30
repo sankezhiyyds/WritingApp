@@ -347,7 +347,7 @@ struct ShortDramaTab {
   }
 
   aboutToAppear() {
-    this.templates = templateList.filter(t => t.category === '剧本类' || t.category === '喜剧类');
+    this.templates = templateList.filter(t => t.category === '剧本类' || t.category === '喜剧类' || t.category === '灵感类' || t.category === '广告类');
     this.works = workManager.getAllWorks().filter(w => this.templates.some(t => t.id === w.templateId));
   }
 
@@ -523,7 +523,7 @@ struct NovelTab {
   }
 
   aboutToAppear() {
-    this.templates = templateList.filter(t => t.category === '叙事类');
+    this.templates = templateList.filter(t => t.category === '叙事类' || t.category === '互动类');
     this.works = workManager.getAllWorks().filter(w => this.templates.some(t => t.id === w.templateId));
   }
 
@@ -688,6 +688,10 @@ struct SettingsTab {
   @State selectedModel: string = 'deepseek';
   @State showApiKeyInput: boolean = false;
   @State apiKeyInput: string = '';
+  @State customUrl: string = '';
+  @State showCustomUrlInput: boolean = false;
+  @State customUrlInput: string = '';
+  @State followSystemDark: boolean = false;
 
   aboutToAppear() {
     this.loadSettings();
@@ -717,6 +721,14 @@ struct SettingsTab {
         })
 
         ListItem() {
+          this.SettingRow('自定义接口地址', this.customUrl ? '已配置' : '未配置', true)
+        }
+        .onClick(() => {
+          this.customUrlInput = this.customUrl;
+          this.showCustomUrlInput = true;
+        })
+
+        ListItem() {
           this.SettingRow('自定义提示词', '编辑AI写作指令', true)
         }
         .onClick(() => {
@@ -729,6 +741,15 @@ struct SettingsTab {
         .onClick(() => {
           this.isDarkMode = !this.isDarkMode;
           this.onDarkModeChange(this.isDarkMode);
+        })
+
+        ListItem() {
+          this.SettingRow('跟随系统深色模式', this.followSystemDark ? '开' : '关', false)
+        }
+        .onClick(() => {
+          this.followSystemDark = !this.followSystemDark;
+          // TODO: 实现跟随系统深色模式
+          promptAction.showToast({ message: '跟随系统深色模式功能开发中', duration: 2000 });
         })
 
         ListItem() {
@@ -753,7 +774,7 @@ struct SettingsTab {
         })
 
         ListItem() {
-          this.SettingRow('关于', 'v1.1.0', false)
+          this.SettingRow('关于', 'v1.2.0', false)
         }
         .onClick(() => {
           promptAction.showToast({ message: '创意写作 v1.2.0\nAI驱动的写作助手', duration: 3000 });
@@ -828,6 +849,74 @@ struct SettingsTab {
           this.showApiKeyInput = false;
         })
       }
+
+      // 自定义URL输入弹层
+      if (this.showCustomUrlInput) {
+        Column() {
+          Column() {
+            Text('设置自定义接口地址')
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#1A1A2E')
+              .margin({ bottom: 8 })
+            Text('用于自定义AI模型API端点')
+              .fontSize(12)
+              .fontColor('#9CA3AF')
+              .margin({ bottom: 12 })
+            TextInput({ placeholder: '请输入 API 地址', text: this.customUrlInput })
+              .width('100%')
+              .height(44)
+              .fontSize(14)
+              .backgroundColor('#F9FAFB')
+              .borderRadius(8)
+              .padding({ left: 12, right: 12 })
+              .onChange((value: string) => {
+                this.customUrlInput = value;
+              })
+            Row() {
+              Button('取消')
+                .fontSize(14)
+                .fontColor('#6B7280')
+                .backgroundColor('#F3F4F6')
+                .borderRadius(20)
+                .height(40)
+                .layoutWeight(1)
+                .margin({ right: 12 })
+                .onClick(() => {
+                  this.showCustomUrlInput = false;
+                })
+              Button('保存')
+                .fontSize(14)
+                .fontColor('#FFFFFF')
+                .backgroundColor('#FF2D55')
+                .borderRadius(20)
+                .height(40)
+                .layoutWeight(1)
+                .onClick(() => {
+                  this.customUrl = this.customUrlInput.trim();
+                  this.saveSettings();
+                  this.showCustomUrlInput = false;
+                  promptAction.showToast({ message: '已保存', duration: 2000 });
+                })
+            }
+            .width('100%')
+            .margin({ top: 16 })
+          }
+          .width('100%')
+          .padding(20)
+          .backgroundColor('#FFFFFF')
+          .borderRadius(16)
+          .margin({ left: 24, right: 24 })
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0,0,0,0.5)')
+        .justifyContent(FlexAlign.Center)
+        .position({ x: 0, y: 0 })
+        .onClick(() => {
+          this.showCustomUrlInput = false;
+        })
+      }
     }
     .width('100%')
     .height('100%')
@@ -897,11 +986,13 @@ struct SettingsTab {
   loadSettings() {
     this.apiKey = settingsManager.settings.apiKey;
     this.selectedModel = settingsManager.settings.selectedModel;
+    this.customUrl = settingsManager.settings.customUrl;
   }
 
   saveSettings() {
     settingsManager.settings.apiKey = this.apiKey;
     settingsManager.settings.selectedModel = this.selectedModel;
+    settingsManager.settings.customUrl = this.customUrl;
     settingsManager.save();
   }
 }

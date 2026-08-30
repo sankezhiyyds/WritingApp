@@ -23,6 +23,11 @@ struct PromptEditorPage {
   @State promptText: string = '';
   @State isGenerating: boolean = false;
   @State currentBreakpoint: BreakpointType = 'sm';
+  @State showVersionHistory: boolean = false;
+  @State selectedVersion: number = -1;
+  @State originalContent: string = '';
+  @State modifiedRanges: Array<{start: number, end: number}> = [];
+  @State previousContent: string = '';
 
   get isWide(): boolean {
     return this.currentBreakpoint === 'md' || this.currentBreakpoint === 'lg';
@@ -64,6 +69,7 @@ struct PromptEditorPage {
         if (this.work) {
           this.title = this.work.title;
           this.generatedContent = this.work.content;
+          this.previousContent = this.work.content;
           this.template = templateList.find(t => t.id === this.work!.templateId) || null;
         }
       }
@@ -130,6 +136,16 @@ struct PromptEditorPage {
         this.FormView()
       }
 
+      // 章节列表面板
+      if (this.showChapterList) {
+        this.ChapterListView()
+      }
+
+      // 版本历史面板
+      if (this.showVersionHistory) {
+        this.VersionHistoryView()
+      }
+
       // 底部操作栏
       if (this.mode !== 'prompt_edit') {
         Row() {
@@ -139,19 +155,36 @@ struct PromptEditorPage {
 
           Blank()
 
-          if (this.work && this.work.chapters && this.work.chapters.length > 0) {
-            Button('章节')
-              .fontSize(14)
-              .fontWeight(FontWeight.Medium)
-              .fontColor('#FF2D55')
-              .backgroundColor('#FFFFFF')
-              .borderRadius(20)
-              .height(36)
-              .padding({ left: 16, right: 16 })
-              .margin({ right: 12 })
-              .onClick(() => {
-                this.showChapterList = true;
-              })
+          if (this.work) {
+            if (this.work.chapters && this.work.chapters.length > 0) {
+              Button('章节')
+                .fontSize(14)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#FF2D55')
+                .backgroundColor('#FFFFFF')
+                .borderRadius(20)
+                .height(36)
+                .padding({ left: 16, right: 16 })
+                .margin({ right: 8 })
+                .onClick(() => {
+                  this.showChapterList = true;
+                })
+            }
+
+            if (this.work.versions && this.work.versions.length > 0) {
+              Button('历史')
+                .fontSize(14)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#3B82F6')
+                .backgroundColor('#FFFFFF')
+                .borderRadius(20)
+                .height(36)
+                .padding({ left: 16, right: 16 })
+                .margin({ right: 8 })
+                .onClick(() => {
+                  this.showVersionHistory = true;
+                })
+            }
           }
 
           Button('保存')
@@ -388,7 +421,7 @@ struct PromptEditorPage {
               .margin({ left: 16, bottom: 8 })
               .alignSelf(ItemAlign.Start)
 
-            Text(this.generatedContent)
+            Text(this.getHighlightedContent())
               .fontSize(13)
               .fontColor('#374151')
               .lineHeight(20)
@@ -516,7 +549,65 @@ struct PromptEditorPage {
         content = content.replace(placeholder, value);
       }
     }
+    
+    // 检测修改内容并高亮
+    if (this.previousContent && content !== this.previousContent) {
+      this.modifiedRanges = this.detectChanges(this.previousContent, content);
+    }
+    
     this.generatedContent = content;
+  }
+
+  detectChanges(oldContent: string, newContent: string): Array<{start: number, end: number}> {
+    const ranges: Array<{start: number, end: number}> = [];
+    
+    // 简单的差异检测：找出新增的内容
+    if (newContent.length > oldContent.length) {
+      // 找到第一个不同的位置
+      let diffStart = 0;
+      while (diffStart < oldContent.length && oldContent[diffStart] === newContent[diffStart]) {
+        diffStart++;
+      }
+      
+      // 找到最后一个不同的位置
+      let oldEnd = oldContent.length;
+      let newEnd = newContent.length;
+      while (oldEnd > diffStart && newEnd > diffStart && 
+             oldContent[oldEnd - 1] === newContent[newEnd - 1]) {
+        oldEnd--;
+        newEnd--;
+      }
+      
+      // 记录修改范围
+      if (newEnd > diffStart) {
+        ranges.push({ start: diffStart, end: newEnd });
+      }
+    }
+    
+    return ranges;
+  }
+
+  getHighlightedContent(): string {
+    if (this.modifiedRanges.length === 0) {
+      return this.generatedContent;
+    }
+    
+    let result = '';
+    let lastIndex = 0;
+    
+    for (let i = 0; i < this.modifiedRanges.length; i++) {
+      const range = this.modifiedRanges[i];
+      // 添加修改前的内容
+      result += this.generatedContent.substring(lastIndex, range.start);
+      // 添加高亮的修改内容
+      result += '【' + this.generatedContent.substring(range.start, range.end) + '】';
+      lastIndex = range.end;
+    }
+    
+    // 添加剩余内容
+    result += this.generatedContent.substring(lastIndex);
+    
+    return result;
   }
 
   async saveWork() {
@@ -530,10 +621,14 @@ struct PromptEditorPage {
     if (this.work) {
       // 更新现有作品（自动归档旧版本）
       workManager.updateWork(this.work.id, this.generatedContent, true);
+      // 更新previousContent为当前内容
+      this.previousContent = this.generatedContent;
+      this.modifiedRanges = [];
       promptAction.showToast({ message: '作品已更新（旧版本已归档）', duration: 2000 });
     } else if (this.template) {
       // 创建新作品
       workManager.createWork(this.template, finalTitle, this.generatedContent);
+      this.previousContent = this.generatedContent;
       promptAction.showToast({ message: '作品已保存', duration: 2000 });
     }
 
@@ -644,5 +739,196 @@ struct PromptEditorPage {
 
     workManager.addChapter(this.work.id, '最终方案_' + new Date().getTime(), '最终方案', content);
     promptAction.showToast({ message: '最终方案已保存', duration: 2000 });
+  }
+
+  @Builder
+  ChapterListView() {
+    Column() {
+      // 标题栏
+      Row() {
+        Text('章节管理')
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#1A1A2E')
+        Blank()
+        Text('×')
+          .fontSize(24)
+          .fontColor('#9CA3AF')
+          .onClick(() => {
+            this.showChapterList = false;
+          })
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+      .backgroundColor('#FFFFFF')
+
+      // 分类标签
+      Scroll() {
+        Row() {
+          ForEach(['全部', '大纲', '人设', '思维链路', '最终方案'], (category: string) => {
+            Button(category)
+              .fontSize(13)
+              .fontColor('#6B7280')
+              .backgroundColor('#F3F4F6')
+              .borderRadius(16)
+              .height(32)
+              .padding({ left: 12, right: 12 })
+              .margin({ right: 8 })
+          }, (category: string) => category)
+        }
+        .padding({ left: 16, right: 16 })
+      }
+      .width('100%')
+      .height(48)
+      .backgroundColor('#FFFFFF')
+
+      // 章节列表
+      List() {
+        if (this.work && this.work.chapters) {
+          ForEach(this.work.chapters, (chapter: Chapter) => {
+            ListItem() {
+              Column() {
+                Row() {
+                  Column() {
+                    Text(chapter.title)
+                      .fontSize(15)
+                      .fontWeight(FontWeight.Medium)
+                      .fontColor('#1A1A2E')
+                      .maxLines(1)
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
+                    Text(chapter.category)
+                      .fontSize(12)
+                      .fontColor('#FF2D55')
+                      .margin({ top: 4 })
+                    Text(chapter.updateTime)
+                      .fontSize(11)
+                      .fontColor('#9CA3AF')
+                      .margin({ top: 2 })
+                  }
+                  .alignItems(HorizontalAlign.Start)
+                  .layoutWeight(1)
+
+                  Text('查看')
+                    .fontSize(13)
+                    .fontColor('#FF2D55')
+                    .onClick(() => {
+                      this.currentChapter = chapter;
+                      this.generatedContent = chapter.content;
+                      this.showChapterList = false;
+                      promptAction.showToast({ message: '已加载章节内容', duration: 2000 });
+                    })
+                }
+                .width('100%')
+              }
+              .width('100%')
+              .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+              .backgroundColor('#FFFFFF')
+            }
+          }, (chapter: Chapter) => chapter.id)
+        }
+      }
+      .layoutWeight(1)
+      .backgroundColor('#F5F6FA')
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('#F5F6FA')
+    .position({ x: 0, y: 0 })
+  }
+
+  @Builder
+  VersionHistoryView() {
+    Column() {
+      // 标题栏
+      Row() {
+        Text('版本历史')
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#1A1A2E')
+        Blank()
+        Text('×')
+          .fontSize(24)
+          .fontColor('#9CA3AF')
+          .onClick(() => {
+            this.showVersionHistory = false;
+          })
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+      .backgroundColor('#FFFFFF')
+
+      // 版本列表
+      List() {
+        if (this.work && this.work.versions) {
+          ForEach(this.work.versions, (version: WorkVersion, index: number) => {
+            ListItem() {
+              Column() {
+                Row() {
+                  Column() {
+                    Text('版本 ' + (this.work!.versions!.length - index))
+                      .fontSize(15)
+                      .fontWeight(FontWeight.Medium)
+                      .fontColor('#1A1A2E')
+                    Text(version.timestamp)
+                      .fontSize(11)
+                      .fontColor('#9CA3AF')
+                      .margin({ top: 4 })
+                    if (version.changeNote) {
+                      Text(version.changeNote)
+                        .fontSize(12)
+                        .fontColor('#6B7280')
+                        .margin({ top: 2 })
+                    }
+                  }
+                  .alignItems(HorizontalAlign.Start)
+                  .layoutWeight(1)
+
+                  Column() {
+                    Text('预览')
+                      .fontSize(13)
+                      .fontColor('#FF2D55')
+                      .onClick(() => {
+                        this.selectedVersion = index;
+                        this.originalContent = this.generatedContent;
+                        this.generatedContent = version.content;
+                        this.showVersionHistory = false;
+                        promptAction.showToast({ message: '已加载历史版本，可对比查看', duration: 2000 });
+                      })
+                    if (this.selectedVersion === index) {
+                      Text('恢复')
+                        .fontSize(13)
+                        .fontColor('#10B981')
+                        .margin({ top: 8 })
+                        .onClick(() => {
+                          this.selectedVersion = -1;
+                          promptAction.showToast({ message: '已恢复到此版本', duration: 2000 });
+                        })
+                    }
+                  }
+                }
+                .width('100%')
+              }
+              .width('100%')
+              .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+              .backgroundColor(this.selectedVersion === index ? '#FFF5F5' : '#FFFFFF')
+            }
+          }, (version: WorkVersion, index: number) => version.id)
+        }
+      }
+      .layoutWeight(1)
+      .backgroundColor('#F5F6FA')
+
+      // 底部提示
+      Text('提示：点击预览可查看历史版本内容，点击恢复可回退到该版本')
+        .fontSize(12)
+        .fontColor('#9CA3AF')
+        .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+        .width('100%')
+        .backgroundColor('#FFFFFF')
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('#F5F6FA')
+    .position({ x: 0, y: 0 })
   }
 }
