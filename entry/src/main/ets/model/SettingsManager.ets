@@ -8,6 +8,7 @@ export interface SettingsData {
   customPrompt: string;
   isFirstLaunch: boolean;
   hasAgreedToTerms: boolean;
+  followSystemDark: boolean;
 }
 
 export class SettingsManager {
@@ -19,7 +20,8 @@ export class SettingsManager {
     customUrl: '',
     customPrompt: '',
     isFirstLaunch: true,
-    hasAgreedToTerms: false
+    hasAgreedToTerms: false,
+    followSystemDark: false
   };
 
   async init(context: common.UIAbilityContext): Promise<void> {
@@ -34,7 +36,8 @@ export class SettingsManager {
           customUrl: parsed.customUrl || '',
           customPrompt: parsed.customPrompt || '',
           isFirstLaunch: parsed.isFirstLaunch !== undefined ? parsed.isFirstLaunch : true,
-          hasAgreedToTerms: parsed.hasAgreedToTerms || false
+          hasAgreedToTerms: parsed.hasAgreedToTerms || false,
+          followSystemDark: parsed.followSystemDark || false
         };
       }
     } catch (e) {

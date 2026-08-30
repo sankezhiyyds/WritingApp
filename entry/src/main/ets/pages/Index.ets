@@ -4,6 +4,8 @@ import { settingsManager } from '../model/SettingsManager';
 import { responsiveManager, BreakpointType } from '../model/ResponsiveManager';
 import router from '@ohos.router';
 import promptAction from '@ohos.promptAction';
+import Configuration from '@ohos.app.ability.Configuration';
+import AbilityConstant from '@ohos.app.ability.AbilityConstant';
 
 @Entry
 @Component
@@ -62,6 +64,22 @@ struct Index {
     responsiveManager.onBreakpointChange((bp: BreakpointType) => {
       this.currentBreakpoint = bp;
     });
+    // 初始化深色模式
+    this.updateDarkMode();
+  }
+
+  updateDarkMode() {
+    if (settingsManager.settings.followSystemDark) {
+      // 获取系统配置
+      const context = getContext(this) as Context;
+      const config = context.config;
+      if (config && config.colorMode !== undefined) {
+        this.isDarkMode = config.colorMode === Configuration.ColorMode.COLOR_MODE_DARK;
+      }
+    } else {
+      // 使用用户手动设置
+      this.isDarkMode = settingsManager.settings.isDarkMode;
+    }
   }
 
   aboutToDisappear() {
@@ -748,8 +766,20 @@ struct SettingsTab {
         }
         .onClick(() => {
           this.followSystemDark = !this.followSystemDark;
-          // TODO: 实现跟随系统深色模式
-          promptAction.showToast({ message: '跟随系统深色模式功能开发中', duration: 2000 });
+          settingsManager.settings.followSystemDark = this.followSystemDark;
+          settingsManager.save();
+          // 通知父组件更新深色模式
+          if (this.followSystemDark) {
+            // 获取系统配置
+            const context = getContext(this) as Context;
+            const config = context.config;
+            if (config && config.colorMode !== undefined) {
+              const systemDark = config.colorMode === Configuration.ColorMode.COLOR_MODE_DARK;
+              this.isDarkMode = systemDark;
+              this.onDarkModeChange(systemDark);
+            }
+          }
+          promptAction.showToast({ message: this.followSystemDark ? '已启用跟随系统深色模式' : '已关闭跟随系统深色模式', duration: 2000 });
         })
 
         ListItem() {
