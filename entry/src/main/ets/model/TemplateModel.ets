@@ -19,16 +19,6 @@ export interface TemplateField {
   options?: string[];
 }
 
-export interface WorkItem {
-  id: string;
-  title: string;
-  templateId: string;
-  templateName: string;
-  content: string;
-  createTime: string;
-  updateTime: string;
-}
-
 export const templateList: TemplateInfo[] = [
   {
     id: 'short_drama',
@@ -555,6 +545,73 @@ export const templateList: TemplateInfo[] = [
       '角色性格要鲜明，关系要有张力',
       '冲突来自性格碰撞，不是外部事件',
       '每集结尾要有温馨的回归'
+    ]
+  },
+  {
+    id: 'inspiration_note',
+    name: '灵感笔记',
+    icon: '💡',
+    desc: '快速记录创作灵感',
+    category: '灵感类',
+    color: '#FBBF24',
+    fields: [
+      { key: 'title', label: '灵感标题', type: 'text', required: true, placeholder: '给这个灵感起个名字' },
+      { key: 'category', label: '分类', type: 'select', required: false, placeholder: '选择分类', options: ['人物', '情节', '场景', '对话', '主题', '其他'] },
+      { key: 'content', label: '灵感内容', type: 'textarea', required: true, placeholder: '详细描述你的灵感...' },
+      { key: 'tags', label: '标签', type: 'text', required: false, placeholder: '用逗号分隔多个标签' }
+    ],
+    format: `【灵感笔记】
+
+【标题】{title}
+【分类】{category}
+【标签】{tags}
+
+【内容】
+{content}`,
+    tips: [
+      '灵感稍纵即逝，快速记录核心想法',
+      '不需要完整，关键词和片段也有价值',
+      '定期回顾灵感笔记，发现创作素材',
+      '可以用标签系统化管理灵感'
+    ]
+  },
+  {
+    id: 'ad_copy',
+    name: '广告文案',
+    icon: '📢',
+    desc: '产品/服务广告文案',
+    category: '广告类',
+    color: '#EC4899',
+    fields: [
+      { key: 'product', label: '产品/服务', type: 'text', required: true, placeholder: '推广什么产品或服务？' },
+      { key: 'target', label: '目标受众', type: 'textarea', required: true, placeholder: '面向什么人群？他们的痛点是什么？' },
+      { key: 'usp', label: '独特卖点', type: 'textarea', required: true, placeholder: '产品最独特的优势是什么？' },
+      { key: 'tone', label: '文案调性', type: 'select', required: false, placeholder: '选择文案风格', options: ['专业', '幽默', '温情', '激励', '紧迫'] },
+      { key: 'cta', label: '行动号召', type: 'text', required: false, placeholder: '希望用户做什么？（立即购买/了解更多等）' }
+    ],
+    format: `【广告文案】
+
+【产品】{product}
+【目标受众】{target}
+【独特卖点】{usp}
+【文案调性】{tone}
+
+【主标题】
+（吸引注意力的标题）
+
+【副标题】
+（补充说明核心卖点）
+
+【正文】
+（详细阐述产品价值）
+
+【行动号召】
+{cta}`,
+    tips: [
+      '标题要在3秒内抓住注意力',
+      '突出用户收益，而非产品功能',
+      '用具体数字和案例增强说服力',
+      '行动号召要明确且紧迫'
     ]
   }
 ];

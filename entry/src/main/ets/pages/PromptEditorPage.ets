@@ -1,6 +1,7 @@
 import { TemplateField, TemplateInfo, templateList } from '../model/TemplateModel';
-import { WorkItem, workManager } from '../model/WorkManager';
+import { WorkItem, workManager, Chapter, Conversation } from '../model/WorkManager';
 import { settingsManager } from '../model/SettingsManager';
+import { aiService } from '../model/AIService';
 import router from '@ohos.router';
 import promptAction from '@ohos.promptAction';
 
@@ -15,11 +16,23 @@ struct PromptEditorPage {
   @State isAiMode: boolean = false;
   @State conversationHistory: string[] = [];
   @State currentPrompt: string = '';
+  @State work: WorkItem | null = null;
+  @State showChapterList: boolean = false;
+  @State currentChapter: Chapter | null = null;
+  @State promptText: string = '';
+  @State isGenerating: boolean = false;
 
   aboutToAppear() {
     const params = router.getParams() as Record<string, string>;
     if (params) {
       this.mode = params['mode'] || 'short_drama';
+
+      // 提示词编辑模式
+      if (this.mode === 'prompt_edit') {
+        this.promptText = settingsManager.settings.customPrompt;
+        return;
+      }
+
       if (params['templateId']) {
         const templateId = params['templateId'];
         this.template = templateList.find(t => t.id === templateId) || null;
@@ -32,11 +45,11 @@ struct PromptEditorPage {
         }
       }
       if (params['workId']) {
-        const work = workManager.getWork(params['workId']);
-        if (work) {
-          this.title = work.title;
-          this.generatedContent = work.content;
-          this.conversationHistory = ['original'];
+        this.work = workManager.getWork(params['workId']);
+        if (this.work) {
+          this.title = this.work.title;
+          this.generatedContent = this.work.content;
+          this.template = templateList.find(t => t.id === this.work!.templateId) || null;
         }
       }
     }
@@ -54,14 +67,16 @@ struct PromptEditorPage {
           })
           .padding({ left: 16, right: 12 })
 
-        Text(this.template ? this.template.name : '提示词编辑器')
+        Text(this.getTitle())
           .fontSize(18)
           .fontWeight(FontWeight.Bold)
           .fontColor('#1A1A2E')
           .layoutWeight(1)
           .textAlign(TextAlign.Center)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-        if (this.template) {
+        if (this.mode !== 'prompt_edit') {
           Text('AI')
             .fontSize(12)
             .fontColor('#FFFFFF')
@@ -73,55 +88,73 @@ struct PromptEditorPage {
             })
             .padding({ right: 16 })
         } else {
-          Blank()
-            .width(48)
+          Blank().width(48)
         }
       }
       .width('100%')
       .height(56)
       .backgroundColor('#FFFFFF')
 
-      if (this.isAiMode) {
-        // AI对话模式
+      if (this.mode === 'prompt_edit') {
+        this.PromptEditView()
+      } else if (this.isAiMode) {
         this.AiChatView()
       } else {
-        // 表单模式
         this.FormView()
       }
 
       // 底部操作栏
-      Row() {
-        Text(this.generatedContent.length + ' 字')
-          .fontSize(12)
-          .fontColor('#9CA3AF')
+      if (this.mode !== 'prompt_edit') {
+        Row() {
+          Text(this.generatedContent.length + ' 字')
+            .fontSize(12)
+            .fontColor('#9CA3AF')
 
-        Blank()
+          Blank()
 
-        Button('保存')
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor('#FFFFFF')
-          .backgroundColor('#FF2D55')
-          .borderRadius(20)
-          .height(36)
-          .padding({ left: 24, right: 24 })
-          .onClick(() => this.saveWork())
+          if (this.work && this.work.chapters && this.work.chapters.length > 0) {
+            Button('章节')
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#FF2D55')
+              .backgroundColor('#FFFFFF')
+              .borderRadius(20)
+              .height(36)
+              .padding({ left: 16, right: 16 })
+              .margin({ right: 12 })
+              .onClick(() => {
+                this.showChapterList = true;
+              })
+          }
 
-        Button('AI生成')
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor('#FFFFFF')
-          .backgroundColor('#10B981')
-          .borderRadius(20)
-          .height(36)
-          .padding({ left: 24, right: 24 })
-          .margin({ left: 12 })
-          .onClick(() => this.generateWithAi())
+          Button('保存')
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#FFFFFF')
+            .backgroundColor('#FF2D55')
+            .borderRadius(20)
+            .height(36)
+            .padding({ left: 24, right: 24 })
+            .onClick(() => this.saveWork())
+
+          if (!this.isAiMode) {
+            Button('AI生成')
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#FFFFFF')
+              .backgroundColor('#10B981')
+              .borderRadius(20)
+              .height(36)
+              .padding({ left: 24, right: 24 })
+              .margin({ left: 12 })
+              .onClick(() => this.generateWithAi())
+          }
+        }
+        .width('100%')
+        .height(56)
+        .backgroundColor('#FFFFFF')
+        .padding({ left: 16, right: 16 })
       }
-      .width('100%')
-      .height(56)
-      .backgroundColor('#FFFFFF')
-      .padding({ left: 16, right: 16 })
     }
     .width('100%')
     .height('100%')
@@ -129,11 +162,57 @@ struct PromptEditorPage {
   }
 
   @Builder
+  PromptEditView() {
+    Column() {
+      Text('自定义AI提示词')
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .fontColor('#1A1A2E')
+        .margin({ left: 16, top: 16, bottom: 8 })
+        .alignSelf(ItemAlign.Start)
+
+      Text('这个提示词将作为AI的系统指令，指导AI的写作风格和行为')
+        .fontSize(13)
+        .fontColor('#9CA3AF')
+        .margin({ left: 16, right: 16, bottom: 12 })
+
+      TextArea({ placeholder: '请输入自定义提示词...', text: this.promptText })
+        .width('90%')
+        .layoutWeight(1)
+        .fontSize(14)
+        .backgroundColor('#FFFFFF')
+        .borderRadius(8)
+        .padding(12)
+        .onChange((value: string) => {
+          this.promptText = value;
+        })
+
+      Button('保存提示词')
+        .width('90%')
+        .height(48)
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
+        .fontColor('#FFFFFF')
+        .backgroundColor('#FF2D55')
+        .borderRadius(24)
+        .margin({ top: 16, bottom: 24 })
+        .onClick(() => {
+          settingsManager.settings.customPrompt = this.promptText;
+          settingsManager.save();
+          promptAction.showToast({ message: '提示词已保存', duration: 2000 });
+          router.back();
+        })
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  @Builder
   FormView() {
     Scroll() {
       Column() {
         // 标题输入
-        if (!this.template) {
+        if (!this.template && !this.work) {
           TextInput({ placeholder: '请输入作品标题', text: this.title })
             .width('90%')
             .height(48)
@@ -154,9 +233,8 @@ struct PromptEditorPage {
               .fontSize(14)
               .fontWeight(FontWeight.Medium)
               .fontColor('#FF6B35')
-              .margin({ bottom: 8 })
+              .margin({ left: 16, top: 12, bottom: 8 })
               .alignSelf(ItemAlign.Start)
-              .margin({ left: 16, top: 12 })
 
             ForEach(this.template.tips, (tip: string, index: number) => {
               Row() {
@@ -267,9 +345,8 @@ struct PromptEditorPage {
               .fontSize(14)
               .fontWeight(FontWeight.Medium)
               .fontColor('#1A1A2E')
-              .margin({ bottom: 8 })
+              .margin({ left: 16, bottom: 8 })
               .alignSelf(ItemAlign.Start)
-              .margin({ left: 16 })
 
             Text(this.generatedContent)
               .fontSize(13)
@@ -317,6 +394,35 @@ struct PromptEditorPage {
       .layoutWeight(1)
       .padding({ left: 16, right: 16, top: 12 })
 
+      // 保存按钮
+      if (this.conversationHistory.length > 0) {
+        Row() {
+          Button('保存思维链路')
+            .fontSize(13)
+            .fontColor('#FFFFFF')
+            .backgroundColor('#3B82F6')
+            .borderRadius(20)
+            .height(36)
+            .padding({ left: 16, right: 16 })
+            .layoutWeight(1)
+            .margin({ right: 8 })
+            .onClick(() => this.saveThoughtChain())
+
+          Button('保存最终方案')
+            .fontSize(13)
+            .fontColor('#FFFFFF')
+            .backgroundColor('#10B981')
+            .borderRadius(20)
+            .height(36)
+            .padding({ left: 16, right: 16 })
+            .layoutWeight(1)
+            .margin({ left: 8 })
+            .onClick(() => this.saveFinalPlan())
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 8 })
+      }
+
       // 输入框
       Row() {
         TextInput({ placeholder: '输入消息...', text: this.currentPrompt })
@@ -330,14 +436,15 @@ struct PromptEditorPage {
             this.currentPrompt = value;
           })
 
-        Button('发送')
+        Button(this.isGenerating ? '...' : '发送')
           .fontSize(14)
           .fontColor('#FFFFFF')
-          .backgroundColor('#FF2D55')
+          .backgroundColor(this.isGenerating ? '#9CA3AF' : '#FF2D55')
           .borderRadius(20)
           .height(40)
           .padding({ left: 16, right: 16 })
           .margin({ left: 8 })
+          .enabled(!this.isGenerating)
           .onClick(() => this.sendAiMessage())
       }
       .width('100%')
@@ -347,6 +454,13 @@ struct PromptEditorPage {
     .width('100%')
     .height('100%')
     .backgroundColor('#F5F6FA')
+  }
+
+  getTitle(): string {
+    if (this.mode === 'prompt_edit') return '编辑提示词';
+    if (this.template) return this.template.name;
+    if (this.work) return this.work.title;
+    return '编辑器';
   }
 
   updateGeneratedContent() {
@@ -365,64 +479,114 @@ struct PromptEditorPage {
     this.generatedContent = content;
   }
 
-  saveWork() {
+  async saveWork() {
     if (this.generatedContent.trim().length === 0) {
-      promptAction.showToast({
-        message: '内容不能为空',
-        duration: 2000
-      });
+      promptAction.showToast({ message: '内容不能为空', duration: 2000 });
       return;
     }
 
     const finalTitle = this.title.trim().length > 0 ? this.title : (this.template ? this.template.name : '未命名作品');
 
-    if (this.template) {
-      const work = workManager.createWork(this.template, finalTitle, this.generatedContent);
-      promptAction.showToast({
-        message: '作品已保存',
-        duration: 2000
-      });
+    if (this.work) {
+      // 更新现有作品（自动归档旧版本）
+      workManager.updateWork(this.work.id, this.generatedContent, true);
+      promptAction.showToast({ message: '作品已更新（旧版本已归档）', duration: 2000 });
+    } else if (this.template) {
+      // 创建新作品
+      workManager.createWork(this.template, finalTitle, this.generatedContent);
+      promptAction.showToast({ message: '作品已保存', duration: 2000 });
     }
 
     router.back();
   }
 
-  generateWithAi() {
+  async generateWithAi() {
     if (!settingsManager.settings.apiKey) {
-      promptAction.showToast({
-        message: '请先在设置中配置API Key',
-        duration: 2000
-      });
-      router.pushUrl({ url: 'pages/Index' });
+      promptAction.showToast({ message: '请先在设置中配置API Key', duration: 2000 });
       return;
     }
 
-    // 模拟AI生成
-    promptAction.showToast({
-      message: 'AI生成中...',
-      duration: 2000
-    });
+    this.isGenerating = true;
+    promptAction.showToast({ message: 'AI生成中...', duration: 2000 });
 
-    // 实际项目中这里应该调用AI API
-    setTimeout(() => {
-      this.generatedContent += '\n\n[AI生成的内容将显示在这里]';
-      this.updateGeneratedContent();
-    }, 1000);
+    // 构建提示词
+    let prompt = this.generatedContent;
+    if (this.template) {
+      prompt = `请根据以下模板信息生成内容：\n模板：${this.template.name}\n\n${this.generatedContent}`;
+    }
+
+    const response = await aiService.callAI(prompt);
+    this.isGenerating = false;
+
+    if (response.success) {
+      this.generatedContent = response.content;
+      promptAction.showToast({ message: 'AI生成完成', duration: 2000 });
+    } else {
+      promptAction.showToast({ message: response.error || 'AI生成失败', duration: 2000 });
+    }
   }
 
-  sendAiMessage() {
+  async sendAiMessage() {
     if (this.currentPrompt.trim().length === 0) return;
+    if (!settingsManager.settings.apiKey) {
+      promptAction.showToast({ message: '请先在设置中配置API Key', duration: 2000 });
+      return;
+    }
 
+    this.isGenerating = true;
     this.conversationHistory.push(this.currentPrompt);
-    this.generatedContent += '\n\n用户: ' + this.currentPrompt;
-
-    // 模拟AI回复
-    setTimeout(() => {
-      const reply = '这是AI的回复：' + this.currentPrompt;
-      this.conversationHistory.push(reply);
-      this.generatedContent += '\n\nAI: ' + reply;
-    }, 1000);
-
+    const userMessage = this.currentPrompt;
     this.currentPrompt = '';
+
+    // 构建上下文
+    let context = '';
+    if (this.work) {
+      context = `当前作品：${this.work.title}\n内容：${this.work.content.substring(0, 500)}`;
+    }
+
+    const response = await aiService.callAI(userMessage, context);
+    this.isGenerating = false;
+
+    if (response.success) {
+      this.conversationHistory.push(response.content);
+
+      // 保存对话记录
+      if (this.work) {
+        workManager.addConversation(this.work.id, userMessage, response.content);
+      }
+    } else {
+      this.conversationHistory.push('错误：' + (response.error || 'AI回复失败'));
+    }
+  }
+
+  saveThoughtChain() {
+    if (!this.work || this.conversationHistory.length === 0) return;
+
+    // 获取最后一条AI回复
+    const lastAiResponse = this.conversationHistory[this.conversationHistory.length - 1];
+    const lastUserMessage = this.conversationHistory[this.conversationHistory.length - 2] || '';
+
+    // 保存为思维链路段落
+    const content = `用户提问：${lastUserMessage}\n\nAI思考过程：\n${lastAiResponse}`;
+    workManager.addChapter(this.work.id, '思维链路_' + new Date().getTime(), '思维链路', content);
+
+    promptAction.showToast({ message: '思维链路已保存', duration: 2000 });
+  }
+
+  saveFinalPlan() {
+    if (!this.work || this.conversationHistory.length === 0) return;
+
+    // 整合所有对话内容
+    let content = '最终方案：\n\n';
+    for (let i = 0; i < this.conversationHistory.length; i += 2) {
+      if (i + 1 < this.conversationHistory.length) {
+        content += `【对话 ${Math.floor(i / 2) + 1}】\n`;
+        content += `用户：${this.conversationHistory[i]}\n`;
+        content += `AI：${this.conversationHistory[i + 1]}\n\n`;
+      }
+    }
+
+    workManager.addChapter(this.work.id, '最终方案_' + new Date().getTime(), '最终方案', content);
+    promptAction.showToast({ message: '最终方案已保存', duration: 2000 });
   }
 }

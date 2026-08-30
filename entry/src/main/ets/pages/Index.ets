@@ -9,6 +9,7 @@ import promptAction from '@ohos.promptAction';
 struct Index {
   @State currentIndex: number = 0;
   @State isDarkMode: boolean = false;
+  @State showOnboarding: boolean = false;
   private controller: TabsController = new TabsController();
 
   get bgColor(): string {
@@ -23,56 +24,180 @@ struct Index {
     return this.isDarkMode ? '#FFFFFF' : '#1A1A2E';
   }
 
+  aboutToAppear() {
+    // 检查是否首次启动
+    if (settingsManager.settings.isFirstLaunch) {
+      this.showOnboarding = true;
+    }
+  }
+
   build() {
-    Column() {
-      // 顶部栏
-      Row() {
-        Text('文字创意工坊')
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.textColor)
-        Blank()
-        // AI标识
-        Text('🤖')
-          .fontSize(20)
-        Text('AI')
-          .fontSize(10)
-          .fontColor('#FFFFFF')
-          .backgroundColor('#FF2D55')
-          .borderRadius(4)
-          .padding({ left: 4, right: 4 })
-          .margin({ left: 4 })
+    Stack() {
+      Column() {
+        // 顶部栏
+        Row() {
+          Text('文字创意工坊')
+            .fontSize(20)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.textColor)
+          Blank()
+          // AI标识
+          Text('🤖')
+            .fontSize(20)
+          Text('AI')
+            .fontSize(10)
+            .fontColor('#FFFFFF')
+            .backgroundColor('#FF2D55')
+            .borderRadius(4)
+            .padding({ left: 4, right: 4 })
+            .margin({ left: 4 })
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+        .backgroundColor(this.cardBg)
+
+        // Tab内容
+        Tabs({ barPosition: BarPosition.End, controller: this.controller }) {
+          TabContent() {
+            ShortDramaTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColor, bgColor: this.bgColor })
+          }
+          .tabBar(this.TabBuilder('短剧', '🎬', 0))
+
+          TabContent() {
+            NovelTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColor, bgColor: this.bgColor })
+          }
+          .tabBar(this.TabBuilder('中长篇', '📚', 1))
+
+          TabContent() {
+            SettingsTab({ isDarkMode: this.isDarkMode, onDarkModeChange: (v) => { this.isDarkMode = v; } })
+          }
+          .tabBar(this.TabBuilder('设置', '⚙️', 2))
+        }
+        .barHeight(56)
+        .barBackgroundColor(this.cardBg)
+        .onChange((index: number) => {
+          this.currentIndex = index;
+        })
       }
       .width('100%')
-      .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-      .backgroundColor(this.cardBg)
+      .height('100%')
+      .backgroundColor(this.bgColor)
 
-      // Tab内容
-      Tabs({ barPosition: BarPosition.End, controller: this.controller }) {
-        TabContent() {
-          ShortDramaTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColoir })
-        }
-        .tabBar(this.TabBuilder('短剧', '🎬', 0))
-
-        TabContent() {
-          NovelTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColor })
-        }
-        .tabBar(this.TabBuilder('中长篇', '📚', 1))
-
-        TabContent() {
-          SettingsTab({ isDarkMode: this.isDarkMode, onDarkModeChange: (v) => { this.isDarkMode = v; } })
-        }
-        .tabBar(this.TabBuilder('设置', '⚙️', 2))
+      // 首次启动引导弹窗
+      if (this.showOnboarding) {
+        this.OnboardingDialog()
       }
-      .barHeight(56)
-      .barBackgroundColor(this.cardBg)
-      .onChange((index: number) => {
-        this.currentIndex = index;
-      })
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(this.bgColor)
+  }
+
+  @Builder
+  OnboardingDialog() {
+    Column() {
+      Column() {
+        Text('欢迎使用文字创意工坊')
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#1A1A2E')
+          .margin({ bottom: 16 })
+
+        Text('🤖 AI驱动的写作助手')
+          .fontSize(16)
+          .fontColor('#FF2D55')
+          .margin({ bottom: 12 })
+
+        Text('核心功能：')
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#1A1A2E')
+          .margin({ bottom: 8 })
+          .alignSelf(ItemAlign.Start)
+
+        Text('• 短剧/中长篇双工作台，独立管理')
+          .fontSize(13)
+          .fontColor('#6B7280')
+          .margin({ bottom: 4 })
+          .alignSelf(ItemAlign.Start)
+
+        Text('• AI对话生成，一键保存思维链路')
+          .fontSize(13)
+          .fontColor('#6B7280')
+          .margin({ bottom: 4 })
+          .alignSelf(ItemAlign.Start)
+
+        Text('• 自动版本归档，修改历史可追溯')
+          .fontSize(13)
+          .fontColor('#6B7280')
+          .margin({ bottom: 4 })
+          .alignSelf(ItemAlign.Start)
+
+        Text('• 支持多种AI模型：DeepSeek、智谱GLM、百度文心、小艺Agent、本地GGUF')
+          .fontSize(13)
+          .fontColor('#6B7280')
+          .margin({ bottom: 12 })
+          .alignSelf(ItemAlign.Start)
+
+        Text('隐私声明：')
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#1A1A2E')
+          .margin({ bottom: 8 })
+          .alignSelf(ItemAlign.Start)
+
+        Text('• 您的API Key仅存储在本地，不会上传到任何服务器')
+          .fontSize(12)
+          .fontColor('#9CA3AF')
+          .margin({ bottom: 4 })
+          .alignSelf(ItemAlign.Start)
+
+        Text('• 作品数据完全保存在您的设备上')
+          .fontSize(12)
+          .fontColor('#9CA3AF')
+          .margin({ bottom: 16 })
+          .alignSelf(ItemAlign.Start)
+
+        Row() {
+          Button('查看用户协议')
+            .fontSize(13)
+            .fontColor('#6B7280')
+            .backgroundColor('#F3F4F6')
+            .borderRadius(20)
+            .height(36)
+            .layoutWeight(1)
+            .margin({ right: 8 })
+            .onClick(() => {
+              promptAction.showToast({ message: '用户协议页面开发中', duration: 2000 });
+            })
+
+          Button('同意并继续')
+            .fontSize(14)
+            .fontColor('#FFFFFF')
+            .backgroundColor('#FF2D55')
+            .borderRadius(20)
+            .height(36)
+            .layoutWeight(1)
+            .margin({ left: 8 })
+            .onClick(() => {
+              settingsManager.settings.isFirstLaunch = false;
+              settingsManager.settings.hasAgreedToTerms = true;
+              settingsManager.save();
+              this.showOnboarding = false;
+              promptAction.showToast({ message: '欢迎开始创作！', duration: 2000 });
+            })
+        }
+        .width('100%')
+      }
+      .width('90%')
+      .padding(24)
+      .backgroundColor('#FFFFFF')
+      .borderRadius(16)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('rgba(0,0,0,0.5)')
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
   }
 
   @Builder
@@ -98,16 +223,17 @@ struct ShortDramaTab {
   @Prop isDarkMode: boolean;
   @Prop cardBg: string;
   @Prop textColor: string;
-  @State templates: TemplateInfo[] = templateList.filter(t => t.category === '短剧类' || t.id === 'short_drama' || t.id === 'manzai' || t.id === 'sketch' || t.id === 'short_video' || t.id === 'script_murder' || t.id === 'monologue' || t.id === 'absurdist' || t.id === 'sitcom');
+  @Prop bgColor: string;
+  @State templates: TemplateInfo[] = [];
   @State works: WorkItem[] = [];
 
   aboutToAppear() {
+    this.templates = templateList.filter(t => t.category === '剧本类' || t.category === '喜剧类');
     this.works = workManager.getAllWorks().filter(w => this.templates.some(t => t.id === w.templateId));
   }
 
   build() {
     Column() {
-      // 头部操作栏
       Row() {
         Text('短剧工作台')
           .fontSize(18)
@@ -129,7 +255,6 @@ struct ShortDramaTab {
       .padding({ left: 16, right: 16, top: 12, bottom: 12 })
       .backgroundColor(this.cardBg)
 
-      // 模板选择区
       Column() {
         Text('选择模板开始创作')
           .fontSize(14)
@@ -152,7 +277,6 @@ struct ShortDramaTab {
       }
       .layoutWeight(1)
 
-      // 作品列表
       if (this.works.length > 0) {
         Column() {
           Text('最近作品')
@@ -253,7 +377,7 @@ struct ShortDramaTab {
     .margin({ bottom: 8 })
     .onClick(() => {
       router.pushUrl({
-        url: 'pages/WorkEditorPage',
+        url: 'pages/PromptEditorPage',
         params: { workId: work.id, mode: 'short_drama' }
       });
     })
@@ -266,10 +390,12 @@ struct NovelTab {
   @Prop isDarkMode: boolean;
   @Prop cardBg: string;
   @Prop textColor: string;
-  @State templates: TemplateInfo[] = templateList.filter(t => t.category === '中长篇类' || t.id === 'hero_journey' || t.id === 'emotional_tension' || t.id === 'mystery' || t.id === 'story_nucleus' || t.id === 'viral_formula' || t.id === 'three_act' || t.id === 'five_act');
+  @Prop bgColor: string;
+  @State templates: TemplateInfo[] = [];
   @State works: WorkItem[] = [];
 
   aboutToAppear() {
+    this.templates = templateList.filter(t => t.category === '叙事类');
     this.works = workManager.getAllWorks().filter(w => this.templates.some(t => t.id === w.templateId));
   }
 
@@ -418,7 +544,7 @@ struct NovelTab {
     .margin({ bottom: 8 })
     .onClick(() => {
       router.pushUrl({
-        url: 'pages/WorkEditorPage',
+        url: 'pages/PromptEditorPage',
         params: { workId: work.id, mode: 'novel' }
       });
     })
@@ -449,7 +575,6 @@ struct SettingsTab {
         .margin({ left: 16, top: 16, bottom: 12 })
 
       List() {
-        // AI模型配置
         ListItem() {
           this.SettingRow('AI模型配置', this.getModelName(), true)
         }
@@ -463,30 +588,19 @@ struct SettingsTab {
           this.showApiKeyInput = true;
         })
 
-        // 外观设置
+        ListItem() {
+          this.SettingRow('自定义提示词', '编辑AI写作指令', true)
+        }
+        .onClick(() => {
+          router.pushUrl({ url: 'pages/PromptEditorPage', params: { mode: 'prompt_edit' } });
+        })
+
         ListItem() {
           this.SettingRow('深色模式', this.isDarkMode ? '开' : '关', false)
         }
         .onClick(() => {
           this.isDarkMode = !this.isDarkMode;
           this.onDarkModeChange(this.isDarkMode);
-        })
-
-        ListItem() {
-          this.SettingRow('跟随系统', this.isDarkMode ? '是' : '否', false)
-        }
-        .onClick(() => {
-          // 实际项目中可读取系统主题设置
-          this.isDarkMode = !this.isDarkMode;
-          this.onDarkModeChange(this.isDarkMode);
-        })
-
-        // 功能设置
-        ListItem() {
-          this.SettingRow('写作提示词', '编辑AI提示词', true)
-        }
-        .onClick(() => {
-          router.pushUrl({ url: 'pages/PromptEditorPage' });
         })
 
         ListItem() {
@@ -503,7 +617,6 @@ struct SettingsTab {
           promptAction.showToast({ message: '隐私政策页面开发中', duration: 2000 });
         })
 
-        // 关于
         ListItem() {
           this.SettingRow('应用评分', '⭐⭐⭐⭐⭐', false)
         }
@@ -519,6 +632,74 @@ struct SettingsTab {
         })
       }
       .layoutWeight(1)
+
+      // API Key输入弹层
+      if (this.showApiKeyInput) {
+        Column() {
+          Column() {
+            Text('设置 API Key')
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#1A1A2E')
+              .margin({ bottom: 8 })
+            Text('仅本地存储，不会上传到任何服务器')
+              .fontSize(12)
+              .fontColor('#9CA3AF')
+              .margin({ bottom: 12 })
+            TextInput({ placeholder: '请输入 API Key', text: this.apiKeyInput })
+              .width('100%')
+              .height(44)
+              .fontSize(14)
+              .backgroundColor('#F9FAFB')
+              .borderRadius(8)
+              .padding({ left: 12, right: 12 })
+              .onChange((value: string) => {
+                this.apiKeyInput = value;
+              })
+            Row() {
+              Button('取消')
+                .fontSize(14)
+                .fontColor('#6B7280')
+                .backgroundColor('#F3F4F6')
+                .borderRadius(20)
+                .height(40)
+                .layoutWeight(1)
+                .margin({ right: 12 })
+                .onClick(() => {
+                  this.showApiKeyInput = false;
+                })
+              Button('保存')
+                .fontSize(14)
+                .fontColor('#FFFFFF')
+                .backgroundColor('#FF2D55')
+                .borderRadius(20)
+                .height(40)
+                .layoutWeight(1)
+                .onClick(() => {
+                  this.apiKey = this.apiKeyInput.trim();
+                  this.saveSettings();
+                  this.showApiKeyInput = false;
+                  promptAction.showToast({ message: '已保存', duration: 2000 });
+                })
+            }
+            .width('100%')
+            .margin({ top: 16 })
+          }
+          .width('100%')
+          .padding(20)
+          .backgroundColor('#FFFFFF')
+          .borderRadius(16)
+          .margin({ left: 24, right: 24 })
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0,0,0,0.5)')
+        .justifyContent(FlexAlign.Center)
+        .position({ x: 0, y: 0 })
+        .onClick(() => {
+          this.showApiKeyInput = false;
+        })
+      }
     }
     .width('100%')
     .height('100%')

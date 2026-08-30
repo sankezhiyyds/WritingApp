@@ -5,12 +5,22 @@ export interface SettingsData {
   apiKey: string;
   selectedModel: string;
   customUrl: string;
+  customPrompt: string;
+  isFirstLaunch: boolean;
+  hasAgreedToTerms: boolean;
 }
 
 export class SettingsManager {
   private prefs: preferences.Preferences | null = null;
   private storageKey: string = 'writing_app_settings';
-  settings: SettingsData = { apiKey: '', selectedModel: 'deepseek', customUrl: '' };
+  settings: SettingsData = {
+    apiKey: '',
+    selectedModel: 'deepseek',
+    customUrl: '',
+    customPrompt: '',
+    isFirstLaunch: true,
+    hasAgreedToTerms: false
+  };
 
   async init(context: common.UIAbilityContext): Promise<void> {
     try {
@@ -21,7 +31,10 @@ export class SettingsManager {
         this.settings = {
           apiKey: parsed.apiKey || '',
           selectedModel: parsed.selectedModel || 'deepseek',
-          customUrl: parsed.customUrl || ''
+          customUrl: parsed.customUrl || '',
+          customPrompt: parsed.customPrompt || '',
+          isFirstLaunch: parsed.isFirstLaunch !== undefined ? parsed.isFirstLaunch : true,
+          hasAgreedToTerms: parsed.hasAgreedToTerms || false
         };
       }
     } catch (e) {
