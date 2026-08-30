@@ -9,6 +9,7 @@ export interface SettingsData {
   isFirstLaunch: boolean;
   hasAgreedToTerms: boolean;
   followSystemDark: boolean;
+  isDarkMode: boolean;
   autoSaveInterval: number;
   fontSize: number;
   aiTimeout: number;
@@ -17,7 +18,7 @@ export interface SettingsData {
 export class SettingsManager {
   private prefs: preferences.Preferences | null = null;
   private storageKey: string = 'writing_app_settings';
- private defaultSettings: SettingsData = {
+  private defaultSettings: SettingsData = {
     apiKey: '',
     selectedModel: 'deepseek',
     customUrl: '',
@@ -25,10 +26,12 @@ export class SettingsManager {
     isFirstLaunch: true,
     hasAgreedToTerms: false,
     followSystemDark: false,
+    isDarkMode: false,
     autoSaveInterval: 5,
     fontSize: 14,
     aiTimeout: 30
   };
+  settings: SettingsData = this.defaultSettings;
 
   async init(context: common.UIAbilityContext): Promise<void> {
     try {
@@ -43,7 +46,11 @@ export class SettingsManager {
           customPrompt: parsed.customPrompt || '',
           isFirstLaunch: parsed.isFirstLaunch !== undefined ? parsed.isFirstLaunch : true,
           hasAgreedToTerms: parsed.hasAgreedToTerms || false,
-          followSystemDark: parsed.followSystemDark || false
+          followSystemDark: parsed.followSystemDark || false,
+          isDarkMode: parsed.isDarkMode || false,
+          autoSaveInterval: parsed.autoSaveInterval || 5,
+          fontSize: parsed.fontSize || 14,
+          aiTimeout: parsed.aiTimeout || 30
         };
       }
     } catch (e) {

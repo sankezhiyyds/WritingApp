@@ -1,7 +1,7 @@
 export interface TemplateInfo {
   id: string;
   name: string;
-  icon: string;
+  icon: Resource | string;
   desc: string;
   category: string;
   color: string;
@@ -23,7 +23,7 @@ export const templateList: TemplateInfo[] = [
   {
     id: 'short_drama',
     name: '短剧剧本',
-    icon: '🎬',
+    icon: $r('app.media.template_short_drama'),
     desc: '竖屏短剧，快节奏强冲突',
     category: '剧本类',
     color: '#FF2D55',
@@ -58,7 +58,7 @@ export const templateList: TemplateInfo[] = [
   {
     id: 'manzai',
     name: '漫才',
-    icon: '🎭',
+    icon: $r('app.media.template_manzai'),
     desc: '日式组合喜剧，装傻与吐槽',
     category: '喜剧类',
     color: '#FF6B35',
@@ -88,7 +88,7 @@ export const templateList: TemplateInfo[] = [
   {
     id: 'hero_journey',
     name: '英雄之旅',
-    icon: '⚔️',
+    icon: $r('app.media.template_hero_journey'),
     desc: '经典叙事结构，启程-启蒙-归来',
     category: '叙事类',
     color: '#10B981',
@@ -128,7 +128,7 @@ export const templateList: TemplateInfo[] = [
   {
     id: 'emotional_tension',
     name: '情感拉扯',
-    icon: '💫',
+    icon: $r('app.media.template_emotional_conflict'),
     desc: '两人关系，推拉之间的情感张力',
     category: '叙事类',
     color: '#A855F7',
@@ -163,7 +163,7 @@ export const templateList: TemplateInfo[] = [
   {
     id: 'mystery',
     name: '悬疑推理',
-    icon: '🔍',
+    icon: $r('app.media.template_mystery_reasoning'),
     desc: '谜题-线索-反转-真相',
     category: '剧本类',
     color: '#3B82F6',
@@ -200,7 +200,7 @@ export const templateList: TemplateInfo[] = [
   {
     id: 'sketch',
     name: '素描喜剧',
-    icon: '✏️',
+    icon: $r('app.media.template_sketch_comedy'),
     desc: '单一前提的渐进式喜剧',
     category: '喜剧类',
     color: '#F59E0B',
@@ -230,7 +230,7 @@ export const templateList: TemplateInfo[] = [
   {
     id: 'short_video',
     name: '短视频脚本',
-    icon: '📱',
+    icon: $r('app.media.template_short_video'),
     desc: '15-60秒短视频的完整脚本',
     category: '剧本类',
     color: '#EC4899',
@@ -269,7 +269,7 @@ export const templateList: TemplateInfo[] = [
   {
     id: 'script_murder',
     name: '剧本杀',
-    icon: '🕵️',
+    icon: $r('app.media.template_murder_mystery'),
     desc: '沉浸式推理游戏剧本',
     category: '剧本类',
     color: '#8B5CF6',
@@ -399,7 +399,7 @@ export const templateList: TemplateInfo[] = [
   {
     id: 'novel_outline',
     name: '长篇小说大纲',
-    icon: '📚',
+    icon: $r('app.media.template_novel_outline'),
     desc: '中长篇小说完整规划',
     category: '中长篇',
     color: '#8B5CF6',
@@ -445,7 +445,7 @@ export const templateList: TemplateInfo[] = [
   {
     id: 'character_sheet',
     name: '人物设定表',
-    icon: '👤',
+    icon: $r('app.media.template_character_setting'),
     desc: '详细角色档案',
     category: '中长篇',
     color: '#EC4899',
@@ -493,7 +493,7 @@ export const templateList: TemplateInfo[] = [
   {
     id: 'chapter_plan',
     name: '章节规划',
-    icon: '📝',
+    icon: $r('app.media.template_chapter_planning'),
     desc: '单章内容规划',
     category: '中长篇',
     color: '#F59E0B',
@@ -538,7 +538,7 @@ export const templateList: TemplateInfo[] = [
   {
     id: 'world_building',
     name: '世界观构建',
-    icon: '🌍',
+    icon: $r('app.media.template_worldview'),
     desc: '完整世界设定',
     category: '中长篇',
     color: '#10B981',
@@ -586,7 +586,7 @@ export const templateList: TemplateInfo[] = [
   {
     id: 'plot_outline',
     name: '剧情大纲',
-    icon: '🎯',
+    icon: $r('app.media.template_plot_outline'),
     desc: '主线剧情规划',
     category: '中长篇',
     color: '#EF4444',
@@ -631,7 +631,7 @@ export const templateList: TemplateInfo[] = [
   {
     id: 'five_act',
     name: '五幕剧',
-    icon: '🎪',
+    icon: $r('app.media.template_five_act_play'),
     desc: '莎士比亚式戏剧结构',
     category: '剧本类',
     color: '#0EA5E9',
@@ -1272,7 +1272,7 @@ AI绝对禁止操控、描述、代替用户说话、思考、感受或做出任
 每次输出前执行"人格滤镜"：
 1. 以角色的成长经历与核心信念，Ta会如何解读当前情境？
 2. 以角色的性格与当下情绪，Ta会如何思考、言说与行动？
-3. 此行为是角色性格的逻辑延伸，还是出于AI推动剧情的便利？`;
+3. 此行为是角色性格的逻辑延伸，还是出于AI推动剧情的便利？
 
 ## 核心协议：世界观动态适配
 当 {{user}} 输入书名或世界名称时，你必须立即检索【故事书/World Info】中对应的世界观设定（如历史、克系、言情等）。

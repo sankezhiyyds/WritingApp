@@ -5,8 +5,19 @@ import { responsiveManager, BreakpointType } from '../model/ResponsiveManager';
 import router from '@ohos.router';
 import promptAction from '@ohos.promptAction';
 import Configuration from '@ohos.app.ability.Configuration';
+import common from '@ohos.app.ability.common';
 import AbilityConstant from '@ohos.app.ability.AbilityConstant';
 import display from '@ohos.display';
+
+interface ToastOptions {
+  message: string | Resource;
+  duration: number;
+}
+
+interface MenuButton {
+  text: string | Resource;
+  color: string | Resource;
+}
 
 @Entry
 @Component
@@ -73,10 +84,10 @@ struct Index {
   updateDarkMode() {
     if (settingsManager.settings.followSystemDark) {
       // 获取系统配置
-      const context = getContext(this) as Context;
+      const context = getContext(this) as common.UIAbilityContext;
       const config = context.config;
       if (config && config.colorMode !== undefined) {
-        this.isDarkMode = config.colorMode === Configuration.ColorMode.COLOR_MODE_DARK;
+        this.isDarkMode = config.colorMode === 1;
       }
     } else {
       // 使用用户手动设置
@@ -714,9 +725,16 @@ struct ShortDramaTab {
           .width(40)
           .height(40)
           .fill(template.color)
-        Text(template.icon)
-          .fontSize(18)
-          .fontColor('#FFFFFF')
+        if (typeof template.icon === 'string') {
+          Text(template.icon)
+            .fontSize(18)
+            .fontColor('#FFFFFF')
+        } else {
+          Image(template.icon)
+            .width(24)
+            .height(24)
+            .objectFit(ImageFit.Contain)
+        }
       }
       .alignContent(Alignment.Center)
       .width('100%')
@@ -897,9 +915,16 @@ struct NovelTab {
           .width(40)
           .height(40)
           .fill(template.color)
-        Text(template.icon)
-          .fontSize(18)
-          .fontColor('#FFFFFF')
+        if (typeof template.icon === 'string') {
+          Text(template.icon)
+            .fontSize(18)
+            .fontColor('#FFFFFF')
+        } else {
+          Image(template.icon)
+            .width(24)
+            .height(24)
+            .objectFit(ImageFit.Contain)
+        }
       }
       .alignContent(Alignment.Center)
 
@@ -1091,10 +1116,10 @@ struct SettingsTab {
           settingsManager.settings.followSystemDark = this.followSystemDark;
           settingsManager.save();
           if (this.followSystemDark) {
-            const context = getContext(this) as Context;
+            const context = getContext(this) as common.UIAbilityContext;
             const config = context.config;
             if (config && config.colorMode !== undefined) {
-              const systemDark = config.colorMode === Configuration.ColorMode.COLOR_MODE_DARK;
+              const systemDark = config.colorMode === 1;
               this.isDarkMode = systemDark;
               this.onDarkModeChange(systemDark);
             }
@@ -1686,41 +1711,68 @@ struct SettingsTab {
   }
 
   editTimeout() {
-    const options = ['15秒', '30秒', '60秒', '120秒'];
-    const values = [15, 30, 60, 120];
     promptAction.showActionMenu({
       title: '选择AI超时时间',
-      buttons: options.map((text, index) => ({ text, color: '#1A1A2E' }))
-    }).then((result) => {
-      this.aiTimeout = values[result.index];
-      this.saveSettings();
-      promptAction.showToast({ message: `已设置为 ${this.aiTimeout}秒`, duration: 2000 });
+      buttons: [
+        { text: '15秒', color: '#1A1A2E' } as MenuButton,
+        { text: '30秒', color: '#1A1A2E' } as MenuButton,
+        { text: '60秒', color: '#1A1A2E' } as MenuButton,
+        { text: '120秒', color: '#1A1A2E' } as MenuButton,
+        { text: '取消', color: '#666666' } as MenuButton,
+        { text: '取消', color: '#666666' } as MenuButton
+      ] as [MenuButton, MenuButton, MenuButton, MenuButton, MenuButton, MenuButton]
+    }).then((result: promptAction.ActionMenuSuccessResponse) => {
+      if (result.index < 4) {
+        const values: number[] = [15, 30, 60, 120];
+        this.aiTimeout = values[result.index];
+        this.saveSettings();
+        const toastOpts: ToastOptions = { message: `已设置为 ${this.aiTimeout}秒`, duration: 2000 };
+        promptAction.showToast(toastOpts);
+      }
     });
   }
 
   editAutoSaveInterval() {
-    const options = ['1分钟', '5分钟', '10分钟', '30分钟'];
-    const values = [1, 5, 10, 30];
     promptAction.showActionMenu({
       title: '选择自动保存间隔',
-      buttons: options.map((text, index) => ({ text, color: '#1A1A2E' }))
-    }).then((result) => {
-      this.autoSaveInterval = values[result.index];
-      this.saveSettings();
-      promptAction.showToast({ message: `已设置为 ${this.autoSaveInterval}分钟`, duration: 2000 });
+      buttons: [
+        { text: '1分钟', color: '#1A1A2E' } as MenuButton,
+        { text: '5分钟', color: '#1A1A2E' } as MenuButton,
+        { text: '10分钟', color: '#1A1A2E' } as MenuButton,
+        { text: '30分钟', color: '#1A1A2E' } as MenuButton,
+        { text: '取消', color: '#666666' } as MenuButton,
+        { text: '取消', color: '#666666' } as MenuButton
+      ] as [MenuButton, MenuButton, MenuButton, MenuButton, MenuButton, MenuButton]
+    }).then((result: promptAction.ActionMenuSuccessResponse) => {
+      if (result.index < 4) {
+        const values: number[] = [1, 5, 10, 30];
+        this.autoSaveInterval = values[result.index];
+        this.saveSettings();
+        const toastOpts: ToastOptions = { message: `已设置为 ${this.autoSaveInterval}分钟`, duration: 2000 };
+        promptAction.showToast(toastOpts);
+      }
     });
   }
 
   editFontSize() {
-    const options = ['12px', '14px', '16px', '18px'];
-    const values = [12, 14, 16, 18];
     promptAction.showActionMenu({
       title: '选择字体大小',
-      buttons: options.map((text, index) => ({ text, color: '#1A1A2E' }))
-    }).then((result) => {
-      this.fontSize = values[result.index];
-      this.saveSettings();
-      promptAction.showToast({ message: `已设置为 ${this.fontSize}px`, duration: 2000 });
+      buttons: [
+        { text: '12px', color: '#1A1A2E' } as MenuButton,
+        { text: '14px', color: '#1A1A2E' } as MenuButton,
+        { text: '16px', color: '#1A1A2E' } as MenuButton,
+        { text: '18px', color: '#1A1A2E' } as MenuButton,
+        { text: '取消', color: '#666666' } as MenuButton,
+        { text: '取消', color: '#666666' } as MenuButton
+      ] as [MenuButton, MenuButton, MenuButton, MenuButton, MenuButton, MenuButton]
+    }).then((result: promptAction.ActionMenuSuccessResponse) => {
+      if (result.index < 4) {
+        const values: number[] = [12, 14, 16, 18];
+        this.fontSize = values[result.index];
+        this.saveSettings();
+        const toastOpts: ToastOptions = { message: `已设置为 ${this.fontSize}px`, duration: 2000 };
+        promptAction.showToast(toastOpts);
+      }
     });
   }
 

@@ -1,10 +1,15 @@
 import { TemplateField, TemplateInfo, templateList } from '../model/TemplateModel';
-import { WorkItem, workManager, Chapter, Conversation } from '../model/WorkManager';
+import { WorkItem, workManager, Chapter, Conversation, WorkVersion } from '../model/WorkManager';
 import { settingsManager } from '../model/SettingsManager';
 import { aiService } from '../model/AIService';
 import { responsiveManager, BreakpointType } from '../model/ResponsiveManager';
 import router from '@ohos.router';
 import promptAction from '@ohos.promptAction';
+
+interface TextRange {
+  start: number;
+  end: number;
+}
 
 @Entry
 @Component
@@ -26,7 +31,7 @@ struct PromptEditorPage {
   @State showVersionHistory: boolean = false;
   @State selectedVersion: number = -1;
   @State originalContent: string = '';
-  @State modifiedRanges: Array<{start: number, end: number}> = [];
+  @State modifiedRanges: Array<TextRange> = [];
   @State previousContent: string = '';
   @State showCreateChapterDialog: boolean = false;
   @State showEditChapterDialog: boolean = false;
@@ -575,8 +580,8 @@ struct PromptEditorPage {
     this.generatedContent = content;
   }
 
-  detectChanges(oldContent: string, newContent: string): Array<{start: number, end: number}> {
-    const ranges: Array<{start: number, end: number}> = [];
+  detectChanges(oldContent: string, newContent: string): Array<TextRange> {
+    const ranges: Array<TextRange> = [];
     
     // 简单的差异检测：找出新增的内容
     if (newContent.length > oldContent.length) {
@@ -597,7 +602,8 @@ struct PromptEditorPage {
       
       // 记录修改范围
       if (newEnd > diffStart) {
-        ranges.push({ start: diffStart, end: newEnd });
+        const range: TextRange = { start: diffStart, end: newEnd };
+        ranges.push(range);
       }
     }
     
@@ -1042,12 +1048,11 @@ struct PromptEditorPage {
             .margin({ bottom: 16 })
         }
 
-        TextArea({ placeholder: '请输入章节内容' })
+        TextArea({ placeholder: '请输入章节内容', text: this.editingChapterContent })
           .fontSize(14)
           .height(300)
           .backgroundColor('#F5F6FA')
           .borderRadius(8)
-          .text(this.editingChapterContent)
           .onChange((value: string) => {
             this.editingChapterContent = value;
           })
