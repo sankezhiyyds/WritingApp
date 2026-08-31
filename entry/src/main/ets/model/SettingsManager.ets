@@ -13,6 +13,8 @@ export interface SettingsData {
   autoSaveInterval: number;
   fontSize: number;
   aiTimeout: number;
+  isLoggedIn: boolean;
+  userName: string;
 }
 
 export class SettingsManager {
@@ -29,7 +31,9 @@ export class SettingsManager {
     isDarkMode: false,
     autoSaveInterval: 5,
     fontSize: 14,
-    aiTimeout: 30
+    aiTimeout: 30,
+    isLoggedIn: false,
+    userName: ''
   };
   settings: SettingsData = this.defaultSettings;
 
@@ -50,7 +54,9 @@ export class SettingsManager {
           isDarkMode: parsed.isDarkMode !== undefined ? parsed.isDarkMode : false,
           autoSaveInterval: parsed.autoSaveInterval || 5,
           fontSize: parsed.fontSize || 14,
-          aiTimeout: parsed.aiTimeout || 30
+          aiTimeout: parsed.aiTimeout || 30,
+          isLoggedIn: parsed.isLoggedIn || false,
+          userName: parsed.userName || ''
         };
       }
     } catch (e) {
