@@ -41,6 +41,8 @@ struct PromptEditorPage {
   @State newChapterContent: string = '';
   @State editingChapter: Chapter | null = null;
   @State editingChapterContent: string = '';
+  @State selectedCategory: string = '全部';
+  @State autoSaveTimer: number = 0;
 
   get isWide(): boolean {
     return this.currentBreakpoint === 'md' || this.currentBreakpoint === 'lg';
@@ -53,6 +55,10 @@ struct PromptEditorPage {
       return 840;
     }
     return 10000;
+  }
+
+  get fontSize(): number {
+    return settingsManager.settings.fontSize || 14;
   }
 
   aboutToAppear() {
@@ -93,12 +99,32 @@ struct PromptEditorPage {
     responsiveManager.onBreakpointChange((bp: BreakpointType) => {
       this.currentBreakpoint = bp;
     });
+
+    // 启动自动保存定时器
+    this.startAutoSave();
+  }
+
+  startAutoSave() {
+    const interval = settingsManager.settings.autoSaveInterval * 60 * 1000; // 转换为毫秒
+    this.autoSaveTimer = setInterval(() => {
+      this.autoSave();
+    }, interval);
+  }
+
+  autoSave() {
+    if (this.work && this.generatedContent.trim().length > 0) {
+      workManager.updateWork(this.work.id, this.generatedContent, false);
+    }
   }
 
   aboutToDisappear() {
     responsiveManager.offBreakpointChange((bp: BreakpointType) => {
       this.currentBreakpoint = bp;
     });
+    // 清理自动保存定时器
+    if (this.autoSaveTimer > 0) {
+      clearInterval(this.autoSaveTimer);
+    }
   }
 
   build() {
@@ -458,7 +484,7 @@ struct PromptEditorPage {
               .alignSelf(ItemAlign.Start)
 
             Text(this.getHighlightedContent())
-              .fontSize(13)
+              .fontSize(this.fontSize)
               .fontColor('#374151')
               .lineHeight(20)
               .width('100%')
@@ -696,6 +722,16 @@ struct PromptEditorPage {
     this.work = workManager.getWork(this.work.id);
   }
 
+  getFilteredChapters(): Chapter[] {
+    if (!this.work || !this.work.chapters) {
+      return [];
+    }
+    if (this.selectedCategory === '全部') {
+      return this.work.chapters;
+    }
+    return this.work.chapters.filter(chapter => chapter.category === this.selectedCategory);
+  }
+
   async saveWork() {
     if (this.generatedContent.trim().length === 0) {
       promptAction.showToast({ message: '内容不能为空', duration: 2000 });
@@ -900,12 +936,15 @@ struct PromptEditorPage {
           ForEach(['全部', '大纲', '人设', '场景', '章节', '时间线', '世界观', '思维链路', '最终方案'], (category: string) => {
             Button(category)
               .fontSize(13)
-              .fontColor('#6B7280')
-              .backgroundColor('#F3F4F6')
+              .fontColor(this.selectedCategory === category ? '#FFFFFF' : '#6B7280')
+              .backgroundColor(this.selectedCategory === category ? '#FF2D55' : '#F3F4F6')
               .borderRadius(16)
               .height(32)
               .padding({ left: 12, right: 12 })
               .margin({ right: 8 })
+              .onClick(() => {
+                this.selectedCategory = category;
+              })
           }, (category: string) => category)
         }
         .padding({ left: 16, right: 16 })
@@ -917,7 +956,7 @@ struct PromptEditorPage {
       // 章节列表
       List() {
         if (this.work && this.work.chapters) {
-          ForEach(this.work.chapters, (chapter: Chapter) => {
+          ForEach(this.getFilteredChapters(), (chapter: Chapter) => {
             ListItem() {
               Column() {
                 Row() {

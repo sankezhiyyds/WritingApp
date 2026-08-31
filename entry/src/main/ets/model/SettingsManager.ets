@@ -1,8 +1,6 @@
 import preferences from '@ohos.data.preferences';
 import common from '@ohos.app.ability.common';
 
-export type ThemeMode = 'system' | 'light' | 'dark';
-
 export interface SettingsData {
   apiKey: string;
   selectedModel: string;
@@ -10,14 +8,11 @@ export interface SettingsData {
   customPrompt: string;
   isFirstLaunch: boolean;
   hasAgreedToTerms: boolean;
-  themeMode: ThemeMode;
+  followSystemDark: boolean;
+  isDarkMode: boolean;
   autoSaveInterval: number;
   fontSize: number;
   aiTimeout: number;
-  isLoggedIn: boolean;
-  userName: string;
-  followSystemDark: boolean;
-  isDarkMode: boolean;
 }
 
 export class SettingsManager {
@@ -30,14 +25,11 @@ export class SettingsManager {
     customPrompt: '',
     isFirstLaunch: true,
     hasAgreedToTerms: false,
-    themeMode: 'system',
+    followSystemDark: false,
+    isDarkMode: false,
     autoSaveInterval: 5,
     fontSize: 14,
-    aiTimeout: 30,
-    isLoggedIn: false,
-    userName: '',
-    followSystemDark: true,
-    isDarkMode: false
+    aiTimeout: 30
   };
   settings: SettingsData = this.defaultSettings;
 
@@ -54,14 +46,11 @@ export class SettingsManager {
           customPrompt: parsed.customPrompt || '',
           isFirstLaunch: parsed.isFirstLaunch !== undefined ? parsed.isFirstLaunch : true,
           hasAgreedToTerms: parsed.hasAgreedToTerms || false,
-          themeMode: (parsed.themeMode || 'system') as ThemeMode,
+          followSystemDark: parsed.followSystemDark || false,
+          isDarkMode: parsed.isDarkMode !== undefined ? parsed.isDarkMode : false,
           autoSaveInterval: parsed.autoSaveInterval || 5,
           fontSize: parsed.fontSize || 14,
-          aiTimeout: parsed.aiTimeout || 30,
-          isLoggedIn: parsed.isLoggedIn || false,
-          userName: parsed.userName || '',
-          followSystemDark: parsed.followSystemDark !== undefined ? parsed.followSystemDark : true,
-          isDarkMode: parsed.isDarkMode || false
+          aiTimeout: parsed.aiTimeout || 30
         };
       }
     } catch (e) {
