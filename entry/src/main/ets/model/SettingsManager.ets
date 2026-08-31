@@ -47,7 +47,7 @@ export class SettingsManager {
           isFirstLaunch: parsed.isFirstLaunch !== undefined ? parsed.isFirstLaunch : true,
           hasAgreedToTerms: parsed.hasAgreedToTerms || false,
           followSystemDark: parsed.followSystemDark || false,
-          isDarkMode: parsed.isDarkMode || false,
+          isDarkMode: parsed.isDarkMode !== undefined ? parsed.isDarkMode : false,
           autoSaveInterval: parsed.autoSaveInterval || 5,
           fontSize: parsed.fontSize || 14,
           aiTimeout: parsed.aiTimeout || 30

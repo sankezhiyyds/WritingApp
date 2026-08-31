@@ -591,7 +591,9 @@ struct Index {
     .height(64)
     .backgroundColor(this.isDarkMode ? 'rgba(45,45,58,0.85)' : 'rgba(255,255,255,0.85)')
     .borderRadius(32)
-    .position({ x: '7.5%', y: 'calc(100% - 80px)' })
+    .position({ x: '7.5%', y: 0 })
+    .alignSelf(ItemAlign.End)
+    .margin({ bottom: 12 })
     .shadow({
       radius: 20,
       color: 'rgba(0,0,0,0.1)',
@@ -831,7 +833,7 @@ struct NovelTab {
   }
 
   aboutToAppear() {
-    this.templates = templateList.filter(t => t.category === '叙事类' || t.category === '互动类');
+    this.templates = templateList.filter(t => t.category === '叙事类' || t.category === '互动类' || t.category === '中长篇');
     this.works = workManager.getAllWorks().filter(w => this.templates.some(t => t.id === w.templateId));
   }
 

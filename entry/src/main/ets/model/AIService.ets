@@ -129,13 +129,16 @@ export class AIService {
 
     try {
       const httpRequest = http.createHttp();
+      const timeout = settings.aiTimeout * 1000; // 转换为毫秒
       const response = await httpRequest.request(url, {
         method: http.RequestMethod.POST,
         header: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${settings.apiKey}`
         },
-        extraData: JSON.stringify(requestBody)
+        extraData: JSON.stringify(requestBody),
+        connectTimeout: timeout,
+        readTimeout: timeout
       });
 
       httpRequest.destroy();
@@ -184,6 +187,7 @@ export class AIService {
 
     try {
       const httpRequest = http.createHttp();
+      const timeout = settings.aiTimeout * 1000;
       const response = await httpRequest.request(url, {
         method: http.RequestMethod.POST,
         header: {
@@ -194,7 +198,9 @@ export class AIService {
           model: 'glm-4',
           messages: messages,
           temperature: 0.7
-        })
+        }),
+        connectTimeout: timeout,
+        readTimeout: timeout
       });
 
       httpRequest.destroy();
@@ -224,10 +230,13 @@ export class AIService {
 
     try {
       const httpRequest = http.createHttp();
+      const timeout = settings.aiTimeout * 1000;
       const response = await httpRequest.request(url + `?access_token=${settings.apiKey}`, {
         method: http.RequestMethod.POST,
         header: { 'Content-Type': 'application/json' },
-        extraData: JSON.stringify({ messages: messages })
+        extraData: JSON.stringify({ messages: messages }),
+        connectTimeout: timeout,
+        readTimeout: timeout
       });
 
       httpRequest.destroy();
