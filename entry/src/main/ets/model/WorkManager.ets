@@ -10,6 +10,8 @@ export interface WorkItem {
   content: string;
   createTime: string;
   updateTime: string;
+  archived?: boolean;
+  workshop?: string; // 自由创作作品归属工作台：short_drama | novel
   versions?: WorkVersion[];
   chapters?: Chapter[];
   conversations?: Conversation[];
@@ -81,6 +83,21 @@ export class WorkManager {
   private storageKey: string = 'writing_app_works';
   private prefs: preferences.Preferences | null = null;
   private context: common.UIAbilityContext | null = null;
+  private changeListeners: Array<() => void> = [];
+
+  /** 订阅作品数据变化（增删改/归档），返回取消订阅函数 */
+  onChange(callback: () => void): () => void {
+    this.changeListeners.push(callback);
+    return () => {
+      this.changeListeners = this.changeListeners.filter(fn => fn !== callback);
+    };
+  }
+
+  private notifyChange(): void {
+    for (let i = 0; i < this.changeListeners.length; i++) {
+      this.changeListeners[i]();
+    }
+  }
 
   async init(context: common.UIAbilityContext): Promise<void> {
     this.context = context;
@@ -112,6 +129,7 @@ export class WorkManager {
     try {
       await this.prefs.put(this.storageKey, JSON.stringify(this.works));
       await this.prefs.flush();
+      this.notifyChange();
     } catch (e) {
       console.error('[WorkManager] 保存作品失败: ' + JSON.stringify(e));
     }
@@ -127,6 +145,27 @@ export class WorkManager {
       content: content,
       createTime: this.formatDate(now),
       updateTime: this.formatDate(now),
+      versions: [],
+      chapters: [],
+      conversations: []
+    };
+    this.works.unshift(work);
+    this.saveToStorage();
+    return work;
+  }
+
+  /** 自由创作（不依赖模板），workshop 指定归属工作台 */
+  createFreeWork(title: string, content: string, workshop: string): WorkItem {
+    const now = new Date();
+    const work: WorkItem = {
+      id: this.generateId(),
+      title: title,
+      templateId: 'free',
+      templateName: '自由创作',
+      content: content,
+      createTime: this.formatDate(now),
+      updateTime: this.formatDate(now),
+      workshop: workshop,
       versions: [],
       chapters: [],
       conversations: []
@@ -159,6 +198,45 @@ export class WorkManager {
       this.saveToStorage();
     }
     return work || null;
+  }
+
+  /** 更新作品标题 */
+  updateTitle(workId: string, title: string): boolean {
+    const work = this.works.find(w => w.id === workId);
+    if (work) {
+      work.title = title;
+      work.updateTime = this.formatDate(new Date());
+      this.saveToStorage();
+      return true;
+    }
+    return false;
+  }
+
+  /** 恢复到指定历史版本（当前内容先归档为新版本） */
+  restoreVersion(workId: string, versionId: string): boolean {
+    const work = this.works.find(w => w.id === workId);
+    if (work && work.versions) {
+      const version = work.versions.find(v => v.id === versionId);
+      if (version) {
+        if (work.content.trim().length > 0) {
+          const backup: WorkVersion = {
+            id: this.generateId(),
+            content: work.content,
+            timestamp: this.formatDate(new Date()),
+            changeNote: '版本恢复前自动备份'
+          };
+          work.versions.unshift(backup);
+          if (work.versions.length > 20) {
+            work.versions = work.versions.slice(0, 20);
+          }
+        }
+        work.content = version.content;
+        work.updateTime = this.formatDate(new Date());
+        this.saveToStorage();
+        return true;
+      }
+    }
+    return false;
   }
 
   addChapter(workId: string, title: string, category: string, content: string): Chapter | null {
@@ -269,6 +347,70 @@ export class WorkManager {
 
   getWorksByTemplate(templateId: string): WorkItem[] {
     return this.works.filter(w => w.templateId === templateId);
+  }
+
+  /** 书架：未归档的作品 */
+  getBookshelfWorks(): WorkItem[] {
+    return this.works.filter(w => !w.archived);
+  }
+
+  /** 旧档区：已归档的作品 */
+  getArchivedWorks(): WorkItem[] {
+    return this.works.filter(w => w.archived);
+  }
+
+  /** 归档作品（移入旧档区） */
+  archiveWork(workId: string): boolean {
+    const work = this.works.find(w => w.id === workId);
+    if (work) {
+      work.archived = true;
+      work.updateTime = this.formatDate(new Date());
+      this.saveToStorage();
+      return true;
+    }
+    return false;
+  }
+
+  /** 取消归档（移回书架） */
+  unarchiveWork(workId: string): boolean {
+    const work = this.works.find(w => w.id === workId);
+    if (work) {
+      work.archived = false;
+      work.updateTime = this.formatDate(new Date());
+      this.saveToStorage();
+      return true;
+    }
+    return false;
+  }
+
+  /** 导出全部作品为JSON字符串 */
+  exportAll(): string {
+    return JSON.stringify(this.works);
+  }
+
+  /** 从备份JSON导入作品，返回导入数量（跳过重复id） */
+  importWorks(json: string): number {
+    try {
+      const parsed = JSON.parse(json) as WorkItem[];
+      if (!Array.isArray(parsed)) {
+        return 0;
+      }
+      let count = 0;
+      for (let i = 0; i < parsed.length; i++) {
+        const item = parsed[i];
+        if (item && item.id && !this.works.some(w => w.id === item.id)) {
+          this.works.push(item);
+          count++;
+        }
+      }
+      if (count > 0) {
+        this.saveToStorage();
+      }
+      return count;
+    } catch (e) {
+      console.error('[WorkManager] 导入作品失败: ' + JSON.stringify(e));
+      return 0;
+    }
   }
 
   private generateId(): string {

@@ -1,4 +1,4 @@
-import { TemplateInfo } from './TemplateModel';
+import type { TemplateInfo } from './TemplateModel';
 
 // ========== 补充模板：缺失品类 ==========
 export const supplementTemplates: TemplateInfo[] = [

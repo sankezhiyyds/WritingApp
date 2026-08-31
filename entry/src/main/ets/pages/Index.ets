@@ -3,8 +3,11 @@ import { WorkItem, workManager } from '../model/WorkManager';
 import { OutlineManagementPanel } from '../components/OutlineManagementPanel';
 import { settingsManager } from '../model/SettingsManager';
 import { responsiveManager, BreakpointType } from '../model/ResponsiveManager';
+import { huaweiAuthService } from '../model/HuaweiAuthService';
+import { permissionManager, PermissionItem, PermissionResult } from '../model/PermissionManager';
 import router from '@ohos.router';
 import promptAction from '@ohos.promptAction';
+import pasteboard from '@ohos.pasteboard';
 import Configuration from '@ohos.app.ability.Configuration';
 import common from '@ohos.app.ability.common';
 import AbilityConstant from '@ohos.app.ability.AbilityConstant';
@@ -80,6 +83,16 @@ struct Index {
     });
     // 初始化深色模式
     this.updateDarkMode();
+    // 初始化华为账号服务并尝试静默登录
+    const context = getContext(this) as common.UIAbilityContext;
+    huaweiAuthService.init(context);
+    if (huaweiAuthService.hasSavedLogin()) {
+      huaweiAuthService.silentLogin();
+    }
+    // 首次启动申请运行时权限
+    if (settingsManager.settings.isFirstLaunch) {
+      permissionManager.requestPermissions(['ohos.permission.INTERNET', 'ohos.permission.GET_NETWORK_INFO']);
+    }
   }
 
   updateDarkMode() {
@@ -118,7 +131,7 @@ struct Index {
               .fontSize(16)
               .margin({ bottom: 20 })
 
-            this.SideNavItem('短剧', '🎬', 0)
+            this.SideNavItem('短幕剧', '🎬', 0)
             this.SideNavItem('中长篇', '📚', 1)
             this.SideNavItem('设置', '⚙️', 2)
 
@@ -200,6 +213,7 @@ struct Index {
         }
         .width('100%')
         .height('100%')
+        .alignContent(Alignment.Bottom)
       }
 
       // 首次启动引导弹窗
@@ -285,14 +299,14 @@ struct Index {
             .fontColor('#1A1A2E')
             .margin({ bottom: 12 })
 
-          Text('短剧工作台')
+          Text('短幕剧工作台')
             .fontSize(16)
             .fontWeight(FontWeight.Medium)
             .fontColor('#1A1A2E')
             .margin({ bottom: 8 })
             .alignSelf(ItemAlign.Start)
 
-          Text('• 快速创作竖屏短剧、微电影')
+          Text('• 快速创作竖屏短幕剧、微电影')
             .fontSize(14)
             .fontColor('#6B7280')
             .margin({ bottom: 4 })
@@ -543,11 +557,11 @@ struct Index {
   @Builder
   FloatingTabBar() {
     Row() {
-      // 短剧
+      // 短幕剧
       Column() {
         Text('🎬')
           .fontSize(24)
-        Text('短剧')
+        Text('短幕剧')
           .fontSize(11)
           .fontColor(this.currentIndex === 0 ? '#FF2D55' : (this.isDarkMode ? '#9CA3AF' : '#6B7280'))
           .margin({ top: 4 })
@@ -592,8 +606,6 @@ struct Index {
     .height(64)
     .backgroundColor(this.isDarkMode ? 'rgba(45,45,58,0.85)' : 'rgba(255,255,255,0.85)')
     .borderRadius(32)
-    .position({ x: '7.5%', y: 0 })
-    .alignSelf(ItemAlign.End)
     .margin({ bottom: 12 })
     .shadow({
       radius: 20,
@@ -624,7 +636,7 @@ struct Index {
   }
 }
 
-// ========== 短剧工作台 ==========
+// ========== 短幕剧工作台 ==========
 @Component
 struct ShortDramaTab {
   @Prop isDarkMode: boolean;
@@ -633,6 +645,12 @@ struct ShortDramaTab {
   @Prop bgColor: string;
   @State templates: TemplateInfo[] = [];
   @State works: WorkItem[] = [];
+  @State archivedWorks: WorkItem[] = [];
+  @State showArchive: boolean = false;
+  private unsubscribe: (() => void) | null = null;
+
+  /** 短幕剧工作台覆盖的模板品类 */
+  private readonly categories: string[] = ['剧本类', '喜剧类', '灵感类', '广告类', '交互沉浸类', '创意引擎'];
 
   get templateColumns(): string {
     const cols = responsiveManager.getTemplateColumns();
@@ -644,14 +662,37 @@ struct ShortDramaTab {
   }
 
   aboutToAppear() {
-    this.templates = templateList.filter(t => t.category === '剧本类' || t.category === '喜剧类' || t.category === '灵感类' || t.category === '广告类');
-    this.works = workManager.getAllWorks().filter(w => this.templates.some(t => t.id === w.templateId));
+    this.refreshData();
+    this.unsubscribe = workManager.onChange(() => {
+      this.refreshData();
+    });
+  }
+
+  aboutToDisappear() {
+    if (this.unsubscribe) {
+      this.unsubscribe();
+      this.unsubscribe = null;
+    }
+  }
+
+  private inScope(w: WorkItem): boolean {
+    return this.templates.some(t => t.id === w.templateId) || (w.templateId === 'free' && w.workshop === 'short_drama');
+  }
+
+  refreshData() {
+    this.templates = templateList.filter(t => this.categories.indexOf(t.category) !== -1);
+    const myWorks = workManager.getBookshelfWorks().filter(w => this.inScope(w));
+    myWorks.sort((a, b) => b.updateTime.localeCompare(a.updateTime));
+    this.works = myWorks;
+    const archived = workManager.getArchivedWorks().filter(w => this.inScope(w));
+    archived.sort((a, b) => b.updateTime.localeCompare(a.updateTime));
+    this.archivedWorks = archived;
   }
 
   build() {
     Column() {
       Row() {
-        Text('短剧工作台')
+        Text('短幕剧工作台')
           .fontSize(18)
           .fontWeight(FontWeight.Bold)
           .fontColor(this.textColor)
@@ -671,49 +712,85 @@ struct ShortDramaTab {
       .padding({ left: 16, right: 16, top: 12, bottom: 12 })
       .backgroundColor(this.cardBg)
 
-      Column() {
-        Text('选择模板开始创作')
-          .fontSize(14)
-          .fontColor('#9CA3AF')
-          .alignSelf(ItemAlign.Start)
-          .margin({ left: 16, top: 12, bottom: 8 })
-
-        Grid() {
-          ForEach(this.templates, (item: TemplateInfo) => {
-            GridItem() {
-              this.TemplateCard(item)
-            }
-          }, (item: TemplateInfo) => item.id)
-        }
-        .columnsTemplate(this.templateColumns)
-        .rowsGap(12)
-        .columnsGap(12)
-        .padding({ left: 16, right: 16 })
-        .layoutWeight(1)
-      }
-      .layoutWeight(1)
-
-      if (this.works.length > 0) {
+      Scroll() {
         Column() {
-          Text('最近作品')
+          Text('选择模板开始创作')
+            .fontSize(14)
+            .fontColor('#9CA3AF')
+            .alignSelf(ItemAlign.Start)
+            .margin({ left: 16, top: 12, bottom: 8 })
+
+          Grid() {
+            ForEach(this.templates, (item: TemplateInfo) => {
+              GridItem() {
+                this.TemplateCard(item)
+              }
+            }, (item: TemplateInfo) => item.id)
+          }
+          .columnsTemplate(this.templateColumns)
+          .rowsGap(12)
+          .columnsGap(12)
+          .padding({ left: 16, right: 16 })
+          .width('100%')
+
+          // ===== 书架 =====
+          Text(`书架（${this.works.length}）`)
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
             .fontColor(this.textColor)
             .alignSelf(ItemAlign.Start)
-            .margin({ left: 16, top: 12, bottom: 8 })
+            .margin({ left: 16, top: 16, bottom: 8 })
 
-          List() {
-            ForEach(this.works.slice(0, 5), (work: WorkItem) => {
-              ListItem() {
-                this.WorkCard(work)
-              }
+          if (this.works.length === 0) {
+            Text('书架空空如也，选个模板开始创作吧')
+              .fontSize(12)
+              .fontColor('#9CA3AF')
+              .alignSelf(ItemAlign.Start)
+              .margin({ left: 16, bottom: 8 })
+          } else {
+            ForEach(this.works, (work: WorkItem) => {
+              this.WorkCard(work, false)
             }, (work: WorkItem) => work.id)
           }
-          .layoutWeight(1)
-          .padding({ left: 16, right: 16 })
+
+          // ===== 旧档区 =====
+          Row() {
+            Text(`旧档区（${this.archivedWorks.length}）`)
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.textColor)
+            Blank()
+            Text(this.showArchive ? '收起 ▲' : '展开 ▼')
+              .fontSize(12)
+              .fontColor('#FF2D55')
+              .onClick(() => {
+                this.showArchive = !this.showArchive;
+              })
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16, top: 16, bottom: 8 })
+
+          if (this.showArchive) {
+            if (this.archivedWorks.length === 0) {
+              Text('暂无归档作品，书架中归档的作品会移到这里')
+                .fontSize(12)
+                .fontColor('#9CA3AF')
+                .alignSelf(ItemAlign.Start)
+                .margin({ left: 16, bottom: 8 })
+            } else {
+              ForEach(this.archivedWorks, (work: WorkItem) => {
+                this.WorkCard(work, true)
+              }, (work: WorkItem) => work.id)
+            }
+          }
+
+          // 底部留白，避免被悬浮底边栏遮挡
+          Column().width('100%').height(96)
         }
         .width('100%')
       }
+      .layoutWeight(1)
+      .scrollBar(BarState.Off)
     }
     .width('100%')
     .height('100%')
@@ -763,7 +840,6 @@ struct ShortDramaTab {
         .margin({ top: 4 })
     }
     .width('100%')
-    .height('100%')
     .padding(12)
     .backgroundColor(this.cardBg)
     .borderRadius(12)
@@ -776,13 +852,15 @@ struct ShortDramaTab {
   }
 
   @Builder
-  WorkCard(work: WorkItem) {
+  WorkCard(work: WorkItem, isArchived: boolean) {
     Row() {
       Column() {
         Text(work.title || '未命名作品')
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.textColor)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
         Text(work.templateName)
           .fontSize(11)
           .fontColor('#FF2D55')
@@ -795,6 +873,28 @@ struct ShortDramaTab {
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
 
+      Text(isArchived ? '移回书架' : '归档')
+        .fontSize(12)
+        .fontColor('#3B82F6')
+        .padding({ left: 8, right: 8 })
+        .onClick(() => {
+          if (isArchived) {
+            workManager.unarchiveWork(work.id);
+            promptAction.showToast({ message: '已移回书架', duration: 2000 });
+          } else {
+            workManager.archiveWork(work.id);
+            promptAction.showToast({ message: '已移入旧档区', duration: 2000 });
+          }
+        })
+
+      Text('删除')
+        .fontSize(12)
+        .fontColor('#EF4444')
+        .padding({ left: 8, right: 8 })
+        .onClick(() => {
+          this.confirmDelete(work);
+        })
+
       Text('>')
         .fontSize(16)
         .fontColor('#D1D5DB')
@@ -804,13 +904,29 @@ struct ShortDramaTab {
     .backgroundColor(this.cardBg)
     .borderRadius(10)
     .padding({ left: 12, right: 12 })
-    .margin({ bottom: 8 })
+    .margin({ left: 16, right: 16, bottom: 8 })
     .onClick(() => {
       router.pushUrl({
         url: 'pages/PromptEditorPage',
         params: { workId: work.id, mode: 'short_drama' }
       });
     })
+  }
+
+  confirmDelete(work: WorkItem) {
+    promptAction.showDialog({
+      title: '删除作品',
+      message: `确定删除《${work.title || '未命名作品'}》吗？此操作不可恢复`,
+      buttons: [
+        { text: '取消', color: '#6B7280' },
+        { text: '删除', color: '#EF4444' }
+      ]
+    }).then((result: promptAction.ShowDialogSuccessResponse) => {
+      if (result.index === 1) {
+        workManager.deleteWork(work.id);
+        promptAction.showToast({ message: '已删除', duration: 2000 });
+      }
+    });
   }
 }
 
@@ -823,9 +939,15 @@ struct NovelTab {
   @Prop bgColor: string;
   @State templates: TemplateInfo[] = [];
   @State works: WorkItem[] = [];
+  @State archivedWorks: WorkItem[] = [];
+  @State showArchive: boolean = false;
   @State showOutlinePanel: boolean = false;
   @State selectedWorkId: string = '';
   @State selectedWorkTitle: string = '';
+  private unsubscribe: (() => void) | null = null;
+
+  /** 中长篇工作台覆盖的模板品类 */
+  private readonly categories: string[] = ['叙事类', '互动类', '中长篇', '世界观专项', '人物专项', '时间线专项', '写作工具', '出版分享'];
 
   openOutlinePanel(work: WorkItem) {
     this.selectedWorkId = work.id;
@@ -843,8 +965,31 @@ struct NovelTab {
   }
 
   aboutToAppear() {
-    this.templates = templateList.filter(t => t.category === '叙事类' || t.category === '互动类' || t.category === '中长篇');
-    this.works = workManager.getAllWorks().filter(w => this.templates.some(t => t.id === w.templateId));
+    this.refreshData();
+    this.unsubscribe = workManager.onChange(() => {
+      this.refreshData();
+    });
+  }
+
+  aboutToDisappear() {
+    if (this.unsubscribe) {
+      this.unsubscribe();
+      this.unsubscribe = null;
+    }
+  }
+
+  private inScope(w: WorkItem): boolean {
+    return this.templates.some(t => t.id === w.templateId) || (w.templateId === 'free' && w.workshop === 'novel');
+  }
+
+  refreshData() {
+    this.templates = templateList.filter(t => this.categories.indexOf(t.category) !== -1);
+    const myWorks = workManager.getBookshelfWorks().filter(w => this.inScope(w));
+    myWorks.sort((a, b) => b.updateTime.localeCompare(a.updateTime));
+    this.works = myWorks;
+    const archived = workManager.getArchivedWorks().filter(w => this.inScope(w));
+    archived.sort((a, b) => b.updateTime.localeCompare(a.updateTime));
+    this.archivedWorks = archived;
   }
 
   build() {
@@ -871,49 +1016,85 @@ struct NovelTab {
       .padding({ left: 16, right: 16, top: 12, bottom: 12 })
       .backgroundColor(this.cardBg)
 
-      Column() {
-        Text('选择模板开始创作')
-          .fontSize(14)
-          .fontColor('#9CA3AF')
-          .alignSelf(ItemAlign.Start)
-          .margin({ left: 16, top: 12, bottom: 8 })
-
-        Grid() {
-          ForEach(this.templates, (item: TemplateInfo) => {
-            GridItem() {
-              this.TemplateCard(item)
-            }
-          }, (item: TemplateInfo) => item.id)
-        }
-        .columnsTemplate(this.templateColumns)
-        .rowsGap(12)
-        .columnsGap(12)
-        .padding({ left: 16, right: 16 })
-        .layoutWeight(1)
-      }
-      .layoutWeight(1)
-
-      if (this.works.length > 0) {
+      Scroll() {
         Column() {
-          Text('最近作品')
+          Text('选择模板开始创作')
+            .fontSize(14)
+            .fontColor('#9CA3AF')
+            .alignSelf(ItemAlign.Start)
+            .margin({ left: 16, top: 12, bottom: 8 })
+
+          Grid() {
+            ForEach(this.templates, (item: TemplateInfo) => {
+              GridItem() {
+                this.TemplateCard(item)
+              }
+            }, (item: TemplateInfo) => item.id)
+          }
+          .columnsTemplate(this.templateColumns)
+          .rowsGap(12)
+          .columnsGap(12)
+          .padding({ left: 16, right: 16 })
+          .width('100%')
+
+          // ===== 书架 =====
+          Text(`书架（${this.works.length}）`)
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
             .fontColor(this.textColor)
             .alignSelf(ItemAlign.Start)
-            .margin({ left: 16, top: 12, bottom: 8 })
+            .margin({ left: 16, top: 16, bottom: 8 })
 
-          List() {
-            ForEach(this.works.slice(0, 5), (work: WorkItem) => {
-              ListItem() {
-                this.WorkCard(work)
-              }
+          if (this.works.length === 0) {
+            Text('书架空空如也，选个模板开始创作吧')
+              .fontSize(12)
+              .fontColor('#9CA3AF')
+              .alignSelf(ItemAlign.Start)
+              .margin({ left: 16, bottom: 8 })
+          } else {
+            ForEach(this.works, (work: WorkItem) => {
+              this.WorkCard(work, false)
             }, (work: WorkItem) => work.id)
           }
-          .layoutWeight(1)
-          .padding({ left: 16, right: 16 })
+
+          // ===== 旧档区 =====
+          Row() {
+            Text(`旧档区（${this.archivedWorks.length}）`)
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.textColor)
+            Blank()
+            Text(this.showArchive ? '收起 ▲' : '展开 ▼')
+              .fontSize(12)
+              .fontColor('#FF2D55')
+              .onClick(() => {
+                this.showArchive = !this.showArchive;
+              })
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16, top: 16, bottom: 8 })
+
+          if (this.showArchive) {
+            if (this.archivedWorks.length === 0) {
+              Text('暂无归档作品，书架中归档的作品会移到这里')
+                .fontSize(12)
+                .fontColor('#9CA3AF')
+                .alignSelf(ItemAlign.Start)
+                .margin({ left: 16, bottom: 8 })
+            } else {
+              ForEach(this.archivedWorks, (work: WorkItem) => {
+                this.WorkCard(work, true)
+              }, (work: WorkItem) => work.id)
+            }
+          }
+
+          // 底部留白，避免被悬浮底边栏遮挡
+          Column().width('100%').height(96)
         }
         .width('100%')
       }
+      .layoutWeight(1)
+      .scrollBar(BarState.Off)
     }
     .width('100%')
     .height('100%')
@@ -983,13 +1164,15 @@ struct NovelTab {
   }
 
   @Builder
-  WorkCard(work: WorkItem) {
+  WorkCard(work: WorkItem, isArchived: boolean) {
     Row() {
       Column() {
         Text(work.title || '未命名作品')
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.textColor)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
         Text(work.templateName)
           .fontSize(11)
           .fontColor('#FF2D55')
@@ -1009,6 +1192,28 @@ struct NovelTab {
           this.openOutlinePanel(work);
         })
 
+      Text(isArchived ? '移回书架' : '归档')
+        .fontSize(12)
+        .fontColor('#3B82F6')
+        .padding({ left: 4, right: 4 })
+        .onClick(() => {
+          if (isArchived) {
+            workManager.unarchiveWork(work.id);
+            promptAction.showToast({ message: '已移回书架', duration: 2000 });
+          } else {
+            workManager.archiveWork(work.id);
+            promptAction.showToast({ message: '已移入旧档区', duration: 2000 });
+          }
+        })
+
+      Text('删除')
+        .fontSize(12)
+        .fontColor('#EF4444')
+        .padding({ left: 4, right: 4 })
+        .onClick(() => {
+          this.confirmDelete(work);
+        })
+
       Text('>')
         .fontSize(16)
         .fontColor('#D1D5DB')
@@ -1018,13 +1223,29 @@ struct NovelTab {
     .backgroundColor(this.cardBg)
     .borderRadius(10)
     .padding({ left: 12, right: 12 })
-    .margin({ bottom: 8 })
+    .margin({ left: 16, right: 16, bottom: 8 })
     .onClick(() => {
       router.pushUrl({
         url: 'pages/PromptEditorPage',
         params: { workId: work.id, mode: 'novel' }
       });
     })
+  }
+
+  confirmDelete(work: WorkItem) {
+    promptAction.showDialog({
+      title: '删除作品',
+      message: `确定删除《${work.title || '未命名作品'}》吗？此操作不可恢复`,
+      buttons: [
+        { text: '取消', color: '#6B7280' },
+        { text: '删除', color: '#EF4444' }
+      ]
+    }).then((result: promptAction.ShowDialogSuccessResponse) => {
+      if (result.index === 1) {
+        workManager.deleteWork(work.id);
+        promptAction.showToast({ message: '已删除', duration: 2000 });
+      }
+    });
   }
 }
 
@@ -1050,9 +1271,17 @@ struct SettingsTab {
   @State autoSaveInterval: number = 5;
   @State fontSize: number = 14;
   @State aiTimeout: number = 30;
+  @State showImportPanel: boolean = false;
+  @State importText: string = '';
+  @State showPermissionPanel: boolean = false;
+  @State permissionItems: PermissionItem[] = [];
+  @State showHelpPanel: boolean = false;
+  @State showFeedbackPanel: boolean = false;
+  @State feedbackText: string = '';
 
   aboutToAppear() {
     this.loadSettings();
+    this.permissionItems = permissionManager.getPermissionItems();
   }
 
   build() {
@@ -1139,6 +1368,8 @@ struct SettingsTab {
         }
         .onClick(() => {
           this.isDarkMode = !this.isDarkMode;
+          settingsManager.settings.isDarkMode = this.isDarkMode;
+          settingsManager.save();
           this.onDarkModeChange(this.isDarkMode);
         })
 
@@ -1213,6 +1444,14 @@ struct SettingsTab {
           this.showPrivacyPanel = true;
         })
 
+        ListItem() {
+          this.SettingRow('权限管理', '查看与申请应用权限', true)
+        }
+        .onClick(() => {
+          this.permissionItems = permissionManager.getPermissionItems();
+          this.showPermissionPanel = true;
+        })
+
         // ===== 关于与支持 =====
         ListItem() {
           this.SectionTitle('关于与支持')
@@ -1236,14 +1475,15 @@ struct SettingsTab {
           this.SettingRow('帮助中心', '使用教程与常见问题', true)
         }
         .onClick(() => {
-          promptAction.showToast({ message: '帮助中心开发中', duration: 2000 });
+          this.showHelpPanel = true;
         })
 
         ListItem() {
           this.SettingRow('联系反馈', '提交问题或建议', true)
         }
         .onClick(() => {
-          promptAction.showToast({ message: '反馈功能开发中', duration: 2000 });
+          this.feedbackText = '';
+          this.showFeedbackPanel = true;
         })
 
         ListItem() {
@@ -1312,6 +1552,7 @@ struct SettingsTab {
           .backgroundColor('#FFFFFF')
           .borderRadius(16)
           .margin({ left: 24, right: 24 })
+          .hitTestBehavior(HitTestMode.Block)
         }
         .width('100%')
         .height('100%')
@@ -1380,6 +1621,7 @@ struct SettingsTab {
           .backgroundColor('#FFFFFF')
           .borderRadius(16)
           .margin({ left: 24, right: 24 })
+          .hitTestBehavior(HitTestMode.Block)
         }
         .width('100%')
         .height('100%')
@@ -1425,6 +1667,7 @@ struct SettingsTab {
           .backgroundColor('#FFFFFF')
           .borderRadius(16)
           .margin({ left: 24, right: 24 })
+          .hitTestBehavior(HitTestMode.Block)
         }
         .width('100%')
         .height('100%')
@@ -1460,10 +1703,7 @@ struct SettingsTab {
                 .height(40)
                 .width('100%')
                 .onClick(() => {
-                  this.isLoggedIn = false;
-                  this.userName = '';
-                  this.showAccountPanel = false;
-                  promptAction.showToast({ message: '已退出登录', duration: 2000 });
+                  this.logoutHuawei();
                 })
             } else {
               Text('登录后即可使用AI功能和修改API设置')
@@ -1512,6 +1752,7 @@ struct SettingsTab {
           .backgroundColor('#FFFFFF')
           .borderRadius(16)
           .margin({ left: 24, right: 24 })
+          .hitTestBehavior(HitTestMode.Block)
         }
         .width('100%')
         .height('100%')
@@ -1575,6 +1816,7 @@ struct SettingsTab {
           .backgroundColor('#FFFFFF')
           .borderRadius(16)
           .margin({ left: 24, right: 24 })
+          .hitTestBehavior(HitTestMode.Block)
         }
         .width('100%')
         .height('100%')
@@ -1618,7 +1860,7 @@ struct SettingsTab {
               .margin({ bottom: 8 })
               .alignSelf(ItemAlign.Start)
 
-            Text('• 短剧/中长篇双工作台，独立管理\n• AI对话生成，一键保存思维链路\n• 自动版本归档，修改历史可追溯\n• 支持多种AI模型：DeepSeek、智谱GLM、百度文心、小艺助手、本地GGUF\n• 丰富的模板库，支持自定义提示词\n• 深色模式，保护您的视力')
+            Text('• 短幕剧/中长篇双工作台，独立管理\n• AI对话生成，一键保存思维链路\n• 自动版本归档，修改历史可追溯\n• 书架与旧档区，作品归档一目了然\n• 支持多种AI模型：DeepSeek、智谱GLM、百度文心、小艺助手、本地GGUF\n• 丰富的模板库，支持自定义提示词\n• 深色模式，保护您的视力')
               .fontSize(12)
               .fontColor('#6B7280')
               .margin({ bottom: 16 })
@@ -1640,6 +1882,7 @@ struct SettingsTab {
           .backgroundColor('#FFFFFF')
           .borderRadius(16)
           .margin({ left: 24, right: 24 })
+          .hitTestBehavior(HitTestMode.Block)
         }
         .width('100%')
         .height('100%')
@@ -1648,6 +1891,288 @@ struct SettingsTab {
         .position({ x: 0, y: 0 })
         .onClick(() => {
           this.showAboutPanel = false;
+        })
+      }
+
+      // 导入数据面板
+      if (this.showImportPanel) {
+        Column() {
+          Column() {
+            Text('导入数据')
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#1A1A2E')
+              .margin({ bottom: 8 })
+            Text('粘贴此前导出的备份JSON，重复作品会自动跳过')
+              .fontSize(12)
+              .fontColor('#9CA3AF')
+              .margin({ bottom: 12 })
+            TextArea({ placeholder: '粘贴备份JSON内容...' })
+              .width('100%')
+              .height(160)
+              .fontSize(13)
+              .backgroundColor('#F9FAFB')
+              .borderRadius(8)
+              .padding(12)
+              .onChange((value: string) => {
+                this.importText = value;
+              })
+            Row() {
+              Button('取消')
+                .fontSize(14)
+                .fontColor('#6B7280')
+                .backgroundColor('#F3F4F6')
+                .borderRadius(20)
+                .height(40)
+                .layoutWeight(1)
+                .margin({ right: 12 })
+                .onClick(() => {
+                  this.showImportPanel = false;
+                })
+              Button('导入')
+                .fontSize(14)
+                .fontColor('#FFFFFF')
+                .backgroundColor('#FF2D55')
+                .borderRadius(20)
+                .height(40)
+                .layoutWeight(1)
+                .onClick(() => {
+                  this.doImportData();
+                })
+            }
+            .width('100%')
+            .margin({ top: 16 })
+          }
+          .width('100%')
+          .padding(20)
+          .backgroundColor('#FFFFFF')
+          .borderRadius(16)
+          .margin({ left: 24, right: 24 })
+          .hitTestBehavior(HitTestMode.Block)
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0,0,0,0.5)')
+        .justifyContent(FlexAlign.Center)
+        .position({ x: 0, y: 0 })
+        .onClick(() => {
+          this.showImportPanel = false;
+        })
+      }
+
+      // 权限管理面板
+      if (this.showPermissionPanel) {
+        Column() {
+          Column() {
+            Text('权限管理')
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#1A1A2E')
+              .margin({ bottom: 12 })
+
+            ForEach(this.permissionItems, (item: PermissionItem) => {
+              Row() {
+                Column() {
+                  Text(item.name)
+                    .fontSize(14)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor('#1A1A2E')
+                  Text(item.reason)
+                    .fontSize(12)
+                    .fontColor('#9CA3AF')
+                    .margin({ top: 2 })
+                }
+                .alignItems(HorizontalAlign.Start)
+                .layoutWeight(1)
+
+                if (item.granted) {
+                  Text('已授权')
+                    .fontSize(12)
+                    .fontColor('#10B981')
+                } else {
+                  Button('申请')
+                    .fontSize(12)
+                    .fontColor('#FFFFFF')
+                    .backgroundColor('#FF2D55')
+                    .borderRadius(14)
+                    .height(28)
+                    .padding({ left: 12, right: 12 })
+                    .onClick(() => {
+                      this.requestSinglePermission(item.permission);
+                    })
+                }
+              }
+              .width('100%')
+              .padding({ top: 10, bottom: 10 })
+            }, (item: PermissionItem) => item.permission)
+
+            Text('提示：网络相关权限为系统级授权，安装时自动授予；如被拒绝可在此重新申请。')
+              .fontSize(11)
+              .fontColor('#9CA3AF')
+              .margin({ top: 8, bottom: 12 })
+              .alignSelf(ItemAlign.Start)
+
+            Button('关闭')
+              .fontSize(14)
+              .fontColor('#FFFFFF')
+              .backgroundColor('#FF2D55')
+              .borderRadius(20)
+              .height(40)
+              .width('100%')
+              .onClick(() => {
+                this.showPermissionPanel = false;
+              })
+          }
+          .width('100%')
+          .padding(20)
+          .backgroundColor('#FFFFFF')
+          .borderRadius(16)
+          .margin({ left: 24, right: 24 })
+          .hitTestBehavior(HitTestMode.Block)
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0,0,0,0.5)')
+        .justifyContent(FlexAlign.Center)
+        .position({ x: 0, y: 0 })
+        .onClick(() => {
+          this.showPermissionPanel = false;
+        })
+      }
+
+      // 帮助中心面板
+      if (this.showHelpPanel) {
+        Column() {
+          Column() {
+            Text('帮助中心')
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#1A1A2E')
+              .margin({ bottom: 12 })
+
+            Scroll() {
+              Column() {
+                Text('【快速上手】')
+                  .fontSize(14)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor('#1A1A2E')
+                  .margin({ bottom: 8 })
+                  .alignSelf(ItemAlign.Start)
+                Text('1. 在短幕剧/中长篇工作台选择模板，填写字段即可生成创作框架。\n2. 点击"AI生成"按钮，由AI补全完整内容（需在设置中配置API Key）。\n3. 保存后作品进入书架，可随时归档到旧档区。')
+                  .fontSize(12)
+                  .fontColor('#6B7280')
+                  .margin({ bottom: 16 })
+                  .alignSelf(ItemAlign.Start)
+
+                Text('【常见问题】')
+                  .fontSize(14)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor('#1A1A2E')
+                  .margin({ bottom: 8 })
+                  .alignSelf(ItemAlign.Start)
+                Text('Q: AI生成失败怎么办？\nA: 请检查设置中的API Key是否正确、网络是否可用，也可尝试调大AI超时时间。\n\nQ: 作品如何备份？\nA: 设置 → 导出数据，将备份JSON复制保存；换设备后用"导入数据"恢复。\n\nQ: 版本历史在哪里？\nA: 打开作品后点击底部"历史"按钮，可预览并恢复任意历史版本。')
+                  .fontSize(12)
+                  .fontColor('#6B7280')
+                  .margin({ bottom: 16 })
+                  .alignSelf(ItemAlign.Start)
+              }
+              .width('100%')
+            }
+            .height(300)
+            .scrollBar(BarState.Auto)
+
+            Button('关闭')
+              .fontSize(14)
+              .fontColor('#FFFFFF')
+              .backgroundColor('#FF2D55')
+              .borderRadius(20)
+              .height(40)
+              .width('100%')
+              .margin({ top: 12 })
+              .onClick(() => {
+                this.showHelpPanel = false;
+              })
+          }
+          .width('100%')
+          .padding(20)
+          .backgroundColor('#FFFFFF')
+          .borderRadius(16)
+          .margin({ left: 24, right: 24 })
+          .hitTestBehavior(HitTestMode.Block)
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0,0,0,0.5)')
+        .justifyContent(FlexAlign.Center)
+        .position({ x: 0, y: 0 })
+        .onClick(() => {
+          this.showHelpPanel = false;
+        })
+      }
+
+      // 联系反馈面板
+      if (this.showFeedbackPanel) {
+        Column() {
+          Column() {
+            Text('联系反馈')
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#1A1A2E')
+              .margin({ bottom: 8 })
+            Text('描述您遇到的问题或建议，提交后会复制到剪贴板，可发送至支持邮箱 support@creativewriting.app')
+              .fontSize(12)
+              .fontColor('#9CA3AF')
+              .margin({ bottom: 12 })
+            TextArea({ placeholder: '请输入反馈内容...' })
+              .width('100%')
+              .height(140)
+              .fontSize(13)
+              .backgroundColor('#F9FAFB')
+              .borderRadius(8)
+              .padding(12)
+              .onChange((value: string) => {
+                this.feedbackText = value;
+              })
+            Row() {
+              Button('取消')
+                .fontSize(14)
+                .fontColor('#6B7280')
+                .backgroundColor('#F3F4F6')
+                .borderRadius(20)
+                .height(40)
+                .layoutWeight(1)
+                .margin({ right: 12 })
+                .onClick(() => {
+                  this.showFeedbackPanel = false;
+                })
+              Button('提交')
+                .fontSize(14)
+                .fontColor('#FFFFFF')
+                .backgroundColor('#FF2D55')
+                .borderRadius(20)
+                .height(40)
+                .layoutWeight(1)
+                .onClick(() => {
+                  this.submitFeedback();
+                })
+            }
+            .width('100%')
+            .margin({ top: 16 })
+          }
+          .width('100%')
+          .padding(20)
+          .backgroundColor('#FFFFFF')
+          .borderRadius(16)
+          .margin({ left: 24, right: 24 })
+          .hitTestBehavior(HitTestMode.Block)
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0,0,0,0.5)')
+        .justifyContent(FlexAlign.Center)
+        .position({ x: 0, y: 0 })
+        .onClick(() => {
+          this.showFeedbackPanel = false;
         })
       }
     }
@@ -1737,11 +2262,25 @@ struct SettingsTab {
   }
 
   loginHuawei() {
-    // 模拟华为账号登录
-    this.isLoggedIn = true;
-    this.userName = '华为用户';
-    this.showAccountPanel = false;
-    promptAction.showToast({ message: '登录成功！', duration: 2000 });
+    huaweiAuthService.loginWithHuaweiID().then((success: boolean) => {
+      if (success) {
+        this.isLoggedIn = settingsManager.settings.isLoggedIn;
+        this.userName = settingsManager.settings.userName;
+        this.showAccountPanel = false;
+        promptAction.showToast({ message: '登录成功！', duration: 2000 });
+      } else {
+        promptAction.showToast({ message: '登录失败或已取消', duration: 2000 });
+      }
+    });
+  }
+
+  logoutHuawei() {
+    huaweiAuthService.logout().then(() => {
+      this.isLoggedIn = false;
+      this.userName = '';
+      this.showAccountPanel = false;
+      promptAction.showToast({ message: '已退出登录', duration: 2000 });
+    });
   }
 
   editTimeout() {
@@ -1811,11 +2350,62 @@ struct SettingsTab {
   }
 
   exportData() {
-    promptAction.showToast({ message: '导出功能开发中', duration: 2000 });
+    const json = workManager.exportAll();
+    const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, json);
+    const systemPasteboard = pasteboard.getSystemPasteboard();
+    systemPasteboard.setData(pasteData).then(() => {
+      promptAction.showToast({ message: `已导出${workManager.getAllWorks().length}部作品，备份JSON已复制到剪贴板`, duration: 3000 });
+    }).catch(() => {
+      promptAction.showToast({ message: '导出失败，请重试', duration: 2000 });
+    });
   }
 
   importData() {
-    promptAction.showToast({ message: '导入功能开发中', duration: 2000 });
+    this.importText = '';
+    this.showImportPanel = true;
+  }
+
+  doImportData() {
+    const text = this.importText.trim();
+    if (!text) {
+      promptAction.showToast({ message: '请先粘贴备份JSON内容', duration: 2000 });
+      return;
+    }
+    const count = workManager.importWorks(text);
+    this.showImportPanel = false;
+    if (count > 0) {
+      promptAction.showToast({ message: `成功导入${count}部作品`, duration: 2000 });
+    } else {
+      promptAction.showToast({ message: '未导入新作品（内容无效或已存在）', duration: 2000 });
+    }
+  }
+
+  requestSinglePermission(permission: string) {
+    permissionManager.requestPermissions([permission]).then((result: PermissionResult) => {
+      this.permissionItems = permissionManager.getPermissionItems();
+      if (result.granted.length > 0) {
+        promptAction.showToast({ message: '权限已授予', duration: 2000 });
+      } else {
+        promptAction.showToast({ message: '权限申请被拒绝，可在系统设置中手动开启', duration: 3000 });
+      }
+    });
+  }
+
+  submitFeedback() {
+    const text = this.feedbackText.trim();
+    if (!text) {
+      promptAction.showToast({ message: '请输入反馈内容', duration: 2000 });
+      return;
+    }
+    const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text);
+    const systemPasteboard = pasteboard.getSystemPasteboard();
+    systemPasteboard.setData(pasteData).then(() => {
+      this.showFeedbackPanel = false;
+      promptAction.showToast({ message: '反馈已复制到剪贴板，感谢支持', duration: 2000 });
+    }).catch(() => {
+      this.showFeedbackPanel = false;
+      promptAction.showToast({ message: '反馈已记录，感谢支持', duration: 2000 });
+    });
   }
 
   clearCache() {
@@ -1830,6 +2420,8 @@ struct SettingsTab {
     this.autoSaveInterval = settingsManager.settings.autoSaveInterval || 5;
     this.fontSize = settingsManager.settings.fontSize || 14;
     this.aiTimeout = settingsManager.settings.aiTimeout || 30;
+    this.isLoggedIn = settingsManager.settings.isLoggedIn;
+    this.userName = settingsManager.settings.userName;
   }
 
   saveSettings() {

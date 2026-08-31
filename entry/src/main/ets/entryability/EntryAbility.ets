@@ -4,6 +4,7 @@ import { workManager } from '../model/WorkManager';
 import { settingsManager } from '../model/SettingsManager';
 import { responsiveManager } from '../model/ResponsiveManager';
 import { aiService } from '../model/AIService';
+import { permissionManager } from '../model/PermissionManager';
 
 export default class EntryAbility extends UIAbility {
   onCreate(): void {
@@ -12,6 +13,8 @@ export default class EntryAbility extends UIAbility {
     settingsManager.init(this.context);
     responsiveManager.init(this.context);
     aiService.setContext(this.context);
+    permissionManager.init(this.context);
+    permissionManager.verifyOnLaunch();
   }
 
   onDestroy(): void {

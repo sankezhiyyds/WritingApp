@@ -10,11 +10,11 @@
     },
     {
       "name": "EntryAbility_label",
-      "value": "文字创意工坊"
+      "value": "创意写作"
     },
     {
       "name": "app_name",
-      "value": "文字创意工坊"
+      "value": "创意写作"
     },
     {
       "name": "home_title",
@@ -175,6 +175,14 @@
     {
       "name": "tip_behavioral_anchor",
       "value": "技巧：用具体动作代替抽象形容词"
+    },
+    {
+      "name": "permission_reason_internet",
+      "value": "用于调用AI模型接口，辅助生成创作内容"
+    },
+    {
+      "name": "permission_reason_network_info",
+      "value": "用于检测网络状态，确保AI请求正常发送"
     }
   ]
 }

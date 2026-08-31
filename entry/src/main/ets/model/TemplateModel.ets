@@ -1,3 +1,5 @@
+import { supplementTemplates } from './TemplateSupplement';
+
 export interface TemplateInfo {
   id: string;
   name: string;
@@ -22,9 +24,9 @@ export interface TemplateField {
 export const templateList: TemplateInfo[] = [
   {
     id: 'short_drama',
-    name: '短剧剧本',
+    name: '短幕剧剧本',
     icon: $r('app.media.template_short_drama'),
-    desc: '竖屏短剧，快节奏强冲突',
+    desc: '竖屏短幕剧，快节奏强冲突',
     category: '剧本类',
     color: '#FF2D55',
     fields: [
@@ -890,6 +892,11 @@ export const templateList: TemplateInfo[] = [
     ]
   }
 ];
+
+// 合并补充模板（交互沉浸/世界观/人物/时间线/写作工具/创意引擎/出版分享等品类）
+for (let i = 0; i < supplementTemplates.length; i++) {
+  templateList.push(supplementTemplates[i]);
+}
 
 // 隐藏核心设定 - 写作参考模板（非穿书专用）
 export const HIDDEN_CORE_PROMPT = `# 写作参考模板库

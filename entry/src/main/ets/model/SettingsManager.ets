@@ -15,6 +15,7 @@ export interface SettingsData {
   aiTimeout: number;
   isLoggedIn: boolean;
   userName: string;
+  grantedPermissions: string[];
 }
 
 export class SettingsManager {
@@ -33,7 +34,8 @@ export class SettingsManager {
     fontSize: 14,
     aiTimeout: 30,
     isLoggedIn: false,
-    userName: ''
+    userName: '',
+    grantedPermissions: []
   };
   settings: SettingsData = this.defaultSettings;
 
@@ -56,7 +58,8 @@ export class SettingsManager {
           fontSize: parsed.fontSize || 14,
           aiTimeout: parsed.aiTimeout || 30,
           isLoggedIn: parsed.isLoggedIn || false,
-          userName: parsed.userName || ''
+          userName: parsed.userName || '',
+          grantedPermissions: Array.isArray(parsed.grantedPermissions) ? parsed.grantedPermissions : []
         };
       }
     } catch (e) {

@@ -359,6 +359,30 @@ struct PromptEditorPage {
             .onChange((value: string) => {
               this.title = value;
             })
+
+          // 自由创作内容输入区
+          Column() {
+            Text('自由创作')
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#1A1A2E')
+              .margin({ bottom: 8 })
+              .alignSelf(ItemAlign.Start)
+            TextArea({ placeholder: '直接输入创作内容，或点击右上角AI进入对话模式生成...', text: this.generatedContent })
+              .width('100%')
+              .height(240)
+              .fontSize(14)
+              .backgroundColor('#F9FAFB')
+              .borderRadius(8)
+              .padding(12)
+              .onChange((value: string) => {
+                this.generatedContent = value;
+              })
+          }
+          .width('90%')
+          .padding(16)
+          .backgroundColor('#FFFFFF')
+          .margin({ top: 8 })
         }
 
         // 提示信息
@@ -606,7 +630,12 @@ struct PromptEditorPage {
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i];
       const value = this.fieldValues[key] || '';
+      // 兼容 {key} 和 {{key}} 两种占位符格式
       const placeholder = '{' + key + '}';
+      const doublePlaceholder = '{{' + key + '}}';
+      while (content.indexOf(doublePlaceholder) !== -1) {
+        content = content.replace(doublePlaceholder, value);
+      }
       while (content.indexOf(placeholder) !== -1) {
         content = content.replace(placeholder, value);
       }
@@ -750,6 +779,11 @@ struct PromptEditorPage {
     } else if (this.template) {
       // 创建新作品
       workManager.createWork(this.template, finalTitle, this.generatedContent);
+      this.previousContent = this.generatedContent;
+      promptAction.showToast({ message: '作品已保存', duration: 2000 });
+    } else {
+      // 自由创作（无模板），归属当前工作台
+      workManager.createFreeWork(finalTitle, this.generatedContent, this.mode);
       this.previousContent = this.generatedContent;
       promptAction.showToast({ message: '作品已保存', duration: 2000 });
     }
@@ -1254,8 +1288,22 @@ struct PromptEditorPage {
                         .fontColor('#10B981')
                         .margin({ top: 8 })
                         .onClick(() => {
-                          this.selectedVersion = -1;
-                          promptAction.showToast({ message: '已恢复到此版本', duration: 2000 });
+                          if (this.work) {
+                            const ok = workManager.restoreVersion(this.work.id, version.id);
+                            if (ok) {
+                              const updated = workManager.getWork(this.work!.id);
+                              if (updated) {
+                                this.work = updated;
+                                this.generatedContent = updated.content;
+                                this.previousContent = updated.content;
+                              }
+                              this.selectedVersion = -1;
+                              this.showVersionHistory = false;
+                              promptAction.showToast({ message: '已恢复到此版本', duration: 2000 });
+                            } else {
+                              promptAction.showToast({ message: '恢复失败，请重试', duration: 2000 });
+                            }
+                          }
                         })
                     }
                   }
