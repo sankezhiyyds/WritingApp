@@ -133,7 +133,9 @@ struct Index {
 
             this.SideNavItem('短幕剧', '🎬', 0)
             this.SideNavItem('中长篇', '📚', 1)
-            this.SideNavItem('设置', '⚙️', 2)
+            this.SideNavItem('书架', '📖', 2)
+            this.SideNavItem('旧档', '📦', 3)
+            this.SideNavItem('设置', '⚙️', 4)
 
             Blank()
             Text('AI')
@@ -155,6 +157,10 @@ struct Index {
               ShortDramaTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColor, bgColor: this.bgColor })
             } else if (this.currentIndex === 1) {
               NovelTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColor, bgColor: this.bgColor })
+            } else if (this.currentIndex === 2) {
+              this.BookshelfView()
+            } else if (this.currentIndex === 3) {
+              this.ArchiveView()
             } else {
               SettingsTab({ isDarkMode: this.isDarkMode, onDarkModeChange: (v) => { this.isDarkMode = v; } })
             }
@@ -197,6 +203,10 @@ struct Index {
                 ShortDramaTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColor, bgColor: this.bgColor })
               } else if (this.currentIndex === 1) {
                 NovelTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColor, bgColor: this.bgColor })
+              } else if (this.currentIndex === 2) {
+                this.BookshelfView()
+              } else if (this.currentIndex === 3) {
+                this.ArchiveView()
               } else {
                 SettingsTab({ isDarkMode: this.isDarkMode, onDarkModeChange: (v) => { this.isDarkMode = v; } })
               }
@@ -555,6 +565,182 @@ struct Index {
   }
 
   @Builder
+  BookshelfView() {
+    Column() {
+      Row() {
+        Text('📖 书架')
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.textColor)
+        Blank()
+        Button('新建')
+          .fontSize(14)
+          .fontColor('#FFFFFF')
+          .backgroundColor('#FF2D55')
+          .borderRadius(20)
+          .height(36)
+          .padding({ left: 16, right: 16 })
+          .onClick(() => {
+            router.pushUrl({ url: 'pages/PromptEditorPage', params: { mode: 'short_drama' } });
+          })
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+      .backgroundColor(this.cardBg)
+
+      Scroll() {
+        Column() {
+          ForEach(workManager.getAllWorks().filter(w => !w.archived), (work: WorkItem) => {
+            Row() {
+              Column() {
+                Text(work.title || '未命名作品')
+                  .fontSize(14)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(this.textColor)
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                Text(work.templateName)
+                  .fontSize(11)
+                  .fontColor('#FF2D55')
+                  .margin({ top: 2 })
+                Text(work.updateTime)
+                  .fontSize(10)
+                  .fontColor('#9CA3AF')
+                  .margin({ top: 2 })
+              }
+              .alignItems(HorizontalAlign.Start)
+              .layoutWeight(1)
+
+              Text('归档')
+                .fontSize(12)
+                .fontColor('#3B82F6')
+                .padding({ left: 8, right: 8 })
+                .onClick(() => {
+                  workManager.archiveWork(work.id);
+                  promptAction.showToast({ message: '已移入旧档区', duration: 2000 });
+                })
+
+              Text('>')
+                .fontSize(16)
+                .fontColor('#D1D5DB')
+            }
+            .width('100%')
+            .height(60)
+            .backgroundColor(this.cardBg)
+            .borderRadius(10)
+            .padding({ left: 12, right: 12 })
+            .margin({ left: 16, right: 16, bottom: 8 })
+            .onClick(() => {
+              router.pushUrl({
+                url: 'pages/PromptEditorPage',
+                params: { workId: work.id, mode: 'short_drama' }
+              });
+            })
+          }, (work: WorkItem) => work.id)
+        }
+        .width('100%')
+        .padding({ top: 12 })
+      }
+      .layoutWeight(1)
+      .width('100%')
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(this.bgColor)
+  }
+
+  @Builder
+  ArchiveView() {
+    Column() {
+      Row() {
+        Text('📦 旧档区')
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.textColor)
+        Blank()
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+      .backgroundColor(this.cardBg)
+
+      Scroll() {
+        Column() {
+          if (workManager.getArchivedWorks().length > 0) {
+            ForEach(workManager.getArchivedWorks(), (work: WorkItem) => {
+              Row() {
+                Column() {
+                  Text(work.title || '未命名作品')
+                    .fontSize(14)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(this.textColor)
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  Text(work.templateName)
+                    .fontSize(11)
+                    .fontColor('#FF2D55')
+                    .margin({ top: 2 })
+                  Text(work.updateTime)
+                    .fontSize(10)
+                    .fontColor('#9CA3AF')
+                    .margin({ top: 2 })
+                }
+                .alignItems(HorizontalAlign.Start)
+                .layoutWeight(1)
+
+                Text('移回书架')
+                  .fontSize(12)
+                  .fontColor('#3B82F6')
+                  .padding({ left: 8, right: 8 })
+                  .onClick(() => {
+                    workManager.unarchiveWork(work.id);
+                    promptAction.showToast({ message: '已移回书架', duration: 2000 });
+                  })
+
+                Text('>')
+                  .fontSize(16)
+                  .fontColor('#D1D5DB')
+              }
+              .width('100%')
+              .height(60)
+              .backgroundColor(this.cardBg)
+              .borderRadius(10)
+              .padding({ left: 12, right: 12 })
+              .margin({ left: 16, right: 16, bottom: 8 })
+              .onClick(() => {
+                router.pushUrl({
+                  url: 'pages/PromptEditorPage',
+                  params: { workId: work.id, mode: 'short_drama' }
+                });
+              })
+            }, (work: WorkItem) => work.id)
+          } else {
+            Column() {
+              Text('📦 暂无归档作品')
+                .fontSize(16)
+                .fontColor('#9CA3AF')
+                .margin({ bottom: 8 })
+              Text('在书架中长按作品可移入旧档区')
+                .fontSize(13)
+                .fontColor('#B0B7C3')
+            }
+            .width('100%')
+            .height(200)
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
+          }
+        }
+        .width('100%')
+        .padding({ top: 12 })
+      }
+      .layoutWeight(1)
+      .width('100%')
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(this.bgColor)
+  }
+
+  @Builder
   FloatingTabBar() {
     Row() {
       // 短幕剧
@@ -587,11 +773,11 @@ struct Index {
         this.currentIndex = 1;
       })
 
-      // 设置
+      // 书架
       Column() {
-        Text('⚙️')
+        Text('📖')
           .fontSize(24)
-        Text('设置')
+        Text('书架')
           .fontSize(11)
           .fontColor(this.currentIndex === 2 ? '#FF2D55' : (this.isDarkMode ? '#9CA3AF' : '#6B7280'))
           .margin({ top: 4 })
@@ -600,6 +786,36 @@ struct Index {
       .justifyContent(FlexAlign.Center)
       .onClick(() => {
         this.currentIndex = 2;
+      })
+
+      // 旧档
+      Column() {
+        Text('📦')
+          .fontSize(24)
+        Text('旧档')
+          .fontSize(11)
+          .fontColor(this.currentIndex === 3 ? '#FF2D55' : (this.isDarkMode ? '#9CA3AF' : '#6B7280'))
+          .margin({ top: 4 })
+      }
+      .layoutWeight(1)
+      .justifyContent(FlexAlign.Center)
+      .onClick(() => {
+        this.currentIndex = 3;
+      })
+
+      // 设置
+      Column() {
+        Text('⚙️')
+          .fontSize(24)
+        Text('设置')
+          .fontSize(11)
+          .fontColor(this.currentIndex === 4 ? '#FF2D55' : (this.isDarkMode ? '#9CA3AF' : '#6B7280'))
+          .margin({ top: 4 })
+      }
+      .layoutWeight(1)
+      .justifyContent(FlexAlign.Center)
+      .onClick(() => {
+        this.currentIndex = 4;
       })
     }
     .width('85%')
@@ -1310,10 +1526,6 @@ struct SettingsTab {
           this.SettingRow('API Key', this.apiKey ? '已配置' : '未配置', true)
         }
         .onClick(() => {
-          if (!this.isLoggedIn) {
-            this.showAccountPanel = true;
-            return;
-          }
           this.apiKeyInput = this.apiKey;
           this.showApiKeyInput = true;
         })
@@ -1322,10 +1534,6 @@ struct SettingsTab {
           this.SettingRow('自定义接口地址', this.customUrl ? '已配置' : '未配置', true)
         }
         .onClick(() => {
-          if (!this.isLoggedIn) {
-            this.showAccountPanel = true;
-            return;
-          }
           this.customUrlInput = this.customUrl;
           this.showCustomUrlInput = true;
         })
@@ -1367,29 +1575,30 @@ struct SettingsTab {
           this.SettingRow('深色模式', this.isDarkMode ? '开' : '关', false)
         }
         .onClick(() => {
-          this.isDarkMode = !this.isDarkMode;
-          settingsManager.settings.isDarkMode = this.isDarkMode;
+          const newDark = !this.isDarkMode;
+          settingsManager.settings.isDarkMode = newDark;
           settingsManager.save();
-          this.onDarkModeChange(this.isDarkMode);
+          this.onDarkModeChange(newDark);
         })
 
         ListItem() {
           this.SettingRow('跟随系统深色模式', this.followSystemDark ? '开' : '关', false)
         }
         .onClick(() => {
-          this.followSystemDark = !this.followSystemDark;
-          settingsManager.settings.followSystemDark = this.followSystemDark;
+          const newFollow = !this.followSystemDark;
+          this.followSystemDark = newFollow;
+          settingsManager.settings.followSystemDark = newFollow;
           settingsManager.save();
-          if (this.followSystemDark) {
+          if (newFollow) {
             const context = getContext(this) as common.UIAbilityContext;
             const config = context.config;
             if (config && config.colorMode !== undefined) {
-              const systemDark = config.colorMode === 1;
-              this.isDarkMode = systemDark;
-              this.onDarkModeChange(systemDark);
+              this.onDarkModeChange(config.colorMode === 1);
             }
+          } else {
+            this.onDarkModeChange(settingsManager.settings.isDarkMode);
           }
-          promptAction.showToast({ message: this.followSystemDark ? '已启用跟随系统深色模式' : '已关闭跟随系统深色模式', duration: 2000 });
+          promptAction.showToast({ message: newFollow ? '已启用跟随系统深色模式' : '已关闭跟随系统深色模式', duration: 2000 });
         })
 
         // ===== 数据管理 =====
@@ -2291,9 +2500,8 @@ struct SettingsTab {
         { text: '30秒', color: '#1A1A2E' } as MenuButton,
         { text: '60秒', color: '#1A1A2E' } as MenuButton,
         { text: '120秒', color: '#1A1A2E' } as MenuButton,
-        { text: '取消', color: '#666666' } as MenuButton,
         { text: '取消', color: '#666666' } as MenuButton
-      ] as [MenuButton, MenuButton, MenuButton, MenuButton, MenuButton, MenuButton]
+      ] as [MenuButton, MenuButton, MenuButton, MenuButton, MenuButton]
     }).then((result: promptAction.ActionMenuSuccessResponse) => {
       if (result.index < 4) {
         const values: number[] = [15, 30, 60, 120];
@@ -2313,9 +2521,8 @@ struct SettingsTab {
         { text: '5分钟', color: '#1A1A2E' } as MenuButton,
         { text: '10分钟', color: '#1A1A2E' } as MenuButton,
         { text: '30分钟', color: '#1A1A2E' } as MenuButton,
-        { text: '取消', color: '#666666' } as MenuButton,
         { text: '取消', color: '#666666' } as MenuButton
-      ] as [MenuButton, MenuButton, MenuButton, MenuButton, MenuButton, MenuButton]
+      ] as [MenuButton, MenuButton, MenuButton, MenuButton, MenuButton]
     }).then((result: promptAction.ActionMenuSuccessResponse) => {
       if (result.index < 4) {
         const values: number[] = [1, 5, 10, 30];
@@ -2335,9 +2542,8 @@ struct SettingsTab {
         { text: '14px', color: '#1A1A2E' } as MenuButton,
         { text: '16px', color: '#1A1A2E' } as MenuButton,
         { text: '18px', color: '#1A1A2E' } as MenuButton,
-        { text: '取消', color: '#666666' } as MenuButton,
         { text: '取消', color: '#666666' } as MenuButton
-      ] as [MenuButton, MenuButton, MenuButton, MenuButton, MenuButton, MenuButton]
+      ] as [MenuButton, MenuButton, MenuButton, MenuButton, MenuButton]
     }).then((result: promptAction.ActionMenuSuccessResponse) => {
       if (result.index < 4) {
         const values: number[] = [12, 14, 16, 18];

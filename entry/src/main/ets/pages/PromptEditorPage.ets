@@ -497,27 +497,49 @@ struct PromptEditorPage {
           .margin({ top: 8 })
         }
 
-        // 生成内容预览
-        if (this.generatedContent.length > 0) {
-          Column() {
-            Text('生成内容预览')
+        // 输出窗口（始终可见）
+        Column() {
+          Row() {
+            Text('输出窗口')
               .fontSize(14)
               .fontWeight(FontWeight.Medium)
               .fontColor('#1A1A2E')
-              .margin({ left: 16, bottom: 8 })
-              .alignSelf(ItemAlign.Start)
 
+            Blank()
+
+            Text(this.generatedContent.length + ' 字')
+              .fontSize(12)
+              .fontColor('#9CA3AF')
+          }
+          .width('100%')
+          .margin({ left: 16, right: 16, bottom: 8 })
+
+          if (this.generatedContent.length > 0) {
             Text(this.getHighlightedContent())
               .fontSize(this.fontSize)
               .fontColor('#374151')
               .lineHeight(20)
               .width('100%')
+          } else {
+            Column() {
+              Text('📝 填写上方模板字段后，点击底部的 AI 生成或小艺按钮')
+                .fontSize(13)
+                .fontColor('#9CA3AF')
+                .margin({ bottom: 4 })
+              Text('生成的内容将自动显示在此处，支持直接编辑与复制')
+                .fontSize(12)
+                .fontColor('#B0B7C3')
+            }
+            .width('100%')
+            .height(100)
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
           }
-          .width('100%')
-          .padding(16)
-          .backgroundColor('#FFFFFF')
-          .margin({ top: 8 })
         }
+        .width('100%')
+        .padding(16)
+        .backgroundColor('#FFFFFF')
+        .margin({ top: 8 })
       }
       .width('100%')
     }
