@@ -13,6 +13,9 @@ export interface WorkItem {
   versions?: WorkVersion[];
   chapters?: Chapter[];
   conversations?: Conversation[];
+  outline?: OutlineNode[];
+  characters?: CharacterInfo[];
+  scenes?: SceneInfo[];
 }
 
 export interface WorkVersion {
@@ -20,6 +23,39 @@ export interface WorkVersion {
   content: string;
   timestamp: string;
   changeNote?: string;
+}
+
+/** 大纲树节点 */
+export interface OutlineNode {
+  id: string;
+  title: string;
+  content: string;
+  parentId: string;       // 空字符串表示根节点
+  level: number;          // 0=卷, 1=章, 2=节
+  order: number;          // 同级排序
+  collapsed: boolean;     // 子节点是否折叠
+}
+
+/** 角色信息 */
+export interface CharacterInfo {
+  id: string;
+  name: string;
+  role: string;           // 主角/配角/反派/路人
+  description: string;
+  personality: string;
+  appearance: string;
+  background: string;
+}
+
+/** 场景信息 */
+export interface SceneInfo {
+  id: string;
+  title: string;
+  location: string;
+  time: string;
+  summary: string;
+  characters: string;     // 涉及角色名，逗号分隔
+  order: number;
 }
 
 export interface Chapter {
@@ -243,6 +279,208 @@ export class WorkManager {
     const pad = (n: number): string => n < 10 ? '0' + n : '' + n;
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
       `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
+  // ==================== 大纲树管理 ====================
+
+  addOutlineNode(workId: string, title: string, parentId: string, level: number): OutlineNode | null {
+    const work = this.works.find(w => w.id === workId);
+    if (!work) return null;
+    if (!work.outline) work.outline = [];
+
+    const siblings = work.outline.filter(n => n.parentId === parentId);
+    const order = siblings.length;
+    const node: OutlineNode = {
+      id: this.generateId(),
+      title: title,
+      content: '',
+      parentId: parentId,
+      level: level,
+      order: order,
+      collapsed: false
+    };
+    work.outline.push(node);
+    work.updateTime = this.formatDate(new Date());
+    this.saveToStorage();
+    return node;
+  }
+
+  updateOutlineNode(workId: string, nodeId: string, title: string, content: string): boolean {
+    const work = this.works.find(w => w.id === workId);
+    if (work && work.outline) {
+      const node = work.outline.find(n => n.id === nodeId);
+      if (node) {
+        node.title = title;
+        node.content = content;
+        work.updateTime = this.formatDate(new Date());
+        this.saveToStorage();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  deleteOutlineNode(workId: string, nodeId: string): boolean {
+    const work = this.works.find(w => w.id === workId);
+    if (work && work.outline) {
+      // 递归删除子节点
+      const toDelete: string[] = [nodeId];
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const node of work.outline) {
+          if (toDelete.includes(node.parentId) && !toDelete.includes(node.id)) {
+            toDelete.push(node.id);
+            changed = true;
+          }
+        }
+      }
+      work.outline = work.outline.filter(n => !toDelete.includes(n.id));
+      work.updateTime = this.formatDate(new Date());
+      this.saveToStorage();
+      return true;
+    }
+    return false;
+  }
+
+  toggleOutlineCollapsed(workId: string, nodeId: string): void {
+    const work = this.works.find(w => w.id === workId);
+    if (work && work.outline) {
+      const node = work.outline.find(n => n.id === nodeId);
+      if (node) {
+        node.collapsed = !node.collapsed;
+        this.saveToStorage();
+      }
+    }
+  }
+
+  moveOutlineNode(workId: string, nodeId: string, direction: 'up' | 'down'): void {
+    const work = this.works.find(w => w.id === workId);
+    if (work && work.outline) {
+      const node = work.outline.find(n => n.id === nodeId);
+      if (!node) return;
+      const siblings = work.outline.filter(n => n.parentId === node.parentId).sort((a, b) => a.order - b.order);
+      const index = siblings.findIndex(n => n.id === nodeId);
+      if (direction === 'up' && index > 0) {
+        const prev = siblings[index - 1];
+        const tempOrder = node.order;
+        node.order = prev.order;
+        prev.order = tempOrder;
+      } else if (direction === 'down' && index < siblings.length - 1) {
+        const next = siblings[index + 1];
+        const tempOrder = node.order;
+        node.order = next.order;
+        next.order = tempOrder;
+      }
+      this.saveToStorage();
+    }
+  }
+
+  // ==================== 角色管理 ====================
+
+  addCharacter(workId: string, name: string, role: string): CharacterInfo | null {
+    const work = this.works.find(w => w.id === workId);
+    if (!work) return null;
+    if (!work.characters) work.characters = [];
+    const char: CharacterInfo = {
+      id: this.generateId(),
+      name: name,
+      role: role,
+      description: '',
+      personality: '',
+      appearance: '',
+      background: ''
+    };
+    work.characters.push(char);
+    work.updateTime = this.formatDate(new Date());
+    this.saveToStorage();
+    return char;
+  }
+
+  updateCharacter(workId: string, charId: string, updates: Partial<CharacterInfo>): boolean {
+    const work = this.works.find(w => w.id === workId);
+    if (work && work.characters) {
+      const char = work.characters.find(c => c.id === charId);
+      if (char) {
+        if (updates.name !== undefined) char.name = updates.name;
+        if (updates.role !== undefined) char.role = updates.role;
+        if (updates.description !== undefined) char.description = updates.description;
+        if (updates.personality !== undefined) char.personality = updates.personality;
+        if (updates.appearance !== undefined) char.appearance = updates.appearance;
+        if (updates.background !== undefined) char.background = updates.background;
+        work.updateTime = this.formatDate(new Date());
+        this.saveToStorage();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  deleteCharacter(workId: string, charId: string): boolean {
+    const work = this.works.find(w => w.id === workId);
+    if (work && work.characters) {
+      const index = work.characters.findIndex(c => c.id === charId);
+      if (index !== -1) {
+        work.characters.splice(index, 1);
+        work.updateTime = this.formatDate(new Date());
+        this.saveToStorage();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // ==================== 场景管理 ====================
+
+  addScene(workId: string, title: string): SceneInfo | null {
+    const work = this.works.find(w => w.id === workId);
+    if (!work) return null;
+    if (!work.scenes) work.scenes = [];
+    const scene: SceneInfo = {
+      id: this.generateId(),
+      title: title,
+      location: '',
+      time: '',
+      summary: '',
+      characters: '',
+      order: work.scenes.length
+    };
+    work.scenes.push(scene);
+    work.updateTime = this.formatDate(new Date());
+    this.saveToStorage();
+    return scene;
+  }
+
+  updateScene(workId: string, sceneId: string, updates: Partial<SceneInfo>): boolean {
+    const work = this.works.find(w => w.id === workId);
+    if (work && work.scenes) {
+      const scene = work.scenes.find(s => s.id === sceneId);
+      if (scene) {
+        if (updates.title !== undefined) scene.title = updates.title;
+        if (updates.location !== undefined) scene.location = updates.location;
+        if (updates.time !== undefined) scene.time = updates.time;
+        if (updates.summary !== undefined) scene.summary = updates.summary;
+        if (updates.characters !== undefined) scene.characters = updates.characters;
+        work.updateTime = this.formatDate(new Date());
+        this.saveToStorage();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  deleteScene(workId: string, sceneId: string): boolean {
+    const work = this.works.find(w => w.id === workId);
+    if (work && work.scenes) {
+      const index = work.scenes.findIndex(s => s.id === sceneId);
+      if (index !== -1) {
+        work.scenes.splice(index, 1);
+        work.updateTime = this.formatDate(new Date());
+        this.saveToStorage();
+        return true;
+      }
+    }
+    return false;
   }
 }
 

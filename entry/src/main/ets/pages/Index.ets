@@ -1,5 +1,6 @@
 import { TemplateField, TemplateInfo, templateList } from '../model/TemplateModel';
 import { WorkItem, workManager } from '../model/WorkManager';
+import { OutlineManagementPanel } from '../components/OutlineManagementPanel';
 import { settingsManager } from '../model/SettingsManager';
 import { responsiveManager, BreakpointType } from '../model/ResponsiveManager';
 import router from '@ohos.router';
@@ -820,6 +821,15 @@ struct NovelTab {
   @Prop bgColor: string;
   @State templates: TemplateInfo[] = [];
   @State works: WorkItem[] = [];
+  @State showOutlinePanel: boolean = false;
+  @State selectedWorkId: string = '';
+  @State selectedWorkTitle: string = '';
+
+  openOutlinePanel(work: WorkItem) {
+    this.selectedWorkId = work.id;
+    this.selectedWorkTitle = work.title;
+    this.showOutlinePanel = true;
+  }
 
   get templateColumns(): string {
     const cols = responsiveManager.getTemplateColumns();
@@ -836,6 +846,7 @@ struct NovelTab {
   }
 
   build() {
+    Stack() {
     Column() {
       Row() {
         Text('中长篇工作台')
@@ -905,6 +916,20 @@ struct NovelTab {
     .width('100%')
     .height('100%')
     .backgroundColor(this.bgColor)
+
+    if (this.showOutlinePanel) {
+      OutlineManagementPanel({
+        workId: this.selectedWorkId,
+        workTitle: this.selectedWorkTitle,
+        cardBg: this.cardBg,
+        bgColor: this.bgColor,
+        textColor: this.textColor,
+        onClose: () => { this.showOutlinePanel = false; }
+      })
+    }
+    }
+    .width('100%')
+    .height('100%')
   }
 
   @Builder
@@ -974,6 +999,13 @@ struct NovelTab {
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
+
+      Text('📋')
+        .fontSize(18)
+        .margin({ right: 8 })
+        .onClick(() => {
+          this.openOutlinePanel(work);
+        })
 
       Text('>')
         .fontSize(16)

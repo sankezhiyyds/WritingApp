@@ -1,6 +1,8 @@
 import preferences from '@ohos.data.preferences';
 import common from '@ohos.app.ability.common';
 
+export type ThemeMode = 'system' | 'light' | 'dark';
+
 export interface SettingsData {
   apiKey: string;
   selectedModel: string;
@@ -8,11 +10,14 @@ export interface SettingsData {
   customPrompt: string;
   isFirstLaunch: boolean;
   hasAgreedToTerms: boolean;
-  followSystemDark: boolean;
-  isDarkMode: boolean;
+  themeMode: ThemeMode;
   autoSaveInterval: number;
   fontSize: number;
   aiTimeout: number;
+  isLoggedIn: boolean;
+  userName: string;
+  followSystemDark: boolean;
+  isDarkMode: boolean;
 }
 
 export class SettingsManager {
@@ -25,11 +30,14 @@ export class SettingsManager {
     customPrompt: '',
     isFirstLaunch: true,
     hasAgreedToTerms: false,
-    followSystemDark: false,
-    isDarkMode: false,
+    themeMode: 'system',
     autoSaveInterval: 5,
     fontSize: 14,
-    aiTimeout: 30
+    aiTimeout: 30,
+    isLoggedIn: false,
+    userName: '',
+    followSystemDark: true,
+    isDarkMode: false
   };
   settings: SettingsData = this.defaultSettings;
 
@@ -46,11 +54,14 @@ export class SettingsManager {
           customPrompt: parsed.customPrompt || '',
           isFirstLaunch: parsed.isFirstLaunch !== undefined ? parsed.isFirstLaunch : true,
           hasAgreedToTerms: parsed.hasAgreedToTerms || false,
-          followSystemDark: parsed.followSystemDark || false,
-          isDarkMode: parsed.isDarkMode || false,
+          themeMode: (parsed.themeMode || 'system') as ThemeMode,
           autoSaveInterval: parsed.autoSaveInterval || 5,
           fontSize: parsed.fontSize || 14,
-          aiTimeout: parsed.aiTimeout || 30
+          aiTimeout: parsed.aiTimeout || 30,
+          isLoggedIn: parsed.isLoggedIn || false,
+          userName: parsed.userName || '',
+          followSystemDark: parsed.followSystemDark !== undefined ? parsed.followSystemDark : true,
+          isDarkMode: parsed.isDarkMode || false
         };
       }
     } catch (e) {

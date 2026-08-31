@@ -5,6 +5,7 @@ import { aiService } from '../model/AIService';
 import { responsiveManager, BreakpointType } from '../model/ResponsiveManager';
 import router from '@ohos.router';
 import promptAction from '@ohos.promptAction';
+import pasteboard from '@ohos.pasteboard';
 
 interface TextRange {
   start: number;
@@ -207,6 +208,19 @@ struct PromptEditorPage {
                   this.showVersionHistory = true;
                 })
             }
+
+            Button('导出')
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#10B981')
+              .backgroundColor('#FFFFFF')
+              .borderRadius(20)
+              .height(36)
+              .padding({ left: 16, right: 16 })
+              .margin({ right: 8 })
+              .onClick(() => {
+                this.exportWork();
+              })
           }
 
           Button('保存')
@@ -813,6 +827,45 @@ struct PromptEditorPage {
     promptAction.showToast({ message: '最终方案已保存', duration: 2000 });
   }
 
+  exportWork() {
+    if (!this.work) return;
+
+    // 汇总所有内容
+    let exportText = `《${this.work.title}》\n`;
+    exportText += `模板：${this.work.templateName}\n`;
+    exportText += `导出时间：${new Date().toLocaleString()}\n`;
+    exportText += `${'='.repeat(40)}\n\n`;
+
+    // 添加生成内容
+    if (this.generatedContent) {
+      exportText += `【生成内容】\n${this.generatedContent}\n\n`;
+    }
+
+    // 添加所有章节
+    if (this.work.chapters && this.work.chapters.length > 0) {
+      exportText += `${'='.repeat(40)}\n【章节内容】\n\n`;
+      for (const chapter of this.work.chapters) {
+        exportText += `--- ${chapter.category} | ${chapter.title} ---\n`;
+        exportText += `${chapter.content}\n\n`;
+      }
+    }
+
+    // 复制到剪贴板
+    try {
+      const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, exportText);
+      const systemPasteboard = pasteboard.getSystemPasteboard();
+      systemPasteboard.setData(pasteData);
+      promptAction.showToast({ message: `已导出 ${exportText.length} 字到剪贴板`, duration: 3000 });
+    } catch (e) {
+      // 降级方案：显示内容供手动复制
+      promptAction.showDialog({
+        title: '导出内容',
+        message: `共 ${exportText.length} 字，复制到剪贴板失败，请手动保存`,
+        buttons: [{ text: '确定', color: '#FF6B35' }]
+      });
+    }
+  }
+
   @Builder
   ChapterListView() {
     Column() {
@@ -844,7 +897,7 @@ struct PromptEditorPage {
       // 分类标签
       Scroll() {
         Row() {
-          ForEach(['全部', '大纲', '人设', '思维链路', '最终方案'], (category: string) => {
+          ForEach(['全部', '大纲', '人设', '场景', '章节', '时间线', '世界观', '思维链路', '最终方案'], (category: string) => {
             Button(category)
               .fontSize(13)
               .fontColor('#6B7280')
@@ -961,7 +1014,7 @@ struct PromptEditorPage {
           .fontColor('#6B7280')
           .margin({ top: 16, bottom: 8 })
         Row() {
-          ForEach(['大纲', '人设', '思维链路', '最终方案'], (category: string) => {
+          ForEach(['大纲', '人设', '场景', '章节', '时间线', '世界观', '思维链路', '最终方案'], (category: string) => {
             Button(category)
               .fontSize(13)
               .fontColor(this.newChapterCategory === category ? '#FFFFFF' : '#6B7280')
