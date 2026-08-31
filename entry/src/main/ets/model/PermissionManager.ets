@@ -1,4 +1,4 @@
-import abilityAccessCtrl, { PermissionRequestResult } from '@ohos.abilityAccessCtrl';
+import abilityAccessCtrl, { PermissionRequestResult, Permissions } from '@ohos.abilityAccessCtrl';
 import bundleManager from '@ohos.bundle.bundleManager';
 import common from '@ohos.app.ability.common';
 import { settingsManager } from './SettingsManager';
@@ -55,7 +55,7 @@ export class PermissionManager {
       const atManager = abilityAccessCtrl.createAtManager();
       const bundleInfo = await bundleManager.getBundleInfoForSelf(bundleManager.BundleFlag.GET_BUNDLE_INFO_WITH_APPLICATION);
       const tokenId = bundleInfo.appInfo.accessTokenId;
-      const result = await atManager.checkAccessToken(tokenId, permission);
+      const result = await atManager.checkAccessToken(tokenId, permission as Permissions);
       return result === abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED;
     } catch (e) {
       console.error('[PermissionManager] 检查权限失败: ' + JSON.stringify(e));
@@ -72,7 +72,7 @@ export class PermissionManager {
     }
     try {
       const atManager = abilityAccessCtrl.createAtManager();
-      const response: PermissionRequestResult = await atManager.requestPermissionsFromUser(this.context, permissions);
+      const response = await atManager.requestPermissionsFromUser(this.context, permissions as Permissions[]);
       for (let i = 0; i < permissions.length; i++) {
         if (response.authResults[i] === 0) {
           result.granted.push(permissions[i]);
