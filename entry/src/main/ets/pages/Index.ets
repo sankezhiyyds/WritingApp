@@ -165,7 +165,7 @@ struct Index {
             } else if (this.currentIndex === 3) {
               this.ArchiveView()
             } else {
-              SettingsTab({ isDarkMode: this.isDarkMode, onDarkModeChange: (v) => { this.isDarkMode = v; } })
+              SettingsTab({ isDarkMode: $isDarkMode })
             }
           }
           .layoutWeight(1)
@@ -211,7 +211,7 @@ struct Index {
               } else if (this.currentIndex === 3) {
                 this.ArchiveView()
               } else {
-                SettingsTab({ isDarkMode: this.isDarkMode, onDarkModeChange: (v) => { this.isDarkMode = v; } })
+                SettingsTab({ isDarkMode: $isDarkMode })
               }
             }
             .width('100%')
@@ -1124,7 +1124,7 @@ struct ShortDramaTab {
   }
 
   confirmDelete(work: WorkItem) {
-    promptAction.showDialog({
+    this.getUIContext().getPromptAction().showDialog({
       title: '删除作品',
       message: `确定删除《${work.title || '未命名作品'}》吗？此操作不可恢复`,
       buttons: [
@@ -1406,7 +1406,7 @@ struct NovelTab {
   }
 
   confirmDelete(work: WorkItem) {
-    promptAction.showDialog({
+    this.getUIContext().getPromptAction().showDialog({
       title: '删除作品',
       message: `确定删除《${work.title || '未命名作品'}》吗？此操作不可恢复`,
       buttons: [
@@ -1425,8 +1425,7 @@ struct NovelTab {
 // ========== 设置Tab ==========
 @Component
 struct SettingsTab {
-  @Prop isDarkMode: boolean;
-  onDarkModeChange: (value: boolean) => void = (value: boolean) => {};
+  @Link isDarkMode: boolean;
   @State apiKey: string = '';
   @State selectedModel: string = 'deepseek';
   @State showApiKeyInput: boolean = false;
@@ -1535,33 +1534,10 @@ struct SettingsTab {
         })
 
         ListItem() {
-          this.SettingRow('深色模式', this.isDarkMode ? '开' : '关', false)
+          this.SettingRow('深色模式', this.followSystemDark ? '跟随系统' : (this.isDarkMode ? '开' : '关'), true)
         }
         .onClick(() => {
-          const newDark = !this.isDarkMode;
-          settingsManager.settings.isDarkMode = newDark;
-          settingsManager.save();
-          this.onDarkModeChange(newDark);
-        })
-
-        ListItem() {
-          this.SettingRow('跟随系统深色模式', this.followSystemDark ? '开' : '关', false)
-        }
-        .onClick(() => {
-          const newFollow = !this.followSystemDark;
-          this.followSystemDark = newFollow;
-          settingsManager.settings.followSystemDark = newFollow;
-          settingsManager.save();
-          if (newFollow) {
-            const context = getContext(this) as common.UIAbilityContext;
-            const config = context.config;
-            if (config && config.colorMode !== undefined) {
-              this.onDarkModeChange(config.colorMode === 1);
-            }
-          } else {
-            this.onDarkModeChange(settingsManager.settings.isDarkMode);
-          }
-          promptAction.showToast({ message: newFollow ? '已启用跟随系统深色模式' : '已关闭跟随系统深色模式', duration: 2000 });
+          this.selectDarkMode();
         })
 
         // ===== 数据管理 =====
@@ -1906,18 +1882,6 @@ struct SettingsTab {
                   this.showAccountPanel = false;
                 })
             }
-
-            Button('取消')
-              .fontSize(14)
-              .fontColor('#6B7280')
-              .backgroundColor('#F3F4F6')
-              .borderRadius(20)
-              .height(40)
-              .width('100%')
-              .margin({ top: 12 })
-              .onClick(() => {
-                this.showAccountPanel = false;
-              })
           }
           .width('100%')
           .padding(20)
@@ -2455,8 +2419,50 @@ struct SettingsTab {
     });
   }
 
+  selectDarkMode() {
+    this.getUIContext().getPromptAction().showActionMenu({
+      title: '深色模式',
+      buttons: [
+        { text: '关', color: '#1A1A2E' } as MenuButton,
+        { text: '开', color: '#1A1A2E' } as MenuButton,
+        { text: '跟随系统', color: '#1A1A2E' } as MenuButton,
+        { text: '取消', color: '#666666' } as MenuButton
+      ] as [MenuButton, MenuButton, MenuButton, MenuButton]
+    }).then((result: promptAction.ActionMenuSuccessResponse) => {
+      if (result.index === 0) {
+        // 关
+        this.followSystemDark = false;
+        this.isDarkMode = false;
+        settingsManager.settings.followSystemDark = false;
+        settingsManager.settings.isDarkMode = false;
+        settingsManager.save();
+        promptAction.showToast({ message: '已关闭深色模式', duration: 2000 });
+      } else if (result.index === 1) {
+        // 开
+        this.followSystemDark = false;
+        this.isDarkMode = true;
+        settingsManager.settings.followSystemDark = false;
+        settingsManager.settings.isDarkMode = true;
+        settingsManager.save();
+        promptAction.showToast({ message: '已开启深色模式', duration: 2000 });
+      } else if (result.index === 2) {
+        // 跟随系统
+        this.followSystemDark = true;
+        settingsManager.settings.followSystemDark = true;
+        const context = getContext(this) as common.UIAbilityContext;
+        const config = context.config;
+        if (config && config.colorMode !== undefined) {
+          this.isDarkMode = config.colorMode === 1;
+          settingsManager.settings.isDarkMode = config.colorMode === 1;
+        }
+        settingsManager.save();
+        promptAction.showToast({ message: '已跟随系统深色模式', duration: 2000 });
+      }
+    });
+  }
+
   editTimeout() {
-    promptAction.showActionMenu({
+    this.getUIContext().getPromptAction().showActionMenu({
       title: '选择AI超时时间',
       buttons: [
         { text: '15秒', color: '#1A1A2E' } as MenuButton,
@@ -2477,7 +2483,7 @@ struct SettingsTab {
   }
 
   editAutoSaveInterval() {
-    promptAction.showActionMenu({
+    this.getUIContext().getPromptAction().showActionMenu({
       title: '选择自动保存间隔',
       buttons: [
         { text: '1分钟', color: '#1A1A2E' } as MenuButton,
@@ -2498,7 +2504,7 @@ struct SettingsTab {
   }
 
   editFontSize() {
-    promptAction.showActionMenu({
+    this.getUIContext().getPromptAction().showActionMenu({
       title: '选择字体大小',
       buttons: [
         { text: '12px', color: '#1A1A2E' } as MenuButton,
@@ -2586,7 +2592,6 @@ struct SettingsTab {
     this.selectedModel = settingsManager.settings.selectedModel;
     this.customUrl = settingsManager.settings.customUrl;
     this.followSystemDark = settingsManager.settings.followSystemDark;
-    this.isDarkMode = settingsManager.settings.isDarkMode;
     this.autoSaveInterval = settingsManager.settings.autoSaveInterval || 5;
     this.fontSize = settingsManager.settings.fontSize || 14;
     this.aiTimeout = settingsManager.settings.aiTimeout || 30;

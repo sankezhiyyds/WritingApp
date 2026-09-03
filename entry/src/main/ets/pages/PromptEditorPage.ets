@@ -1022,7 +1022,7 @@ struct PromptEditorPage {
       promptAction.showToast({ message: `已导出 ${exportText.length} 字到剪贴板`, duration: 3000 });
     } catch (e) {
       // 降级方案：显示内容供手动复制
-      promptAction.showDialog({
+      this.getUIContext().getPromptAction().showDialog({
         title: '导出内容',
         message: `共 ${exportText.length} 字，复制到剪贴板失败，请手动保存`,
         buttons: [{ text: '确定', color: '#FF6B35' }]
