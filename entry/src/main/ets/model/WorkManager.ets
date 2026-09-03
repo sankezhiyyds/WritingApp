@@ -18,6 +18,8 @@ export interface WorkItem {
   outline?: OutlineNode[];
   characters?: CharacterInfo[];
   scenes?: SceneInfo[];
+  coverColor?: string; // 封面颜色
+  bgTheme?: string; // 背景主题：default | warm | cool | parchment
 }
 
 export interface WorkVersion {

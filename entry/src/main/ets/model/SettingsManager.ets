@@ -38,6 +38,7 @@ export class SettingsManager {
     grantedPermissions: []
   };
   settings: SettingsData = this.defaultSettings;
+  initPromise: Promise<void> | null = null;
 
   async init(context: common.UIAbilityContext): Promise<void> {
     try {

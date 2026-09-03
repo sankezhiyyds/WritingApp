@@ -43,6 +43,8 @@ struct PromptEditorPage {
   @State editingChapterContent: string = '';
   @State selectedCategory: string = '全部';
   @State autoSaveTimer: number = 0;
+  @State isDarkMode: boolean = false;
+  @State bgTheme: string = 'default';
 
   get isWide(): boolean {
     return this.currentBreakpoint === 'md' || this.currentBreakpoint === 'lg';
@@ -61,7 +63,41 @@ struct PromptEditorPage {
     return settingsManager.settings.fontSize || 14;
   }
 
+  get bgColor(): string {
+    return this.isDarkMode ? '#1A1A2E' : '#F5F5F5';
+  }
+
+  get cardBg(): string {
+    return this.isDarkMode ? '#2D2D44' : '#FFFFFF';
+  }
+
+  get textColor(): string {
+    return this.isDarkMode ? '#E0E0E0' : '#1A1A2E';
+  }
+
+  get subTextColor(): string {
+    return this.isDarkMode ? '#9CA3AF' : '#6B7280';
+  }
+
+  get themeBgColor(): string {
+    if (this.isDarkMode) {
+      switch (this.bgTheme) {
+        case 'warm': return '#2D2418';
+        case 'cool': return '#1A2D3D';
+        case 'parchment': return '#2D2418';
+        default: return '#1A1A2E';
+      }
+    }
+    switch (this.bgTheme) {
+      case 'warm': return '#FFF8F0';
+      case 'cool': return '#F0F8FF';
+      case 'parchment': return '#F5E6D3';
+      default: return '#F5F5F5';
+    }
+  }
+
   aboutToAppear() {
+    this.isDarkMode = settingsManager.settings.isDarkMode;
     const params = router.getParams() as Record<string, string>;
     if (params) {
       this.mode = params['mode'] || 'short_drama';
@@ -90,6 +126,7 @@ struct PromptEditorPage {
           this.generatedContent = this.work.content;
           this.previousContent = this.work.content;
           this.template = templateList.find(t => t.id === this.work!.templateId) || null;
+          this.bgTheme = this.work.bgTheme || 'default';
         }
       }
     }
@@ -113,6 +150,13 @@ struct PromptEditorPage {
 
   autoSave() {
     if (this.work && this.generatedContent.trim().length > 0) {
+      workManager.updateWork(this.work.id, this.generatedContent, false);
+    }
+  }
+
+  saveBgTheme() {
+    if (this.work) {
+      this.work.bgTheme = this.bgTheme;
       workManager.updateWork(this.work.id, this.generatedContent, false);
     }
   }
@@ -142,7 +186,7 @@ struct PromptEditorPage {
         Text(this.getTitle())
           .fontSize(18)
           .fontWeight(FontWeight.Bold)
-          .fontColor('#1A1A2E')
+          .fontColor(this.textColor)
           .layoutWeight(1)
           .textAlign(TextAlign.Center)
           .maxLines(1)
@@ -159,13 +203,39 @@ struct PromptEditorPage {
               this.isAiMode = !this.isAiMode;
             })
             .padding({ right: 16 })
+
+          // 背景主题切换
+          Text('🎨')
+            .fontSize(18)
+            .padding({ right: 12 })
+            .onClick(() => {
+              const themes = ['default', 'warm', 'cool', 'parchment'];
+              const idx = themes.indexOf(this.bgTheme);
+              this.bgTheme = themes[(idx + 1) % themes.length];
+              this.saveBgTheme();
+            })
+
+          // 封面颜色切换
+          if (this.work) {
+            Text('📕')
+              .fontSize(18)
+              .padding({ right: 16 })
+              .onClick(() => {
+                const colors = ['#FF2D55', '#10B981', '#007DFF', '#F59E0B', '#8B5CF6', '#EF4444'];
+                const current = this.work!.coverColor || '#FF2D55';
+                const idx = colors.indexOf(current);
+                this.work!.coverColor = colors[(idx + 1) % colors.length];
+                workManager.updateWork(this.work!.id, this.generatedContent, false);
+                promptAction.showToast({ message: '封面已更换', duration: 1500 });
+              })
+          }
         } else {
           Blank().width(48)
         }
       }
       .width('100%')
       .height(56)
-      .backgroundColor('#FFFFFF')
+      .backgroundColor(this.cardBg)
 
       if (this.mode === 'prompt_edit') {
         this.PromptEditView()
@@ -200,7 +270,7 @@ struct PromptEditorPage {
         Row() {
           Text(this.generatedContent.length + ' 字')
             .fontSize(12)
-            .fontColor('#9CA3AF')
+            .fontColor(this.subTextColor)
 
           Blank()
 
@@ -210,7 +280,7 @@ struct PromptEditorPage {
                 .fontSize(14)
                 .fontWeight(FontWeight.Medium)
                 .fontColor('#FF2D55')
-                .backgroundColor('#FFFFFF')
+                .backgroundColor(this.cardBg)
                 .borderRadius(20)
                 .height(36)
                 .padding({ left: 16, right: 16 })
@@ -225,7 +295,7 @@ struct PromptEditorPage {
                 .fontSize(14)
                 .fontWeight(FontWeight.Medium)
                 .fontColor('#3B82F6')
-                .backgroundColor('#FFFFFF')
+                .backgroundColor(this.cardBg)
                 .borderRadius(20)
                 .height(36)
                 .padding({ left: 16, right: 16 })
@@ -239,7 +309,7 @@ struct PromptEditorPage {
               .fontSize(14)
               .fontWeight(FontWeight.Medium)
               .fontColor('#10B981')
-              .backgroundColor('#FFFFFF')
+              .backgroundColor(this.cardBg)
               .borderRadius(20)
               .height(36)
               .padding({ left: 16, right: 16 })
@@ -286,13 +356,13 @@ struct PromptEditorPage {
         }
         .width('100%')
         .height(56)
-        .backgroundColor('#FFFFFF')
+        .backgroundColor(this.cardBg)
         .padding({ left: 16, right: 16 })
       }
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#F5F6FA')
+    .backgroundColor(this.themeBgColor)
     .constraintSize({ maxWidth: this.contentMaxWidth })
   }
 
@@ -302,20 +372,20 @@ struct PromptEditorPage {
       Text('自定义AI提示词')
         .fontSize(16)
         .fontWeight(FontWeight.Medium)
-        .fontColor('#1A1A2E')
+        .fontColor(this.textColor)
         .margin({ left: 16, top: 16, bottom: 8 })
         .alignSelf(ItemAlign.Start)
 
       Text('这个提示词将作为AI的系统指令，指导AI的写作风格和行为')
         .fontSize(13)
-        .fontColor('#9CA3AF')
+        .fontColor(this.subTextColor)
         .margin({ left: 16, right: 16, bottom: 12 })
 
       TextArea({ placeholder: '请输入自定义提示词...', text: this.promptText })
         .width('90%')
         .layoutWeight(1)
         .fontSize(14)
-        .backgroundColor('#FFFFFF')
+        .backgroundColor(this.cardBg)
         .borderRadius(8)
         .padding(12)
         .onChange((value: string) => {
@@ -353,7 +423,7 @@ struct PromptEditorPage {
             .height(48)
             .fontSize(16)
             .fontWeight(FontWeight.Medium)
-            .backgroundColor('#FFFFFF')
+            .backgroundColor(this.cardBg)
             .padding({ left: 16, right: 16 })
             .margin({ top: 12 })
             .onChange((value: string) => {
@@ -365,14 +435,14 @@ struct PromptEditorPage {
             Text('自由创作')
               .fontSize(14)
               .fontWeight(FontWeight.Medium)
-              .fontColor('#1A1A2E')
+              .fontColor(this.textColor)
               .margin({ bottom: 8 })
               .alignSelf(ItemAlign.Start)
             TextArea({ placeholder: '直接输入创作内容，或点击右上角AI进入对话模式生成...', text: this.generatedContent })
               .width('100%')
               .height(240)
               .fontSize(14)
-              .backgroundColor('#F9FAFB')
+              .backgroundColor(this.bgColor)
               .borderRadius(8)
               .padding(12)
               .onChange((value: string) => {
@@ -381,7 +451,7 @@ struct PromptEditorPage {
           }
           .width('90%')
           .padding(16)
-          .backgroundColor('#FFFFFF')
+          .backgroundColor(this.cardBg)
           .margin({ top: 8 })
         }
 
@@ -403,7 +473,7 @@ struct PromptEditorPage {
                   .margin({ right: 8 })
                 Text(tip)
                   .fontSize(13)
-                  .fontColor('#6B7280')
+                  .fontColor(this.subTextColor)
                   .layoutWeight(1)
               }
               .width('100%')
@@ -412,7 +482,7 @@ struct PromptEditorPage {
           }
           .width('100%')
           .padding(16)
-          .backgroundColor('#FFFFFF')
+          .backgroundColor(this.cardBg)
           .margin({ top: 8 })
         }
 
@@ -424,7 +494,7 @@ struct PromptEditorPage {
                 Text(field.label + (field.required ? ' *' : ''))
                   .fontSize(14)
                   .fontWeight(FontWeight.Medium)
-                  .fontColor('#1A1A2E')
+                  .fontColor(this.textColor)
                   .margin({ bottom: 8 })
 
                 if (field.type === 'textarea') {
@@ -434,7 +504,7 @@ struct PromptEditorPage {
                     .width('100%')
                     .height(100)
                     .fontSize(14)
-                    .backgroundColor('#F9FAFB')
+                    .backgroundColor(this.bgColor)
                     .borderRadius(8)
                     .padding(12)
                     .onChange((value: string) => {
@@ -446,7 +516,7 @@ struct PromptEditorPage {
                     ForEach(field.options || [], (option: string) => {
                       Button(option)
                         .fontSize(12)
-                        .fontColor(this.fieldValues[field.key] === option ? '#FFFFFF' : '#6B7280')
+                        .fontColor(this.fieldValues[field.key] === option ? '#FFFFFF' : this.subTextColor)
                         .backgroundColor(this.fieldValues[field.key] === option ? '#FF2D55' : '#E5E7EB')
                         .borderRadius(16)
                         .height(32)
@@ -465,7 +535,7 @@ struct PromptEditorPage {
                     .width('100%')
                     .height(44)
                     .fontSize(14)
-                    .backgroundColor('#F9FAFB')
+                    .backgroundColor(this.bgColor)
                     .borderRadius(8)
                     .padding({ left: 12, right: 12 })
                     .onChange((value: string) => {
@@ -477,7 +547,7 @@ struct PromptEditorPage {
                     .width('100%')
                     .height(44)
                     .fontSize(14)
-                    .backgroundColor('#F9FAFB')
+                    .backgroundColor(this.bgColor)
                     .borderRadius(8)
                     .padding({ left: 12, right: 12 })
                     .onChange((value: string) => {
@@ -493,7 +563,7 @@ struct PromptEditorPage {
             }, (field: TemplateField) => field.key)
           }
           .width('100%')
-          .backgroundColor('#FFFFFF')
+          .backgroundColor(this.cardBg)
           .margin({ top: 8 })
         }
 
@@ -503,13 +573,13 @@ struct PromptEditorPage {
             Text('输出窗口')
               .fontSize(14)
               .fontWeight(FontWeight.Medium)
-              .fontColor('#1A1A2E')
+              .fontColor(this.textColor)
 
             Blank()
 
             Text(this.generatedContent.length + ' 字')
               .fontSize(12)
-              .fontColor('#9CA3AF')
+              .fontColor(this.subTextColor)
           }
           .width('100%')
           .margin({ left: 16, right: 16, bottom: 8 })
@@ -524,7 +594,7 @@ struct PromptEditorPage {
             Column() {
               Text('📝 填写上方模板字段后，点击底部的 AI 生成或小艺按钮')
                 .fontSize(13)
-                .fontColor('#9CA3AF')
+                .fontColor(this.subTextColor)
                 .margin({ bottom: 4 })
               Text('生成的内容将自动显示在此处，支持直接编辑与复制')
                 .fontSize(12)
@@ -538,13 +608,13 @@ struct PromptEditorPage {
         }
         .width('100%')
         .padding(16)
-        .backgroundColor('#FFFFFF')
+        .backgroundColor(this.cardBg)
         .margin({ top: 8 })
       }
       .width('100%')
     }
     .layoutWeight(1)
-    .backgroundColor('#F5F6FA')
+    .backgroundColor(this.bgColor)
   }
 
   @Builder
@@ -557,16 +627,16 @@ struct PromptEditorPage {
             Column() {
               Text(index % 2 === 0 ? '用户' : 'AI')
                 .fontSize(12)
-                .fontColor('#9CA3AF')
+                .fontColor(this.subTextColor)
                 .margin({ bottom: 4 })
               Text(msg)
                 .fontSize(14)
-                .fontColor('#1A1A2E')
+                .fontColor(this.textColor)
                 .lineHeight(20)
             }
             .width('90%')
             .padding(12)
-            .backgroundColor(index % 2 === 0 ? '#E5E7EB' : '#FFFFFF')
+            .backgroundColor(index % 2 === 0 ? '#E5E7EB' : this.cardBg)
             .borderRadius(8)
             .alignSelf(index % 2 === 0 ? ItemAlign.End : ItemAlign.Start)
           }
@@ -606,13 +676,14 @@ struct PromptEditorPage {
 
       // 输入框
       Row() {
-        TextInput({ placeholder: '输入消息...', text: this.currentPrompt })
+        TextArea({ placeholder: '输入消息...', text: this.currentPrompt })
           .layoutWeight(1)
+          .maxLines(4)
           .height(40)
           .fontSize(14)
-          .backgroundColor('#F9FAFB')
+          .backgroundColor(this.bgColor)
           .borderRadius(20)
-          .padding({ left: 16, right: 16 })
+          .padding({ left: 16, right: 16, top: 8, bottom: 8 })
           .onChange((value: string) => {
             this.currentPrompt = value;
           })
@@ -630,11 +701,12 @@ struct PromptEditorPage {
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-      .backgroundColor('#FFFFFF')
+      .backgroundColor(this.cardBg)
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#F5F6FA')
+    .backgroundColor(this.themeBgColor)
+    .expandSafeArea([SafeAreaType.KEYBOARD], [SafeAreaEdge.BOTTOM])
   }
 
   getTitle(): string {
@@ -966,7 +1038,7 @@ struct PromptEditorPage {
         Text('章节管理')
           .fontSize(18)
           .fontWeight(FontWeight.Bold)
-          .fontColor('#1A1A2E')
+          .fontColor(this.textColor)
         Blank()
         Text('+')
           .fontSize(24)
@@ -977,14 +1049,14 @@ struct PromptEditorPage {
           })
         Text('×')
           .fontSize(24)
-          .fontColor('#9CA3AF')
+          .fontColor(this.subTextColor)
           .onClick(() => {
             this.showChapterList = false;
           })
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-      .backgroundColor('#FFFFFF')
+      .backgroundColor(this.cardBg)
 
       // 分类标签
       Scroll() {
@@ -992,7 +1064,7 @@ struct PromptEditorPage {
           ForEach(['全部', '大纲', '人设', '场景', '章节', '时间线', '世界观', '思维链路', '最终方案'], (category: string) => {
             Button(category)
               .fontSize(13)
-              .fontColor(this.selectedCategory === category ? '#FFFFFF' : '#6B7280')
+              .fontColor(this.selectedCategory === category ? '#FFFFFF' : this.subTextColor)
               .backgroundColor(this.selectedCategory === category ? '#FF2D55' : '#F3F4F6')
               .borderRadius(16)
               .height(32)
@@ -1007,7 +1079,7 @@ struct PromptEditorPage {
       }
       .width('100%')
       .height(48)
-      .backgroundColor('#FFFFFF')
+      .backgroundColor(this.cardBg)
 
       // 章节列表
       List() {
@@ -1020,7 +1092,7 @@ struct PromptEditorPage {
                     Text(chapter.title)
                       .fontSize(15)
                       .fontWeight(FontWeight.Medium)
-                      .fontColor('#1A1A2E')
+                      .fontColor(this.textColor)
                       .maxLines(1)
                       .textOverflow({ overflow: TextOverflow.Ellipsis })
                     Text(chapter.category)
@@ -1029,7 +1101,7 @@ struct PromptEditorPage {
                       .margin({ top: 4 })
                     Text(chapter.updateTime)
                       .fontSize(11)
-                      .fontColor('#9CA3AF')
+                      .fontColor(this.subTextColor)
                       .margin({ top: 2 })
                   }
                   .alignItems(HorizontalAlign.Start)
@@ -1067,17 +1139,17 @@ struct PromptEditorPage {
               }
               .width('100%')
               .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-              .backgroundColor('#FFFFFF')
+              .backgroundColor(this.cardBg)
             }
           }, (chapter: Chapter) => chapter.id)
         }
       }
       .layoutWeight(1)
-      .backgroundColor('#F5F6FA')
+      .backgroundColor(this.bgColor)
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#F5F6FA')
+    .backgroundColor(this.bgColor)
     .position({ x: 0, y: 0 })
   }
 
@@ -1088,17 +1160,17 @@ struct PromptEditorPage {
         Text('创建章节')
           .fontSize(18)
           .fontWeight(FontWeight.Bold)
-          .fontColor('#1A1A2E')
+          .fontColor(this.textColor)
           .margin({ bottom: 16 })
 
         Text('章节标题')
           .fontSize(14)
-          .fontColor('#6B7280')
+          .fontColor(this.subTextColor)
           .margin({ bottom: 8 })
         TextInput({ placeholder: '请输入章节标题' })
           .fontSize(14)
           .height(40)
-          .backgroundColor('#F5F6FA')
+          .backgroundColor(this.bgColor)
           .borderRadius(8)
           .onChange((value: string) => {
             this.newChapterTitle = value;
@@ -1106,14 +1178,14 @@ struct PromptEditorPage {
 
         Text('章节分类')
           .fontSize(14)
-          .fontColor('#6B7280')
+          .fontColor(this.subTextColor)
           .margin({ top: 16, bottom: 8 })
         Row() {
           ForEach(['大纲', '人设', '场景', '章节', '时间线', '世界观', '思维链路', '最终方案'], (category: string) => {
             Button(category)
               .fontSize(13)
-              .fontColor(this.newChapterCategory === category ? '#FFFFFF' : '#6B7280')
-              .backgroundColor(this.newChapterCategory === category ? '#FF2D55' : '#F5F6FA')
+              .fontColor(this.newChapterCategory === category ? '#FFFFFF' : this.subTextColor)
+              .backgroundColor(this.newChapterCategory === category ? '#FF2D55' : this.bgColor)
               .borderRadius(16)
               .height(32)
               .padding({ left: 12, right: 12 })
@@ -1126,12 +1198,12 @@ struct PromptEditorPage {
 
         Text('章节内容')
           .fontSize(14)
-          .fontColor('#6B7280')
+          .fontColor(this.subTextColor)
           .margin({ top: 16, bottom: 8 })
         TextArea({ placeholder: '请输入章节内容（可选）' })
           .fontSize(14)
           .height(150)
-          .backgroundColor('#F5F6FA')
+          .backgroundColor(this.bgColor)
           .borderRadius(8)
           .onChange((value: string) => {
             this.newChapterContent = value;
@@ -1140,8 +1212,8 @@ struct PromptEditorPage {
         Row() {
           Button('取消')
             .fontSize(14)
-            .fontColor('#6B7280')
-            .backgroundColor('#F5F6FA')
+            .fontColor(this.subTextColor)
+            .backgroundColor(this.bgColor)
             .borderRadius(8)
             .height(40)
             .layoutWeight(1)
@@ -1169,7 +1241,7 @@ struct PromptEditorPage {
       }
       .width('90%')
       .padding(20)
-      .backgroundColor('#FFFFFF')
+      .backgroundColor(this.cardBg)
       .borderRadius(16)
     }
     .width('100%')
@@ -1186,20 +1258,20 @@ struct PromptEditorPage {
         Text('编辑章节')
           .fontSize(18)
           .fontWeight(FontWeight.Bold)
-          .fontColor('#1A1A2E')
+          .fontColor(this.textColor)
           .margin({ bottom: 8 })
 
         if (this.editingChapter) {
           Text(this.editingChapter.title)
             .fontSize(14)
-            .fontColor('#6B7280')
+            .fontColor(this.subTextColor)
             .margin({ bottom: 16 })
         }
 
         TextArea({ placeholder: '请输入章节内容', text: this.editingChapterContent })
           .fontSize(14)
           .height(300)
-          .backgroundColor('#F5F6FA')
+          .backgroundColor(this.bgColor)
           .borderRadius(8)
           .onChange((value: string) => {
             this.editingChapterContent = value;
@@ -1208,8 +1280,8 @@ struct PromptEditorPage {
         Row() {
           Button('取消')
             .fontSize(14)
-            .fontColor('#6B7280')
-            .backgroundColor('#F5F6FA')
+            .fontColor(this.subTextColor)
+            .backgroundColor(this.bgColor)
             .borderRadius(8)
             .height(40)
             .layoutWeight(1)
@@ -1236,7 +1308,7 @@ struct PromptEditorPage {
       }
       .width('90%')
       .padding(20)
-      .backgroundColor('#FFFFFF')
+      .backgroundColor(this.cardBg)
       .borderRadius(16)
     }
     .width('100%')
@@ -1254,18 +1326,18 @@ struct PromptEditorPage {
         Text('版本历史')
           .fontSize(18)
           .fontWeight(FontWeight.Bold)
-          .fontColor('#1A1A2E')
+          .fontColor(this.textColor)
         Blank()
         Text('×')
           .fontSize(24)
-          .fontColor('#9CA3AF')
+          .fontColor(this.subTextColor)
           .onClick(() => {
             this.showVersionHistory = false;
           })
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-      .backgroundColor('#FFFFFF')
+      .backgroundColor(this.cardBg)
 
       // 版本列表
       List() {
@@ -1278,15 +1350,15 @@ struct PromptEditorPage {
                     Text('版本 ' + (this.work!.versions!.length - index))
                       .fontSize(15)
                       .fontWeight(FontWeight.Medium)
-                      .fontColor('#1A1A2E')
+                      .fontColor(this.textColor)
                     Text(version.timestamp)
                       .fontSize(11)
-                      .fontColor('#9CA3AF')
+                      .fontColor(this.subTextColor)
                       .margin({ top: 4 })
                     if (version.changeNote) {
                       Text(version.changeNote)
                         .fontSize(12)
-                        .fontColor('#6B7280')
+                        .fontColor(this.subTextColor)
                         .margin({ top: 2 })
                     }
                   }
@@ -1334,25 +1406,25 @@ struct PromptEditorPage {
               }
               .width('100%')
               .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-              .backgroundColor(this.selectedVersion === index ? '#FFF5F5' : '#FFFFFF')
+              .backgroundColor(this.selectedVersion === index ? '#FFF5F5' : this.cardBg)
             }
           }, (version: WorkVersion, index: number) => version.id)
         }
       }
       .layoutWeight(1)
-      .backgroundColor('#F5F6FA')
+      .backgroundColor(this.bgColor)
 
       // 底部提示
       Text('提示：点击预览可查看历史版本内容，点击恢复可回退到该版本')
         .fontSize(12)
-        .fontColor('#9CA3AF')
+        .fontColor(this.subTextColor)
         .padding({ left: 16, right: 16, top: 12, bottom: 12 })
         .width('100%')
-        .backgroundColor('#FFFFFF')
+        .backgroundColor(this.cardBg)
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#F5F6FA')
+    .backgroundColor(this.bgColor)
     .position({ x: 0, y: 0 })
   }
 }

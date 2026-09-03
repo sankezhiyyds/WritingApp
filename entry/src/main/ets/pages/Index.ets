@@ -82,9 +82,12 @@ struct Index {
       this.currentBreakpoint = bp;
     });
     // 初始化深色模式
-    this.updateDarkMode();
-    // 初始化华为账号服务并尝试静默登录
     const context = getContext(this) as common.UIAbilityContext;
+    settingsManager.initPromise = settingsManager.init(context);
+    settingsManager.initPromise.then(() => {
+      this.updateDarkMode();
+    });
+    // 初始化华为账号服务并尝试静默登录
     huaweiAuthService.init(context);
     if (huaweiAuthService.hasSavedLogin()) {
       huaweiAuthService.silentLogin();
@@ -592,6 +595,20 @@ struct Index {
         Column() {
           ForEach(workManager.getAllWorks().filter(w => !w.archived), (work: WorkItem) => {
             Row() {
+              // 封面缩略图
+              Column() {
+                Text((work.title || '未命名').charAt(0))
+                  .fontSize(18)
+                  .fontColor('#FFFFFF')
+                  .fontWeight(FontWeight.Bold)
+              }
+              .width(40)
+              .height(40)
+              .backgroundColor(work.coverColor || '#FF2D55')
+              .borderRadius(8)
+              .justifyContent(FlexAlign.Center)
+              .margin({ right: 10 })
+
               Column() {
                 Text(work.title || '未命名作品')
                   .fontSize(14)
@@ -668,6 +685,20 @@ struct Index {
           if (workManager.getArchivedWorks().length > 0) {
             ForEach(workManager.getArchivedWorks(), (work: WorkItem) => {
               Row() {
+                // 封面缩略图
+                Column() {
+                  Text((work.title || '未命名').charAt(0))
+                    .fontSize(18)
+                    .fontColor('#FFFFFF')
+                    .fontWeight(FontWeight.Bold)
+                }
+                .width(40)
+                .height(40)
+                .backgroundColor(work.coverColor || '#FF2D55')
+                .borderRadius(8)
+                .justifyContent(FlexAlign.Center)
+                .margin({ right: 10 })
+
                 Column() {
                   Text(work.title || '未命名作品')
                     .fontSize(14)
@@ -949,57 +980,6 @@ struct ShortDramaTab {
           .padding({ left: 16, right: 16 })
           .width('100%')
 
-          // ===== 书架 =====
-          Text(`书架（${this.works.length}）`)
-            .fontSize(14)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.textColor)
-            .alignSelf(ItemAlign.Start)
-            .margin({ left: 16, top: 16, bottom: 8 })
-
-          if (this.works.length === 0) {
-            Text('书架空空如也，选个模板开始创作吧')
-              .fontSize(12)
-              .fontColor('#9CA3AF')
-              .alignSelf(ItemAlign.Start)
-              .margin({ left: 16, bottom: 8 })
-          } else {
-            ForEach(this.works, (work: WorkItem) => {
-              this.WorkCard(work, false)
-            }, (work: WorkItem) => work.id)
-          }
-
-          // ===== 旧档区 =====
-          Row() {
-            Text(`旧档区（${this.archivedWorks.length}）`)
-              .fontSize(14)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.textColor)
-            Blank()
-            Text(this.showArchive ? '收起 ▲' : '展开 ▼')
-              .fontSize(12)
-              .fontColor('#FF2D55')
-              .onClick(() => {
-                this.showArchive = !this.showArchive;
-              })
-          }
-          .width('100%')
-          .padding({ left: 16, right: 16, top: 16, bottom: 8 })
-
-          if (this.showArchive) {
-            if (this.archivedWorks.length === 0) {
-              Text('暂无归档作品，书架中归档的作品会移到这里')
-                .fontSize(12)
-                .fontColor('#9CA3AF')
-                .alignSelf(ItemAlign.Start)
-                .margin({ left: 16, bottom: 8 })
-            } else {
-              ForEach(this.archivedWorks, (work: WorkItem) => {
-                this.WorkCard(work, true)
-              }, (work: WorkItem) => work.id)
-            }
-          }
-
           // 底部留白，避免被悬浮底边栏遮挡
           Column().width('100%').height(96)
         }
@@ -1070,6 +1050,20 @@ struct ShortDramaTab {
   @Builder
   WorkCard(work: WorkItem, isArchived: boolean) {
     Row() {
+      // 封面缩略图
+      Column() {
+        Text((work.title || '未命名').charAt(0))
+          .fontSize(20)
+          .fontColor('#FFFFFF')
+          .fontWeight(FontWeight.Bold)
+      }
+      .width(44)
+      .height(44)
+      .backgroundColor(work.coverColor || '#FF2D55')
+      .borderRadius(8)
+      .justifyContent(FlexAlign.Center)
+      .margin({ right: 12 })
+
       Column() {
         Text(work.title || '未命名作品')
           .fontSize(14)
@@ -1253,57 +1247,6 @@ struct NovelTab {
           .padding({ left: 16, right: 16 })
           .width('100%')
 
-          // ===== 书架 =====
-          Text(`书架（${this.works.length}）`)
-            .fontSize(14)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.textColor)
-            .alignSelf(ItemAlign.Start)
-            .margin({ left: 16, top: 16, bottom: 8 })
-
-          if (this.works.length === 0) {
-            Text('书架空空如也，选个模板开始创作吧')
-              .fontSize(12)
-              .fontColor('#9CA3AF')
-              .alignSelf(ItemAlign.Start)
-              .margin({ left: 16, bottom: 8 })
-          } else {
-            ForEach(this.works, (work: WorkItem) => {
-              this.WorkCard(work, false)
-            }, (work: WorkItem) => work.id)
-          }
-
-          // ===== 旧档区 =====
-          Row() {
-            Text(`旧档区（${this.archivedWorks.length}）`)
-              .fontSize(14)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.textColor)
-            Blank()
-            Text(this.showArchive ? '收起 ▲' : '展开 ▼')
-              .fontSize(12)
-              .fontColor('#FF2D55')
-              .onClick(() => {
-                this.showArchive = !this.showArchive;
-              })
-          }
-          .width('100%')
-          .padding({ left: 16, right: 16, top: 16, bottom: 8 })
-
-          if (this.showArchive) {
-            if (this.archivedWorks.length === 0) {
-              Text('暂无归档作品，书架中归档的作品会移到这里')
-                .fontSize(12)
-                .fontColor('#9CA3AF')
-                .alignSelf(ItemAlign.Start)
-                .margin({ left: 16, bottom: 8 })
-            } else {
-              ForEach(this.archivedWorks, (work: WorkItem) => {
-                this.WorkCard(work, true)
-              }, (work: WorkItem) => work.id)
-            }
-          }
-
           // 底部留白，避免被悬浮底边栏遮挡
           Column().width('100%').height(96)
         }
@@ -1382,6 +1325,20 @@ struct NovelTab {
   @Builder
   WorkCard(work: WorkItem, isArchived: boolean) {
     Row() {
+      // 封面缩略图
+      Column() {
+        Text((work.title || '未命名').charAt(0))
+          .fontSize(20)
+          .fontColor('#FFFFFF')
+          .fontWeight(FontWeight.Bold)
+      }
+      .width(44)
+      .height(44)
+      .backgroundColor(work.coverColor || '#FF2D55')
+      .borderRadius(8)
+      .justifyContent(FlexAlign.Center)
+      .margin({ right: 12 })
+
       Column() {
         Text(work.title || '未命名作品')
           .fontSize(14)
@@ -1496,7 +1453,13 @@ struct SettingsTab {
   @State feedbackText: string = '';
 
   aboutToAppear() {
-    this.loadSettings();
+    if (settingsManager.initPromise) {
+      settingsManager.initPromise.then(() => {
+        this.loadSettings();
+      });
+    } else {
+      this.loadSettings();
+    }
     this.permissionItems = permissionManager.getPermissionItems();
   }
 
@@ -2623,6 +2586,7 @@ struct SettingsTab {
     this.selectedModel = settingsManager.settings.selectedModel;
     this.customUrl = settingsManager.settings.customUrl;
     this.followSystemDark = settingsManager.settings.followSystemDark;
+    this.isDarkMode = settingsManager.settings.isDarkMode;
     this.autoSaveInterval = settingsManager.settings.autoSaveInterval || 5;
     this.fontSize = settingsManager.settings.fontSize || 14;
     this.aiTimeout = settingsManager.settings.aiTimeout || 30;
@@ -2637,6 +2601,8 @@ struct SettingsTab {
     settingsManager.settings.autoSaveInterval = this.autoSaveInterval;
     settingsManager.settings.fontSize = this.fontSize;
     settingsManager.settings.aiTimeout = this.aiTimeout;
+    settingsManager.settings.isDarkMode = this.isDarkMode;
+    settingsManager.settings.followSystemDark = this.followSystemDark;
     settingsManager.save();
   }
 }
