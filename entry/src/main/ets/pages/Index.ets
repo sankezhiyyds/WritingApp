@@ -7,6 +7,9 @@ import { huaweiAuthService } from '../model/HuaweiAuthService';
 import { permissionManager, PermissionItem, PermissionResult } from '../model/PermissionManager';
 import router from '@ohos.router';
 import promptAction from '@ohos.promptAction';
+import { BusinessError } from '@ohos.base';
+import picker from '@ohos.file.picker';
+import fileIo from '@ohos.file.fs';
 import pasteboard from '@ohos.pasteboard';
 import Configuration from '@ohos.app.ability.Configuration';
 import common from '@ohos.app.ability.common';
@@ -216,6 +219,7 @@ struct Index {
             }
             .width('100%')
             .layoutWeight(1)
+            .padding({ bottom: 88 })
           }
           .width('100%')
           .height('100%')
@@ -773,7 +777,8 @@ struct Index {
 
   @Builder
   FloatingTabBar() {
-    Row() {
+    Column() {
+      Row() {
       // 短幕剧
       Column() {
         Text('🎬')
@@ -849,20 +854,19 @@ struct Index {
         this.currentIndex = 4;
       })
     }
-    .width('85%')
-    .height(64)
-    .backgroundColor(this.isDarkMode ? 'rgba(45,45,58,0.85)' : 'rgba(255,255,255,0.85)')
-    .borderRadius(32)
-    .margin({ bottom: 12 })
-    .shadow({
-      radius: 20,
-      color: 'rgba(0,0,0,0.1)',
-      offsetX: 0,
-      offsetY: 4
-    })
+      .width('100%')
+      .height(64)
+
+      // 底部安全区域填充（适配虚拟导航栏）
+      Row()
+        .width('100%')
+        .height(24)
+    }
+    .width('100%')
+    .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
     .border({
-      width: 1,
-      color: this.isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.5)'
+      width: { top: 1 },
+      color: this.isDarkMode ? '#3D3D4A' : '#E5E7EB'
     })
   }
 
@@ -898,6 +902,33 @@ struct ShortDramaTab {
 
   /** 短幕剧工作台覆盖的模板品类 */
   private readonly categories: string[] = ['剧本类', '喜剧类', '灵感类', '广告类', '交互沉浸类', '创意引擎'];
+
+  /** 获取实际有模板的分类列表 */
+  getCategories(): string[] {
+    const cats: string[] = [];
+    this.categories.forEach(c => {
+      if (this.templates.some(t => t.category === c)) {
+        cats.push(c);
+      }
+    });
+    return cats;
+  }
+
+  /** 分类对应的Emoji图标 */
+  getCategoryEmoji(category: string): string {
+    const map: Record<string, string> = {
+      '剧本类': '📝',
+      '喜剧类': '😂',
+      '叙事类': '📖',
+      '中长篇': '📚',
+      '灵感类': '💡',
+      '广告类': '📢',
+      '互动类': '🎮',
+      '交互沉浸类': '🎭',
+      '创意引擎': '⚡'
+    };
+    return map[category] || '📄';
+  }
 
   get templateColumns(): string {
     const cols = responsiveManager.getTemplateColumns();
@@ -961,27 +992,43 @@ struct ShortDramaTab {
 
       Scroll() {
         Column() {
-          Text('选择模板开始创作')
-            .fontSize(14)
-            .fontColor('#9CA3AF')
-            .alignSelf(ItemAlign.Start)
-            .margin({ left: 16, top: 12, bottom: 8 })
-
-          Grid() {
-            ForEach(this.templates, (item: TemplateInfo) => {
-              GridItem() {
-                this.TemplateCard(item)
+          ForEach(this.getCategories(), (category: string) => {
+            Column() {
+              // 分类标题
+              Row() {
+                Text(this.getCategoryEmoji(category))
+                  .fontSize(14)
+                Text(category)
+                  .fontSize(14)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(this.textColor)
+                  .margin({ left: 6 })
+                Blank()
+                Text(`${this.templates.filter(t => t.category === category).length}个模板`)
+                  .fontSize(11)
+                  .fontColor('#9CA3AF')
               }
-            }, (item: TemplateInfo) => item.id)
-          }
-          .columnsTemplate(this.templateColumns)
-          .rowsGap(12)
-          .columnsGap(12)
-          .padding({ left: 16, right: 16 })
-          .width('100%')
+              .width('100%')
+              .padding({ left: 16, right: 16, top: 12, bottom: 8 })
 
-          // 底部留白，避免被悬浮底边栏遮挡
-          Column().width('100%').height(96)
+              // 每排2个按钮
+              Grid() {
+                ForEach(this.templates.filter(t => t.category === category), (item: TemplateInfo) => {
+                  GridItem() {
+                    this.TemplateCard(item)
+                  }
+                }, (item: TemplateInfo) => item.id)
+              }
+              .columnsTemplate('1fr 1fr')
+              .rowsGap(10)
+              .columnsGap(10)
+              .padding({ left: 16, right: 16 })
+              .width('100%')
+            }
+          }, (category: string) => category)
+
+          // 底部留白
+          Column().width('100%').height(8)
         }
         .width('100%')
       }
@@ -995,50 +1042,45 @@ struct ShortDramaTab {
 
   @Builder
   TemplateCard(template: TemplateInfo) {
-    Column() {
+    Row() {
       Stack() {
         Circle()
-          .width(40)
-          .height(40)
+          .width(36)
+          .height(36)
           .fill(template.color)
         if (typeof template.icon === 'string') {
           Text(template.icon)
-            .fontSize(18)
+            .fontSize(16)
             .fontColor('#FFFFFF')
         } else {
           Image(template.icon)
-            .width(24)
-            .height(24)
+            .width(20)
+            .height(20)
             .objectFit(ImageFit.Contain)
         }
       }
-      .alignContent(Alignment.Center)
-      .width('100%')
-      .height(60)
+      .width(36)
+      .height(36)
 
       Text(template.name)
         .fontSize(13)
         .fontWeight(FontWeight.Medium)
         .fontColor(this.textColor)
-        .margin({ top: 8 })
+        .margin({ left: 10 })
+        .layoutWeight(1)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width('100%')
-        .textAlign(TextAlign.Center)
 
-      Text(template.desc)
-        .fontSize(11)
+      Text('›')
+        .fontSize(18)
         .fontColor('#9CA3AF')
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width('100%')
-        .textAlign(TextAlign.Center)
-        .margin({ top: 4 })
     }
     .width('100%')
-    .padding(12)
+    .height(52)
+    .padding({ left: 12, right: 12 })
     .backgroundColor(this.cardBg)
-    .borderRadius(12)
+    .borderRadius(10)
+    .alignItems(VerticalAlign.Center)
     .onClick(() => {
       router.pushUrl({
         url: 'pages/PromptEditorPage',
@@ -1159,6 +1201,33 @@ struct NovelTab {
   /** 中长篇工作台覆盖的模板品类 */
   private readonly categories: string[] = ['叙事类', '互动类', '中长篇', '世界观专项', '人物专项', '时间线专项', '写作工具', '出版分享'];
 
+  /** 获取实际有模板的分类列表 */
+  getCategories(): string[] {
+    const cats: string[] = [];
+    this.categories.forEach(c => {
+      if (this.templates.some(t => t.category === c)) {
+        cats.push(c);
+      }
+    });
+    return cats;
+  }
+
+  /** 分类对应的Emoji图标 */
+  getCategoryEmoji(category: string): string {
+    const map: Record<string, string> = {
+      '剧本类': '📝',
+      '喜剧类': '😂',
+      '叙事类': '📖',
+      '中长篇': '📚',
+      '灵感类': '💡',
+      '广告类': '📢',
+      '互动类': '🎮',
+      '交互沉浸类': '🎭',
+      '创意引擎': '⚡'
+    };
+    return map[category] || '📄';
+  }
+
   openOutlinePanel(work: WorkItem) {
     this.selectedWorkId = work.id;
     this.selectedWorkTitle = work.title;
@@ -1228,27 +1297,43 @@ struct NovelTab {
 
       Scroll() {
         Column() {
-          Text('选择模板开始创作')
-            .fontSize(14)
-            .fontColor('#9CA3AF')
-            .alignSelf(ItemAlign.Start)
-            .margin({ left: 16, top: 12, bottom: 8 })
-
-          Grid() {
-            ForEach(this.templates, (item: TemplateInfo) => {
-              GridItem() {
-                this.TemplateCard(item)
+          ForEach(this.getCategories(), (category: string) => {
+            Column() {
+              // 分类标题
+              Row() {
+                Text(this.getCategoryEmoji(category))
+                  .fontSize(14)
+                Text(category)
+                  .fontSize(14)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(this.textColor)
+                  .margin({ left: 6 })
+                Blank()
+                Text(`${this.templates.filter(t => t.category === category).length}个模板`)
+                  .fontSize(11)
+                  .fontColor('#9CA3AF')
               }
-            }, (item: TemplateInfo) => item.id)
-          }
-          .columnsTemplate(this.templateColumns)
-          .rowsGap(12)
-          .columnsGap(12)
-          .padding({ left: 16, right: 16 })
-          .width('100%')
+              .width('100%')
+              .padding({ left: 16, right: 16, top: 12, bottom: 8 })
 
-          // 底部留白，避免被悬浮底边栏遮挡
-          Column().width('100%').height(96)
+              // 每排2个按钮
+              Grid() {
+                ForEach(this.templates.filter(t => t.category === category), (item: TemplateInfo) => {
+                  GridItem() {
+                    this.TemplateCard(item)
+                  }
+                }, (item: TemplateInfo) => item.id)
+              }
+              .columnsTemplate('1fr 1fr')
+              .rowsGap(10)
+              .columnsGap(10)
+              .padding({ left: 16, right: 16 })
+              .width('100%')
+            }
+          }, (category: string) => category)
+
+          // 底部留白
+          Column().width('100%').height(8)
         }
         .width('100%')
       }
@@ -1276,44 +1361,45 @@ struct NovelTab {
 
   @Builder
   TemplateCard(template: TemplateInfo) {
-    Column() {
+    Row() {
       Stack() {
         Circle()
-          .width(40)
-          .height(40)
+          .width(36)
+          .height(36)
           .fill(template.color)
         if (typeof template.icon === 'string') {
           Text(template.icon)
-            .fontSize(18)
+            .fontSize(16)
             .fontColor('#FFFFFF')
         } else {
           Image(template.icon)
-            .width(24)
-            .height(24)
+            .width(20)
+            .height(20)
             .objectFit(ImageFit.Contain)
         }
       }
-      .alignContent(Alignment.Center)
+      .width(36)
+      .height(36)
 
       Text(template.name)
-        .fontSize(12)
+        .fontSize(13)
         .fontWeight(FontWeight.Medium)
         .fontColor(this.textColor)
-        .margin({ top: 6 })
+        .margin({ left: 10 })
+        .layoutWeight(1)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-      Text(template.desc)
-        .fontSize(10)
+      Text('›')
+        .fontSize(18)
         .fontColor('#9CA3AF')
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width('90%')
     }
     .width('100%')
-    .padding(10)
+    .height(52)
+    .padding({ left: 12, right: 12 })
     .backgroundColor(this.cardBg)
     .borderRadius(10)
+    .alignItems(VerticalAlign.Center)
     .onClick(() => {
       router.pushUrl({
         url: 'pages/PromptEditorPage',
@@ -1437,6 +1523,7 @@ struct SettingsTab {
   @State showModelPickerPanel: boolean = false;
   @State showPrivacyPanel: boolean = false;
   @State showAboutPanel: boolean = false;
+  @State showFontSizeSlider: boolean = false;
   @State showAccountPanel: boolean = false;
   @State isLoggedIn: boolean = false;
   @State userName: string = '';
@@ -1450,6 +1537,10 @@ struct SettingsTab {
   @State showHelpPanel: boolean = false;
   @State showFeedbackPanel: boolean = false;
   @State feedbackText: string = '';
+  @State localFontPath: string = '';
+  @State showFontPicker: boolean = false;
+  @State localModelPath: string = '';
+  @State showModelPicker: boolean = false;
 
   aboutToAppear() {
     if (settingsManager.initPromise) {
@@ -1460,6 +1551,20 @@ struct SettingsTab {
       this.loadSettings();
     }
     this.permissionItems = permissionManager.getPermissionItems();
+  }
+
+  // 暗色模式辅助颜色属性
+  get _cardBg(): string { return this.isDarkMode ? '#2D2D3A' : '#FFFFFF'; }
+  get _textPrimary(): string { return this.isDarkMode ? '#FFFFFF' : '#1A1A2E'; }
+  get _textSecondary(): string { return this.isDarkMode ? '#9CA3AF' : '#6B7280'; }
+  get _inputBg(): string { return this.isDarkMode ? '#3A3A4A' : '#F9FAFB'; }
+  get _cancelBg(): string { return this.isDarkMode ? '#3A3A4A' : '#F3F4F6'; }
+  get _cancelText(): string { return this.isDarkMode ? '#9CA3AF' : '#6B7280'; }
+
+  /** 从完整路径中提取文件名 */
+  getFileName(fullPath: string): string {
+    const parts = fullPath.split('/');
+    return parts[parts.length - 1] || fullPath;
   }
 
   build() {
@@ -1507,6 +1612,13 @@ struct SettingsTab {
           this.editTimeout();
         })
 
+        ListItem() {
+          this.SettingRow('本地模型文件(GGUF)', this.localModelPath ? this.getFileName(this.localModelPath) : '未选择', true)
+        }
+        .onClick(() => {
+          this.showModelPicker = true;
+        })
+
         // ===== 写作设置 =====
         ListItem() {
           this.SectionTitle('写作设置')
@@ -1530,7 +1642,14 @@ struct SettingsTab {
           this.SettingRow('字体大小', `${this.fontSize}px`, true)
         }
         .onClick(() => {
-          this.editFontSize();
+          this.showFontSizeSlider = true;
+        })
+
+        ListItem() {
+          this.SettingRow('本地字体文件', this.localFontPath ? this.getFileName(this.localFontPath) : '未选择', true)
+        }
+        .onClick(() => {
+          this.showFontPicker = true;
         })
 
         ListItem() {
@@ -1641,6 +1760,7 @@ struct SettingsTab {
           this.showAboutPanel = true;
         })
       }
+      .width('100%')
       .layoutWeight(1)
 
       // API Key输入弹层
@@ -1650,7 +1770,7 @@ struct SettingsTab {
             Text('设置 API Key')
               .fontSize(16)
               .fontWeight(FontWeight.Bold)
-              .fontColor('#1A1A2E')
+              .fontColor(this._textPrimary)
               .margin({ bottom: 8 })
             Text('仅本地存储，不会上传到任何服务器')
               .fontSize(12)
@@ -1660,7 +1780,7 @@ struct SettingsTab {
               .width('100%')
               .height(44)
               .fontSize(14)
-              .backgroundColor('#F9FAFB')
+              .backgroundColor(this._inputBg)
               .borderRadius(8)
               .padding({ left: 12, right: 12 })
               .onChange((value: string) => {
@@ -1669,8 +1789,8 @@ struct SettingsTab {
             Row() {
               Button('取消')
                 .fontSize(14)
-                .fontColor('#6B7280')
-                .backgroundColor('#F3F4F6')
+                .fontColor(this._cancelText)
+                .backgroundColor(this._cancelBg)
                 .borderRadius(20)
                 .height(40)
                 .layoutWeight(1)
@@ -1697,7 +1817,7 @@ struct SettingsTab {
           }
           .width('100%')
           .padding(20)
-          .backgroundColor('#FFFFFF')
+          .backgroundColor(this._cardBg)
           .borderRadius(16)
           .margin({ left: 24, right: 24 })
           .hitTestBehavior(HitTestMode.Block)
@@ -1719,7 +1839,7 @@ struct SettingsTab {
             Text('设置自定义接口地址')
               .fontSize(16)
               .fontWeight(FontWeight.Bold)
-              .fontColor('#1A1A2E')
+              .fontColor(this._textPrimary)
               .margin({ bottom: 8 })
             Text('用于自定义AI模型API端点')
               .fontSize(12)
@@ -1729,7 +1849,7 @@ struct SettingsTab {
               .width('100%')
               .height(44)
               .fontSize(14)
-              .backgroundColor('#F9FAFB')
+              .backgroundColor(this._inputBg)
               .borderRadius(8)
               .padding({ left: 12, right: 12 })
               .onChange((value: string) => {
@@ -1738,8 +1858,8 @@ struct SettingsTab {
             Row() {
               Button('取消')
                 .fontSize(14)
-                .fontColor('#6B7280')
-                .backgroundColor('#F3F4F6')
+                .fontColor(this._cancelText)
+                .backgroundColor(this._cancelBg)
                 .borderRadius(20)
                 .height(40)
                 .layoutWeight(1)
@@ -1766,7 +1886,7 @@ struct SettingsTab {
           }
           .width('100%')
           .padding(20)
-          .backgroundColor('#FFFFFF')
+          .backgroundColor(this._cardBg)
           .borderRadius(16)
           .margin({ left: 24, right: 24 })
           .hitTestBehavior(HitTestMode.Block)
@@ -1787,8 +1907,7 @@ struct SettingsTab {
           Column() {
             Text('选择AI模型')
               .fontSize(16)
-              .fontWeight(FontWeight.Bold)
-              .fontColor('#1A1A2E')
+              .fontColor(this._textPrimary)
               .margin({ bottom: 16 })
 
             this.ModelOption('DeepSeek', 'deepseek')
@@ -1800,8 +1919,8 @@ struct SettingsTab {
 
             Button('取消')
               .fontSize(14)
-              .fontColor('#6B7280')
-              .backgroundColor('#F3F4F6')
+              .fontColor(this._cancelText)
+              .backgroundColor(this._cancelBg)
               .borderRadius(20)
               .height(40)
               .width('100%')
@@ -1812,7 +1931,7 @@ struct SettingsTab {
           }
           .width('100%')
           .padding(20)
-          .backgroundColor('#FFFFFF')
+          .backgroundColor(this._cardBg)
           .borderRadius(16)
           .margin({ left: 24, right: 24 })
           .hitTestBehavior(HitTestMode.Block)
@@ -1834,13 +1953,13 @@ struct SettingsTab {
             Text('账号登录')
               .fontSize(16)
               .fontWeight(FontWeight.Bold)
-              .fontColor('#1A1A2E')
+              .fontColor(this._textPrimary)
               .margin({ bottom: 8 })
 
             if (this.isLoggedIn) {
               Text(`已登录: ${this.userName}`)
                 .fontSize(14)
-                .fontColor('#6B7280')
+                .fontColor(this._textSecondary)
                 .margin({ bottom: 16 })
 
               Button('退出登录')
@@ -1885,7 +2004,7 @@ struct SettingsTab {
           }
           .width('100%')
           .padding(20)
-          .backgroundColor('#FFFFFF')
+          .backgroundColor(this._cardBg)
           .borderRadius(16)
           .margin({ left: 24, right: 24 })
           .hitTestBehavior(HitTestMode.Block)
@@ -1907,32 +2026,32 @@ struct SettingsTab {
             Text('用户协议与隐私政策')
               .fontSize(16)
               .fontWeight(FontWeight.Bold)
-              .fontColor('#1A1A2E')
+              .fontColor(this._textPrimary)
               .margin({ bottom: 12 })
 
             Text('【用户协议】')
               .fontSize(14)
               .fontWeight(FontWeight.Bold)
-              .fontColor('#1A1A2E')
+              .fontColor(this._textPrimary)
               .margin({ bottom: 8 })
               .alignSelf(ItemAlign.Start)
 
             Text('1. 本应用仅供个人学习和创作使用，不得用于商业侵权用途。\n2. 用户需遵守相关法律法规，不得利用本应用生成违法违规内容。\n3. AI生成的内容版权归用户所有，用户需自行承担使用风险。\n4. 用户应妥善保管API Key，不得将其分享给他人使用。\n5. 本应用不对AI生成内容的准确性和合法性负责。')
               .fontSize(12)
-              .fontColor('#6B7280')
+              .fontColor(this._textSecondary)
               .margin({ bottom: 16 })
               .alignSelf(ItemAlign.Start)
 
             Text('【隐私政策】')
               .fontSize(14)
               .fontWeight(FontWeight.Bold)
-              .fontColor('#1A1A2E')
+              .fontColor(this._textPrimary)
               .margin({ bottom: 8 })
               .alignSelf(ItemAlign.Start)
 
             Text('1. 您的API Key仅存储在本地，不会上传到任何服务器。\n2. 作品数据完全保存在您的设备上，我们不会收集您的创作内容。\n3. 本应用不会收集您的个人信息、位置、通讯录等隐私数据。\n4. 当您使用华为账号登录时，我们仅会获取必要的用户标识用于登录验证。\n5. 我们不会将您的任何数据分享给第三方。')
               .fontSize(12)
-              .fontColor('#6B7280')
+              .fontColor(this._textSecondary)
               .margin({ bottom: 16 })
               .alignSelf(ItemAlign.Start)
 
@@ -1949,7 +2068,7 @@ struct SettingsTab {
           }
           .width('100%')
           .padding(20)
-          .backgroundColor('#FFFFFF')
+          .backgroundColor(this._cardBg)
           .borderRadius(16)
           .margin({ left: 24, right: 24 })
           .hitTestBehavior(HitTestMode.Block)
@@ -1971,7 +2090,7 @@ struct SettingsTab {
             Text('关于 创意写作')
               .fontSize(16)
               .fontWeight(FontWeight.Bold)
-              .fontColor('#1A1A2E')
+              .fontColor(this._textPrimary)
               .margin({ bottom: 12 })
 
             Text('🤖 AI')
@@ -1986,13 +2105,13 @@ struct SettingsTab {
 
             Text('AI驱动的写作助手')
               .fontSize(13)
-              .fontColor('#6B7280')
+              .fontColor(this._textSecondary)
               .margin({ bottom: 16 })
 
             Text('功能特性：')
               .fontSize(14)
               .fontWeight(FontWeight.Bold)
-              .fontColor('#1A1A2E')
+              .fontColor(this._textPrimary)
               .margin({ bottom: 8 })
               .alignSelf(ItemAlign.Start)
 
@@ -2015,7 +2134,7 @@ struct SettingsTab {
           }
           .width('100%')
           .padding(20)
-          .backgroundColor('#FFFFFF')
+          .backgroundColor(this._cardBg)
           .borderRadius(16)
           .margin({ left: 24, right: 24 })
           .hitTestBehavior(HitTestMode.Block)
@@ -2030,6 +2149,243 @@ struct SettingsTab {
         })
       }
 
+      // 字体大小滑动面板
+      if (this.showFontSizeSlider) {
+        Column() {
+          Column() {
+            Text('调整字体大小')
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this._textPrimary)
+              .margin({ bottom: 12 })
+
+            // 预览文本
+            Row() {
+              Text('预览效果')
+                .fontSize(this.fontSize)
+                .fontColor(this._textPrimary)
+                .layoutWeight(1)
+            }
+            .width('100%')
+            .padding(12)
+            .backgroundColor(this._inputBg)
+            .borderRadius(8)
+            .margin({ bottom: 16 })
+
+            Row() {
+              Text('A')
+                .fontSize(12)
+                .fontColor(this._textSecondary)
+              Slider({
+                value: this.fontSize,
+                min: 12,
+                max: 24,
+                step: 1,
+                style: SliderStyle.OutSet
+              })
+                .width('100%')
+                .layoutWeight(1)
+                .blockColor('#FF2D55')
+                .trackColor(this.isDarkMode ? '#3D3D4A' : '#E5E7EB')
+                .selectedColor('#FF2D55')
+                .onChange((value: number) => {
+                  this.fontSize = value;
+                  settingsManager.settings.fontSize = value;
+                  settingsManager.save();
+                })
+              Text('A')
+                .fontSize(24)
+                .fontColor(this._textSecondary)
+            }
+            .width('100%')
+            .alignItems(VerticalAlign.Center)
+            .margin({ bottom: 16 })
+
+            Text(`当前：${this.fontSize}px`)
+              .fontSize(13)
+              .fontColor(this._textSecondary)
+              .margin({ bottom: 16 })
+
+            Button('确定')
+              .fontSize(14)
+              .fontColor('#FFFFFF')
+              .backgroundColor('#FF2D55')
+              .borderRadius(20)
+              .height(40)
+              .width('100%')
+              .onClick(() => {
+                this.showFontSizeSlider = false;
+              })
+          }
+          .width('85%')
+          .padding(20)
+          .backgroundColor(this.isDarkMode ? '#2D2D44' : '#FFFFFF')
+          .borderRadius(16)
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0,0,0,0.4)')
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+        .onClick(() => {
+          this.showFontSizeSlider = false;
+        })
+      }
+
+      // 本地字体文件选择面板
+      if (this.showFontPicker) {
+        Column() {
+          Column() {
+            Text('选择本地字体文件')
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this._textPrimary)
+              .margin({ bottom: 16 })
+
+            Text('支持 .ttf / .otf 格式的字体文件')
+              .fontSize(12)
+              .fontColor(this._textSecondary)
+              .margin({ bottom: 12 })
+
+            if (this.localFontPath) {
+              Text(`当前: ${this.getFileName(this.localFontPath)}`)
+                .fontSize(13)
+                .fontColor('#3B82F6')
+                .margin({ bottom: 12 })
+            }
+
+            Button('从文件管理器选择')
+              .fontSize(14)
+              .fontColor('#FFFFFF')
+              .backgroundColor('#FF2D55')
+              .borderRadius(20)
+              .height(40)
+              .width('100%')
+              .onClick(async () => {
+                try {
+                  const documentPicker = new picker.DocumentViewPicker();
+                  const uris = await documentPicker.select();
+                  const result: string[] = uris as string[];
+                  if (result && result.length > 0) {
+                    this.localFontPath = result[0];
+                    settingsManager.settings.localFontPath = this.localFontPath;
+                    settingsManager.save();
+                    promptAction.showToast({ message: `已选择字体: ${this.getFileName(this.localFontPath)}`, duration: 2000 });
+                    this.showFontPicker = false;
+                  }
+                } catch (err) {
+                  promptAction.showToast({ message: '选择文件失败', duration: 2000 });
+                }
+              })
+
+            Button('清除选择')
+              .fontSize(14)
+              .fontColor(this._cancelText)
+              .backgroundColor(this._cancelBg)
+              .borderRadius(20)
+              .height(40)
+              .width('100%')
+              .margin({ top: 8 })
+              .onClick(() => {
+                this.localFontPath = '';
+                settingsManager.settings.localFontPath = '';
+                settingsManager.save();
+                promptAction.showToast({ message: '已清除字体选择', duration: 2000 });
+                this.showFontPicker = false;
+              })
+          }
+          .width('85%')
+          .padding(20)
+          .backgroundColor(this.isDarkMode ? '#2D2D44' : '#FFFFFF')
+          .borderRadius(16)
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0,0,0,0.4)')
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+        .onClick(() => {
+          this.showFontPicker = false;
+        })
+      }
+
+      // 本地模型文件(GGUF)选择面板
+      if (this.showModelPicker) {
+        Column() {
+          Column() {
+            Text('选择本地AI模型文件')
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this._textPrimary)
+              .margin({ bottom: 16 })
+
+            Text('支持 .gguf 格式的AI模型文件')
+              .fontSize(12)
+              .fontColor(this._textSecondary)
+              .margin({ bottom: 12 })
+
+            if (this.localModelPath) {
+              Text(`当前: ${this.getFileName(this.localModelPath)}`)
+                .fontSize(13)
+                .fontColor('#3B82F6')
+                .margin({ bottom: 12 })
+            }
+
+            Button('从文件管理器选择')
+              .fontSize(14)
+              .fontColor('#FFFFFF')
+              .backgroundColor('#FF2D55')
+              .borderRadius(20)
+              .height(40)
+              .width('100%')
+              .onClick(async () => {
+                try {
+                  const documentPicker = new picker.DocumentViewPicker();
+                  const uris = await documentPicker.select();
+                  const result: string[] = uris as string[];
+                  if (result && result.length > 0) {
+                    this.localModelPath = result[0];
+                    settingsManager.settings.localModelPath = this.localModelPath;
+                    settingsManager.save();
+                    promptAction.showToast({ message: `已选择模型: ${this.getFileName(this.localModelPath)}`, duration: 2000 });
+                    this.showModelPicker = false;
+                  }
+                } catch (err) {
+                  promptAction.showToast({ message: '选择文件失败', duration: 2000 });
+                }
+              })
+
+            Button('清除选择')
+              .fontSize(14)
+              .fontColor(this._cancelText)
+              .backgroundColor(this._cancelBg)
+              .borderRadius(20)
+              .height(40)
+              .width('100%')
+              .margin({ top: 8 })
+              .onClick(() => {
+                this.localModelPath = '';
+                settingsManager.settings.localModelPath = '';
+                settingsManager.save();
+                promptAction.showToast({ message: '已清除模型选择', duration: 2000 });
+                this.showModelPicker = false;
+              })
+          }
+          .width('85%')
+          .padding(20)
+          .backgroundColor(this.isDarkMode ? '#2D2D44' : '#FFFFFF')
+          .borderRadius(16)
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0,0,0,0.4)')
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+        .onClick(() => {
+          this.showModelPicker = false;
+        })
+      }
+
       // 导入数据面板
       if (this.showImportPanel) {
         Column() {
@@ -2037,7 +2393,7 @@ struct SettingsTab {
             Text('导入数据')
               .fontSize(16)
               .fontWeight(FontWeight.Bold)
-              .fontColor('#1A1A2E')
+              .fontColor(this._textPrimary)
               .margin({ bottom: 8 })
             Text('粘贴此前导出的备份JSON，重复作品会自动跳过')
               .fontSize(12)
@@ -2047,7 +2403,7 @@ struct SettingsTab {
               .width('100%')
               .height(160)
               .fontSize(13)
-              .backgroundColor('#F9FAFB')
+              .backgroundColor(this._inputBg)
               .borderRadius(8)
               .padding(12)
               .onChange((value: string) => {
@@ -2056,8 +2412,8 @@ struct SettingsTab {
             Row() {
               Button('取消')
                 .fontSize(14)
-                .fontColor('#6B7280')
-                .backgroundColor('#F3F4F6')
+                .fontColor(this._cancelText)
+                .backgroundColor(this._cancelBg)
                 .borderRadius(20)
                 .height(40)
                 .layoutWeight(1)
@@ -2081,7 +2437,7 @@ struct SettingsTab {
           }
           .width('100%')
           .padding(20)
-          .backgroundColor('#FFFFFF')
+          .backgroundColor(this._cardBg)
           .borderRadius(16)
           .margin({ left: 24, right: 24 })
           .hitTestBehavior(HitTestMode.Block)
@@ -2103,7 +2459,7 @@ struct SettingsTab {
             Text('权限管理')
               .fontSize(16)
               .fontWeight(FontWeight.Bold)
-              .fontColor('#1A1A2E')
+              .fontColor(this._textPrimary)
               .margin({ bottom: 12 })
 
             ForEach(this.permissionItems, (item: PermissionItem) => {
@@ -2112,7 +2468,7 @@ struct SettingsTab {
                   Text(item.name)
                     .fontSize(14)
                     .fontWeight(FontWeight.Medium)
-                    .fontColor('#1A1A2E')
+                    .fontColor(this._textPrimary)
                   Text(item.reason)
                     .fontSize(12)
                     .fontColor('#9CA3AF')
@@ -2161,7 +2517,7 @@ struct SettingsTab {
           }
           .width('100%')
           .padding(20)
-          .backgroundColor('#FFFFFF')
+          .backgroundColor(this._cardBg)
           .borderRadius(16)
           .margin({ left: 24, right: 24 })
           .hitTestBehavior(HitTestMode.Block)
@@ -2183,7 +2539,7 @@ struct SettingsTab {
             Text('帮助中心')
               .fontSize(16)
               .fontWeight(FontWeight.Bold)
-              .fontColor('#1A1A2E')
+              .fontColor(this._textPrimary)
               .margin({ bottom: 12 })
 
             Scroll() {
@@ -2191,19 +2547,19 @@ struct SettingsTab {
                 Text('【快速上手】')
                   .fontSize(14)
                   .fontWeight(FontWeight.Bold)
-                  .fontColor('#1A1A2E')
+                  .fontColor(this._textPrimary)
                   .margin({ bottom: 8 })
                   .alignSelf(ItemAlign.Start)
                 Text('1. 在短幕剧/中长篇工作台选择模板，填写字段即可生成创作框架。\n2. 点击"AI生成"按钮，由AI补全完整内容（需在设置中配置API Key）。\n3. 保存后作品进入书架，可随时归档到旧档区。')
                   .fontSize(12)
-                  .fontColor('#6B7280')
+                  .fontColor(this._textSecondary)
                   .margin({ bottom: 16 })
                   .alignSelf(ItemAlign.Start)
 
                 Text('【常见问题】')
                   .fontSize(14)
                   .fontWeight(FontWeight.Bold)
-                  .fontColor('#1A1A2E')
+                  .fontColor(this._textPrimary)
                   .margin({ bottom: 8 })
                   .alignSelf(ItemAlign.Start)
                 Text('Q: AI生成失败怎么办？\nA: 请检查设置中的API Key是否正确、网络是否可用，也可尝试调大AI超时时间。\n\nQ: 作品如何备份？\nA: 设置 → 导出数据，将备份JSON复制保存；换设备后用"导入数据"恢复。\n\nQ: 版本历史在哪里？\nA: 打开作品后点击底部"历史"按钮，可预览并恢复任意历史版本。')
@@ -2231,7 +2587,7 @@ struct SettingsTab {
           }
           .width('100%')
           .padding(20)
-          .backgroundColor('#FFFFFF')
+          .backgroundColor(this._cardBg)
           .borderRadius(16)
           .margin({ left: 24, right: 24 })
           .hitTestBehavior(HitTestMode.Block)
@@ -2253,7 +2609,7 @@ struct SettingsTab {
             Text('联系反馈')
               .fontSize(16)
               .fontWeight(FontWeight.Bold)
-              .fontColor('#1A1A2E')
+              .fontColor(this._textPrimary)
               .margin({ bottom: 8 })
             Text('描述您遇到的问题或建议，提交后会复制到剪贴板，可发送至支持邮箱 support@creativewriting.app')
               .fontSize(12)
@@ -2263,7 +2619,7 @@ struct SettingsTab {
               .width('100%')
               .height(140)
               .fontSize(13)
-              .backgroundColor('#F9FAFB')
+              .backgroundColor(this._inputBg)
               .borderRadius(8)
               .padding(12)
               .onChange((value: string) => {
@@ -2272,8 +2628,8 @@ struct SettingsTab {
             Row() {
               Button('取消')
                 .fontSize(14)
-                .fontColor('#6B7280')
-                .backgroundColor('#F3F4F6')
+                .fontColor(this._cancelText)
+                .backgroundColor(this._cancelBg)
                 .borderRadius(20)
                 .height(40)
                 .layoutWeight(1)
@@ -2297,7 +2653,7 @@ struct SettingsTab {
           }
           .width('100%')
           .padding(20)
-          .backgroundColor('#FFFFFF')
+          .backgroundColor(this._cardBg)
           .borderRadius(16)
           .margin({ left: 24, right: 24 })
           .hitTestBehavior(HitTestMode.Block)
@@ -2373,7 +2729,7 @@ struct SettingsTab {
     Row() {
       Text(label)
         .fontSize(15)
-        .fontColor(this.selectedModel === modelKey ? '#FF2D55' : '#1A1A2E')
+        .fontColor(this.selectedModel === modelKey ? '#FF2D55' : (this.isDarkMode ? '#FFFFFF' : '#1A1A2E'))
         .fontWeight(this.selectedModel === modelKey ? FontWeight.Bold : FontWeight.Normal)
         .layoutWeight(1)
 
@@ -2423,11 +2779,10 @@ struct SettingsTab {
     this.getUIContext().getPromptAction().showActionMenu({
       title: '深色模式',
       buttons: [
-        { text: '关', color: '#1A1A2E' } as MenuButton,
-        { text: '开', color: '#1A1A2E' } as MenuButton,
-        { text: '跟随系统', color: '#1A1A2E' } as MenuButton,
-        { text: '取消', color: '#666666' } as MenuButton
-      ] as [MenuButton, MenuButton, MenuButton, MenuButton]
+        { text: '关', color: this._textPrimary } as MenuButton,
+        { text: '开', color: this._textPrimary } as MenuButton,
+        { text: '跟随系统', color: this._textPrimary } as MenuButton
+      ] as [MenuButton, MenuButton, MenuButton]
     }).then((result: promptAction.ActionMenuSuccessResponse) => {
       if (result.index === 0) {
         // 关
@@ -2465,12 +2820,11 @@ struct SettingsTab {
     this.getUIContext().getPromptAction().showActionMenu({
       title: '选择AI超时时间',
       buttons: [
-        { text: '15秒', color: '#1A1A2E' } as MenuButton,
-        { text: '30秒', color: '#1A1A2E' } as MenuButton,
-        { text: '60秒', color: '#1A1A2E' } as MenuButton,
-        { text: '120秒', color: '#1A1A2E' } as MenuButton,
-        { text: '取消', color: '#666666' } as MenuButton
-      ] as [MenuButton, MenuButton, MenuButton, MenuButton, MenuButton]
+        { text: '15秒', color: this._textPrimary } as MenuButton,
+        { text: '30秒', color: this._textPrimary } as MenuButton,
+        { text: '60秒', color: this._textPrimary } as MenuButton,
+        { text: '120秒', color: this._textPrimary } as MenuButton
+      ] as [MenuButton, MenuButton, MenuButton, MenuButton]
     }).then((result: promptAction.ActionMenuSuccessResponse) => {
       if (result.index < 4) {
         const values: number[] = [15, 30, 60, 120];
@@ -2486,12 +2840,11 @@ struct SettingsTab {
     this.getUIContext().getPromptAction().showActionMenu({
       title: '选择自动保存间隔',
       buttons: [
-        { text: '1分钟', color: '#1A1A2E' } as MenuButton,
-        { text: '5分钟', color: '#1A1A2E' } as MenuButton,
-        { text: '10分钟', color: '#1A1A2E' } as MenuButton,
-        { text: '30分钟', color: '#1A1A2E' } as MenuButton,
-        { text: '取消', color: '#666666' } as MenuButton
-      ] as [MenuButton, MenuButton, MenuButton, MenuButton, MenuButton]
+        { text: '1分钟', color: this._textPrimary } as MenuButton,
+        { text: '5分钟', color: this._textPrimary } as MenuButton,
+        { text: '10分钟', color: this._textPrimary } as MenuButton,
+        { text: '30分钟', color: this._textPrimary } as MenuButton
+      ] as [MenuButton, MenuButton, MenuButton, MenuButton]
     }).then((result: promptAction.ActionMenuSuccessResponse) => {
       if (result.index < 4) {
         const values: number[] = [1, 5, 10, 30];
@@ -2504,24 +2857,7 @@ struct SettingsTab {
   }
 
   editFontSize() {
-    this.getUIContext().getPromptAction().showActionMenu({
-      title: '选择字体大小',
-      buttons: [
-        { text: '12px', color: '#1A1A2E' } as MenuButton,
-        { text: '14px', color: '#1A1A2E' } as MenuButton,
-        { text: '16px', color: '#1A1A2E' } as MenuButton,
-        { text: '18px', color: '#1A1A2E' } as MenuButton,
-        { text: '取消', color: '#666666' } as MenuButton
-      ] as [MenuButton, MenuButton, MenuButton, MenuButton, MenuButton]
-    }).then((result: promptAction.ActionMenuSuccessResponse) => {
-      if (result.index < 4) {
-        const values: number[] = [12, 14, 16, 18];
-        this.fontSize = values[result.index];
-        this.saveSettings();
-        const toastOpts: ToastOptions = { message: `已设置为 ${this.fontSize}px`, duration: 2000 };
-        promptAction.showToast(toastOpts);
-      }
-    });
+    this.showFontSizeSlider = true;
   }
 
   exportData() {
@@ -2597,6 +2933,8 @@ struct SettingsTab {
     this.aiTimeout = settingsManager.settings.aiTimeout || 30;
     this.isLoggedIn = settingsManager.settings.isLoggedIn;
     this.userName = settingsManager.settings.userName;
+    this.localFontPath = settingsManager.settings.localFontPath || '';
+    this.localModelPath = settingsManager.settings.localModelPath || '';
   }
 
   saveSettings() {
@@ -2608,6 +2946,8 @@ struct SettingsTab {
     settingsManager.settings.aiTimeout = this.aiTimeout;
     settingsManager.settings.isDarkMode = this.isDarkMode;
     settingsManager.settings.followSystemDark = this.followSystemDark;
+    settingsManager.settings.localFontPath = this.localFontPath;
+    settingsManager.settings.localModelPath = this.localModelPath;
     settingsManager.save();
   }
 }

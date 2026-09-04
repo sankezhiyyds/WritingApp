@@ -16,6 +16,8 @@ export interface SettingsData {
   isLoggedIn: boolean;
   userName: string;
   grantedPermissions: string[];
+  localFontPath: string;
+  localModelPath: string;
 }
 
 export class SettingsManager {
@@ -35,7 +37,9 @@ export class SettingsManager {
     aiTimeout: 30,
     isLoggedIn: false,
     userName: '',
-    grantedPermissions: []
+    grantedPermissions: [],
+    localFontPath: '',
+    localModelPath: ''
   };
   settings: SettingsData = this.defaultSettings;
   initPromise: Promise<void> | null = null;
@@ -60,7 +64,9 @@ export class SettingsManager {
           aiTimeout: parsed.aiTimeout || 30,
           isLoggedIn: parsed.isLoggedIn || false,
           userName: parsed.userName || '',
-          grantedPermissions: Array.isArray(parsed.grantedPermissions) ? parsed.grantedPermissions : []
+          grantedPermissions: Array.isArray(parsed.grantedPermissions) ? parsed.grantedPermissions : [],
+          localFontPath: parsed.localFontPath || '',
+          localModelPath: parsed.localModelPath || ''
         };
       }
     } catch (e) {
