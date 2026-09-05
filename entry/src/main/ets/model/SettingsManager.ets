@@ -10,6 +10,7 @@ export interface SettingsData {
   hasAgreedToTerms: boolean;
   followSystemDark: boolean;
   isDarkMode: boolean;
+  autoLightMode: boolean;
   autoSaveInterval: number;
   fontSize: number;
   aiTimeout: number;
@@ -32,6 +33,7 @@ export class SettingsManager {
     hasAgreedToTerms: false,
     followSystemDark: false,
     isDarkMode: false,
+    autoLightMode: false,
     autoSaveInterval: 5,
     fontSize: 14,
     aiTimeout: 30,
@@ -59,6 +61,7 @@ export class SettingsManager {
           hasAgreedToTerms: parsed.hasAgreedToTerms || false,
           followSystemDark: parsed.followSystemDark || false,
           isDarkMode: parsed.isDarkMode !== undefined ? parsed.isDarkMode : false,
+          autoLightMode: parsed.autoLightMode || false,
           autoSaveInterval: parsed.autoSaveInterval || 5,
           fontSize: parsed.fontSize || 14,
           aiTimeout: parsed.aiTimeout || 30,

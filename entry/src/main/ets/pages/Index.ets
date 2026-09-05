@@ -34,7 +34,11 @@ struct Index {
   @State showOnboarding: boolean = false;
   @State onboardingPage: number = 0;
   @State currentBreakpoint: BreakpointType = 'sm';
+  @StorageProp('sysDarkMode') @Watch('onSysDarkModeChange') sysDarkMode: boolean = false;
   private controller: TabsController = new TabsController();
+  private breakpointCallback: (bp: BreakpointType) => void = (bp: BreakpointType) => {
+    this.currentBreakpoint = bp;
+  };
 
   get isWide(): boolean {
     return this.currentBreakpoint === 'md' || this.currentBreakpoint === 'lg';
@@ -81,9 +85,7 @@ struct Index {
     }
     // 初始化断点
     this.currentBreakpoint = responsiveManager.getBreakpoint();
-    responsiveManager.onBreakpointChange((bp: BreakpointType) => {
-      this.currentBreakpoint = bp;
-    });
+    responsiveManager.onBreakpointChange(this.breakpointCallback);
     // 初始化深色模式
     const context = getContext(this) as common.UIAbilityContext;
     settingsManager.initPromise = settingsManager.init(context);
@@ -99,26 +101,43 @@ struct Index {
     if (settingsManager.settings.isFirstLaunch) {
       permissionManager.requestPermissions(['ohos.permission.INTERNET', 'ohos.permission.GET_NETWORK_INFO']);
     }
+    // fallback: 如果EntryAbility尚未设置sysDarkMode，从context读取
+    if (AppStorage.get<boolean>('sysDarkMode') === undefined) {
+      const cfg = (getContext(this) as common.UIAbilityContext).config;
+      if (cfg && cfg.colorMode !== undefined) {
+        AppStorage.setOrCreate<boolean>('sysDarkMode', cfg.colorMode === 1);
+      }
+    }
   }
 
   updateDarkMode() {
-    if (settingsManager.settings.followSystemDark) {
-      // 获取系统配置
+    const autoLight = settingsManager.settings.autoLightMode;
+    const followSystem = settingsManager.settings.followSystemDark;
+    if (autoLight) {
+      // 光感自动模式：跟随系统深色模式（由环境光传感器驱动）
+      this.isDarkMode = this.sysDarkMode;
+    } else if (followSystem) {
+      // 跟随系统：获取系统配置的colorMode
       const context = getContext(this) as common.UIAbilityContext;
       const config = context.config;
       if (config && config.colorMode !== undefined) {
         this.isDarkMode = config.colorMode === 1;
       }
     } else {
-      // 使用用户手动设置
+      // 手动设置
       this.isDarkMode = settingsManager.settings.isDarkMode;
     }
   }
 
+  /** 系统深色模式变化时自动同步（光感自动/跟随系统模式） */
+  onSysDarkModeChange(): void {
+    if (settingsManager.settings.autoLightMode || settingsManager.settings.followSystemDark) {
+      this.updateDarkMode();
+    }
+  }
+
   aboutToDisappear() {
-    responsiveManager.offBreakpointChange((bp: BreakpointType) => {
-      this.currentBreakpoint = bp;
-    });
+    responsiveManager.offBreakpointChange(this.breakpointCallback);
   }
 
   build() {
@@ -782,11 +801,11 @@ struct Index {
       // 短幕剧
       Column() {
         Text('🎬')
-          .fontSize(24)
+          .fontSize(26)
         Text('短幕剧')
-          .fontSize(11)
-          .fontColor(this.currentIndex === 0 ? '#FF2D55' : (this.isDarkMode ? '#9CA3AF' : '#6B7280'))
-          .margin({ top: 4 })
+          .fontSize(12)
+          .fontColor(this.currentIndex === 0 ? '#FF2D55' : (this.isDarkMode ? '#E5E7EB' : '#374151'))
+          .margin({ top: 3 })
       }
       .layoutWeight(1)
       .justifyContent(FlexAlign.Center)
@@ -797,11 +816,11 @@ struct Index {
       // 中长篇
       Column() {
         Text('📚')
-          .fontSize(24)
+          .fontSize(26)
         Text('中长篇')
-          .fontSize(11)
-          .fontColor(this.currentIndex === 1 ? '#FF2D55' : (this.isDarkMode ? '#9CA3AF' : '#6B7280'))
-          .margin({ top: 4 })
+          .fontSize(12)
+          .fontColor(this.currentIndex === 1 ? '#FF2D55' : (this.isDarkMode ? '#E5E7EB' : '#374151'))
+          .margin({ top: 3 })
       }
       .layoutWeight(1)
       .justifyContent(FlexAlign.Center)
@@ -812,11 +831,11 @@ struct Index {
       // 书架
       Column() {
         Text('📖')
-          .fontSize(24)
+          .fontSize(26)
         Text('书架')
-          .fontSize(11)
-          .fontColor(this.currentIndex === 2 ? '#FF2D55' : (this.isDarkMode ? '#9CA3AF' : '#6B7280'))
-          .margin({ top: 4 })
+          .fontSize(12)
+          .fontColor(this.currentIndex === 2 ? '#FF2D55' : (this.isDarkMode ? '#E5E7EB' : '#374151'))
+          .margin({ top: 3 })
       }
       .layoutWeight(1)
       .justifyContent(FlexAlign.Center)
@@ -827,11 +846,11 @@ struct Index {
       // 旧档
       Column() {
         Text('📦')
-          .fontSize(24)
+          .fontSize(26)
         Text('旧档')
-          .fontSize(11)
-          .fontColor(this.currentIndex === 3 ? '#FF2D55' : (this.isDarkMode ? '#9CA3AF' : '#6B7280'))
-          .margin({ top: 4 })
+          .fontSize(12)
+          .fontColor(this.currentIndex === 3 ? '#FF2D55' : (this.isDarkMode ? '#E5E7EB' : '#374151'))
+          .margin({ top: 3 })
       }
       .layoutWeight(1)
       .justifyContent(FlexAlign.Center)
@@ -842,11 +861,11 @@ struct Index {
       // 设置
       Column() {
         Text('⚙️')
-          .fontSize(24)
+          .fontSize(26)
         Text('设置')
-          .fontSize(11)
-          .fontColor(this.currentIndex === 4 ? '#FF2D55' : (this.isDarkMode ? '#9CA3AF' : '#6B7280'))
-          .margin({ top: 4 })
+          .fontSize(12)
+          .fontColor(this.currentIndex === 4 ? '#FF2D55' : (this.isDarkMode ? '#E5E7EB' : '#374151'))
+          .margin({ top: 3 })
       }
       .layoutWeight(1)
       .justifyContent(FlexAlign.Center)
@@ -857,16 +876,20 @@ struct Index {
       .width('100%')
       .height(64)
 
-      // 底部安全区域填充（适配虚拟导航栏）
+      // 底部安全区域
       Row()
         .width('100%')
-        .height(24)
+        .height(8)
     }
-    .width('100%')
+    .width('92%')
+    .margin({ bottom: 12 })
+    .borderRadius(32)
     .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
-    .border({
-      width: { top: 1 },
-      color: this.isDarkMode ? '#3D3D4A' : '#E5E7EB'
+    .border({ width: 1, color: this.isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' })
+    .shadow({
+      radius: 16,
+      color: this.isDarkMode ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.15)',
+      offsetY: -2
     })
   }
 
@@ -1520,10 +1543,11 @@ struct SettingsTab {
   @State showCustomUrlInput: boolean = false;
   @State customUrlInput: string = '';
   @State followSystemDark: boolean = false;
+  @State autoLightMode: boolean = false;
+  @State prevFollowSystemDark: boolean = false;
   @State showModelPickerPanel: boolean = false;
   @State showPrivacyPanel: boolean = false;
   @State showAboutPanel: boolean = false;
-  @State showFontSizeSlider: boolean = false;
   @State showAccountPanel: boolean = false;
   @State isLoggedIn: boolean = false;
   @State userName: string = '';
@@ -1565,6 +1589,20 @@ struct SettingsTab {
   getFileName(fullPath: string): string {
     const parts = fullPath.split('/');
     return parts[parts.length - 1] || fullPath;
+  }
+
+  /** 根据当前设置计算并应用暗色模式（替代Index.updateDarkMode） */
+  applyDarkMode(): void {
+    if (settingsManager.settings.autoLightMode) {
+      this.isDarkMode = AppStorage.get<boolean>('sysDarkMode') ?? false;
+    } else if (settingsManager.settings.followSystemDark) {
+      const ctx = getContext(this) as common.UIAbilityContext;
+      if (ctx.config && ctx.config.colorMode !== undefined) {
+        this.isDarkMode = ctx.config.colorMode === 1;
+      }
+    } else {
+      this.isDarkMode = settingsManager.settings.isDarkMode;
+    }
   }
 
   build() {
@@ -1642,7 +1680,7 @@ struct SettingsTab {
           this.SettingRow('字体大小', `${this.fontSize}px`, true)
         }
         .onClick(() => {
-          this.showFontSizeSlider = true;
+          this.selectFontSize();
         })
 
         ListItem() {
@@ -1658,6 +1696,46 @@ struct SettingsTab {
         .onClick(() => {
           this.selectDarkMode();
         })
+
+        ListItem() {
+          Row() {
+            Column() {
+              Text('🌙 光感自动深色')
+                .fontSize(14)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this._textPrimary)
+              Text('自动跟随环境光线切换深色/浅色')
+                .fontSize(11)
+                .fontColor(this._textSecondary)
+                .margin({ top: 2 })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+
+            Toggle({ type: ToggleType.Switch, isOn: this.autoLightMode })
+              .selectedColor('#FF2D55')
+              .switchPointColor('#FFFFFF')
+              .onChange((isOn: boolean) => {
+                this.autoLightMode = isOn;
+                settingsManager.settings.autoLightMode = isOn;
+                if (isOn) {
+                  // 开启光感时保存之前的跟随状态
+                  this.prevFollowSystemDark = this.followSystemDark;
+                  settingsManager.settings.followSystemDark = true;
+                  this.followSystemDark = true;
+                } else {
+                  // 关闭光感时恢复到之前的跟随状态
+                  settingsManager.settings.followSystemDark = this.prevFollowSystemDark;
+                  this.followSystemDark = this.prevFollowSystemDark;
+                }
+                settingsManager.save();
+                this.applyDarkMode(); // 直接刷新，不弹菜单
+              })
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16 })
+          .height(56)
+        }
 
         // ===== 数据管理 =====
         ListItem() {
@@ -2146,89 +2224,6 @@ struct SettingsTab {
         .position({ x: 0, y: 0 })
         .onClick(() => {
           this.showAboutPanel = false;
-        })
-      }
-
-      // 字体大小滑动面板
-      if (this.showFontSizeSlider) {
-        Column() {
-          Column() {
-            Text('调整字体大小')
-              .fontSize(16)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this._textPrimary)
-              .margin({ bottom: 12 })
-
-            // 预览文本
-            Row() {
-              Text('预览效果')
-                .fontSize(this.fontSize)
-                .fontColor(this._textPrimary)
-                .layoutWeight(1)
-            }
-            .width('100%')
-            .padding(12)
-            .backgroundColor(this._inputBg)
-            .borderRadius(8)
-            .margin({ bottom: 16 })
-
-            Row() {
-              Text('A')
-                .fontSize(12)
-                .fontColor(this._textSecondary)
-              Slider({
-                value: this.fontSize,
-                min: 12,
-                max: 24,
-                step: 1,
-                style: SliderStyle.OutSet
-              })
-                .width('100%')
-                .layoutWeight(1)
-                .blockColor('#FF2D55')
-                .trackColor(this.isDarkMode ? '#3D3D4A' : '#E5E7EB')
-                .selectedColor('#FF2D55')
-                .onChange((value: number) => {
-                  this.fontSize = value;
-                  settingsManager.settings.fontSize = value;
-                  settingsManager.save();
-                })
-              Text('A')
-                .fontSize(24)
-                .fontColor(this._textSecondary)
-            }
-            .width('100%')
-            .alignItems(VerticalAlign.Center)
-            .margin({ bottom: 16 })
-
-            Text(`当前：${this.fontSize}px`)
-              .fontSize(13)
-              .fontColor(this._textSecondary)
-              .margin({ bottom: 16 })
-
-            Button('确定')
-              .fontSize(14)
-              .fontColor('#FFFFFF')
-              .backgroundColor('#FF2D55')
-              .borderRadius(20)
-              .height(40)
-              .width('100%')
-              .onClick(() => {
-                this.showFontSizeSlider = false;
-              })
-          }
-          .width('85%')
-          .padding(20)
-          .backgroundColor(this.isDarkMode ? '#2D2D44' : '#FFFFFF')
-          .borderRadius(16)
-        }
-        .width('100%')
-        .height('100%')
-        .backgroundColor('rgba(0,0,0,0.4)')
-        .justifyContent(FlexAlign.Center)
-        .alignItems(HorizontalAlign.Center)
-        .onClick(() => {
-          this.showFontSizeSlider = false;
         })
       }
 
@@ -2786,30 +2781,34 @@ struct SettingsTab {
     }).then((result: promptAction.ActionMenuSuccessResponse) => {
       if (result.index === 0) {
         // 关
-        this.followSystemDark = false;
-        this.isDarkMode = false;
         settingsManager.settings.followSystemDark = false;
+        settingsManager.settings.autoLightMode = false;
         settingsManager.settings.isDarkMode = false;
+        this.autoLightMode = false;
+        this.followSystemDark = false;
+        this.prevFollowSystemDark = false;
+        this.applyDarkMode();
         settingsManager.save();
         promptAction.showToast({ message: '已关闭深色模式', duration: 2000 });
       } else if (result.index === 1) {
         // 开
-        this.followSystemDark = false;
-        this.isDarkMode = true;
         settingsManager.settings.followSystemDark = false;
+        settingsManager.settings.autoLightMode = false;
         settingsManager.settings.isDarkMode = true;
+        this.autoLightMode = false;
+        this.followSystemDark = false;
+        this.prevFollowSystemDark = false;
+        this.applyDarkMode();
         settingsManager.save();
         promptAction.showToast({ message: '已开启深色模式', duration: 2000 });
       } else if (result.index === 2) {
         // 跟随系统
-        this.followSystemDark = true;
         settingsManager.settings.followSystemDark = true;
-        const context = getContext(this) as common.UIAbilityContext;
-        const config = context.config;
-        if (config && config.colorMode !== undefined) {
-          this.isDarkMode = config.colorMode === 1;
-          settingsManager.settings.isDarkMode = config.colorMode === 1;
-        }
+        settingsManager.settings.autoLightMode = false;
+        this.followSystemDark = true;
+        this.autoLightMode = false;
+        this.prevFollowSystemDark = true;
+        this.applyDarkMode();
         settingsManager.save();
         promptAction.showToast({ message: '已跟随系统深色模式', duration: 2000 });
       }
@@ -2856,8 +2855,26 @@ struct SettingsTab {
     });
   }
 
-  editFontSize() {
-    this.showFontSizeSlider = true;
+  selectFontSize() {
+    const sizes: number[] = [12, 14, 16, 18, 20, 24];
+    const labels: string[] = sizes.map((s: number) => s + 'px');
+    this.getUIContext().getPromptAction().showActionMenu({
+      title: '字体大小',
+      buttons: [
+        { text: labels[0], color: this._textPrimary } as MenuButton,
+        { text: labels[1], color: this._textPrimary } as MenuButton,
+        { text: labels[2], color: this._textPrimary } as MenuButton,
+        { text: labels[3], color: this._textPrimary } as MenuButton,
+        { text: labels[4], color: this._textPrimary } as MenuButton,
+        { text: labels[5], color: this._textPrimary } as MenuButton
+      ] as [MenuButton, MenuButton, MenuButton, MenuButton, MenuButton, MenuButton]
+    }).then((result: promptAction.ActionMenuSuccessResponse) => {
+      if (result.index < 6) {
+        this.fontSize = sizes[result.index];
+        this.saveSettings();
+        promptAction.showToast({ message: `字体大小已设置为 ${this.fontSize}px`, duration: 2000 });
+      }
+    });
   }
 
   exportData() {
@@ -2928,6 +2945,8 @@ struct SettingsTab {
     this.selectedModel = settingsManager.settings.selectedModel;
     this.customUrl = settingsManager.settings.customUrl;
     this.followSystemDark = settingsManager.settings.followSystemDark;
+    this.prevFollowSystemDark = settingsManager.settings.followSystemDark;
+    this.autoLightMode = settingsManager.settings.autoLightMode || false;
     this.autoSaveInterval = settingsManager.settings.autoSaveInterval || 5;
     this.fontSize = settingsManager.settings.fontSize || 14;
     this.aiTimeout = settingsManager.settings.aiTimeout || 30;
@@ -2946,6 +2965,7 @@ struct SettingsTab {
     settingsManager.settings.aiTimeout = this.aiTimeout;
     settingsManager.settings.isDarkMode = this.isDarkMode;
     settingsManager.settings.followSystemDark = this.followSystemDark;
+    settingsManager.settings.autoLightMode = this.autoLightMode;
     settingsManager.settings.localFontPath = this.localFontPath;
     settingsManager.settings.localModelPath = this.localModelPath;
     settingsManager.save();
