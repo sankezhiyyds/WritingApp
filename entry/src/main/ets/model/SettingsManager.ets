@@ -10,7 +10,6 @@ export interface SettingsData {
   hasAgreedToTerms: boolean;
   followSystemDark: boolean;
   isDarkMode: boolean;
-  autoLightMode: boolean;
   autoSaveInterval: number;
   fontSize: number;
   aiTimeout: number;
@@ -19,6 +18,10 @@ export interface SettingsData {
   grantedPermissions: string[];
   localFontPath: string;
   localModelPath: string;
+  ggufContextLength: number;
+  ggufThreads: number;
+  ggufMaxTokens: number;
+  ggufTemperature: number;
 }
 
 export class SettingsManager {
@@ -33,7 +36,6 @@ export class SettingsManager {
     hasAgreedToTerms: false,
     followSystemDark: false,
     isDarkMode: false,
-    autoLightMode: false,
     autoSaveInterval: 5,
     fontSize: 14,
     aiTimeout: 30,
@@ -41,12 +43,24 @@ export class SettingsManager {
     userName: '',
     grantedPermissions: [],
     localFontPath: '',
-    localModelPath: ''
+    localModelPath: '',
+    ggufContextLength: 2048,
+    ggufThreads: 4,
+    ggufMaxTokens: 512,
+    ggufTemperature: 0.8
   };
   settings: SettingsData = this.defaultSettings;
   initPromise: Promise<void> | null = null;
 
-  async init(context: common.UIAbilityContext): Promise<void> {
+  init(context: common.UIAbilityContext): Promise<void> {
+    if (this.initPromise) {
+      return this.initPromise;
+    }
+    this.initPromise = this._doInit(context);
+    return this.initPromise;
+  }
+
+  private async _doInit(context: common.UIAbilityContext): Promise<void> {
     try {
       this.prefs = await preferences.getPreferences(context, 'writing_app');
       const stored = await this.prefs.get(this.storageKey, '') as string;
@@ -61,7 +75,6 @@ export class SettingsManager {
           hasAgreedToTerms: parsed.hasAgreedToTerms || false,
           followSystemDark: parsed.followSystemDark || false,
           isDarkMode: parsed.isDarkMode !== undefined ? parsed.isDarkMode : false,
-          autoLightMode: parsed.autoLightMode || false,
           autoSaveInterval: parsed.autoSaveInterval || 5,
           fontSize: parsed.fontSize || 14,
           aiTimeout: parsed.aiTimeout || 30,
@@ -69,7 +82,11 @@ export class SettingsManager {
           userName: parsed.userName || '',
           grantedPermissions: Array.isArray(parsed.grantedPermissions) ? parsed.grantedPermissions : [],
           localFontPath: parsed.localFontPath || '',
-          localModelPath: parsed.localModelPath || ''
+          localModelPath: parsed.localModelPath || '',
+          ggufContextLength: parsed.ggufContextLength ?? 2048,
+          ggufThreads: parsed.ggufThreads ?? 4,
+          ggufMaxTokens: parsed.ggufMaxTokens ?? 512,
+          ggufTemperature: parsed.ggufTemperature ?? 0.8
         };
       }
     } catch (e) {

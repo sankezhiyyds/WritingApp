@@ -1,4 +1,4 @@
-import { TemplateField, TemplateInfo, templateList } from '../model/TemplateModel';
+﻿import { TemplateField, TemplateInfo, templateList } from '../model/TemplateModel';
 import { WorkItem, workManager } from '../model/WorkManager';
 import { OutlineManagementPanel } from '../components/OutlineManagementPanel';
 import { settingsManager } from '../model/SettingsManager';
@@ -35,6 +35,11 @@ struct Index {
   @State onboardingPage: number = 0;
   @State currentBreakpoint: BreakpointType = 'sm';
   @StorageProp('sysDarkMode') @Watch('onSysDarkModeChange') sysDarkMode: boolean = false;
+  @StorageProp('appFontSize') fontSize: number = 14;
+
+  sf(base: number): number {
+    return Math.round(base * this.fontSize / 14);
+  }
   private controller: TabsController = new TabsController();
   private breakpointCallback: (bp: BreakpointType) => void = (bp: BreakpointType) => {
     this.currentBreakpoint = bp;
@@ -91,6 +96,7 @@ struct Index {
     settingsManager.initPromise = settingsManager.init(context);
     settingsManager.initPromise.then(() => {
       this.updateDarkMode();
+      AppStorage.setOrCreate('appFontSize', settingsManager.settings.fontSize || 14);
     });
     // 初始化华为账号服务并尝试静默登录
     huaweiAuthService.init(context);
@@ -111,12 +117,7 @@ struct Index {
   }
 
   updateDarkMode() {
-    const autoLight = settingsManager.settings.autoLightMode;
-    const followSystem = settingsManager.settings.followSystemDark;
-    if (autoLight) {
-      // 光感自动模式：跟随系统深色模式（由环境光传感器驱动）
-      this.isDarkMode = this.sysDarkMode;
-    } else if (followSystem) {
+    if (settingsManager.settings.followSystemDark) {
       // 跟随系统：获取系统配置的colorMode
       const context = getContext(this) as common.UIAbilityContext;
       const config = context.config;
@@ -129,9 +130,9 @@ struct Index {
     }
   }
 
-  /** 系统深色模式变化时自动同步（光感自动/跟随系统模式） */
+  /** 系统深色模式变化时自动同步（跟随系统模式） */
   onSysDarkModeChange(): void {
-    if (settingsManager.settings.autoLightMode || settingsManager.settings.followSystemDark) {
+    if (settingsManager.settings.followSystemDark) {
       this.updateDarkMode();
     }
   }
@@ -148,12 +149,12 @@ struct Index {
           // 侧边导航栏
           Column() {
             Text('创意写作')
-              .fontSize(18)
+              .fontSize(this.sf(18))
               .fontWeight(FontWeight.Bold)
               .fontColor(this.textColor)
               .margin({ top: 20, bottom: 24 })
             Text('🤖')
-              .fontSize(16)
+              .fontSize(this.sf(16))
               .margin({ bottom: 20 })
 
             this.SideNavItem('短幕剧', '🎬', 0)
@@ -164,7 +165,7 @@ struct Index {
 
             Blank()
             Text('AI')
-              .fontSize(10)
+              .fontSize(this.sf(10))
               .fontColor('#FFFFFF')
               .backgroundColor('#FF2D55')
               .borderRadius(4)
@@ -203,15 +204,15 @@ struct Index {
             // 顶部栏
             Row() {
               Text('创意写作')
-                .fontSize(20)
+                .fontSize(this.sf(20))
                 .fontWeight(FontWeight.Bold)
                 .fontColor(this.textColor)
               Blank()
               // AI标识
               Text('🤖')
-                .fontSize(20)
+                .fontSize(this.sf(20))
               Text('AI')
-                .fontSize(10)
+                .fontSize(this.sf(10))
                 .fontColor('#FFFFFF')
                 .backgroundColor('#FF2D55')
                 .borderRadius(4)
@@ -265,10 +266,10 @@ struct Index {
   SideNavItem(label: string, icon: string, index: number) {
     Row() {
       Text(icon)
-        .fontSize(20)
+        .fontSize(this.sf(20))
         .margin({ right: 12 })
       Text(label)
-        .fontSize(15)
+        .fontSize(this.sf(15))
         .fontColor(this.currentIndex === index ? '#FF6B35' : this.textColor)
         .fontWeight(this.currentIndex === index ? FontWeight.Bold : FontWeight.Normal)
     }
@@ -302,22 +303,22 @@ struct Index {
         // 第0页：欢迎页
         if (this.onboardingPage === 0) {
           Text('🎨')
-            .fontSize(60)
+            .fontSize(this.sf(60))
             .margin({ bottom: 16 })
 
           Text('欢迎使用创意写作')
-            .fontSize(24)
+            .fontSize(this.sf(24))
             .fontWeight(FontWeight.Bold)
             .fontColor('#1A1A2E')
             .margin({ bottom: 12 })
 
           Text('AI赋能，创意无限')
-            .fontSize(16)
+            .fontSize(this.sf(16))
             .fontColor('#FF2D55')
             .margin({ bottom: 24 })
 
           Text('这是一款专为创作者打造的AI写作助手，帮助您从灵感迸发到完整作品的全流程创作。')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontColor('#6B7280')
             .textAlign(TextAlign.Center)
             .margin({ bottom: 24 })
@@ -326,49 +327,49 @@ struct Index {
         // 第1页：双工作台
         if (this.onboardingPage === 1) {
           Text('📚')
-            .fontSize(60)
+            .fontSize(this.sf(60))
             .margin({ bottom: 16 })
 
           Text('双工作台设计')
-            .fontSize(24)
+            .fontSize(this.sf(24))
             .fontWeight(FontWeight.Bold)
             .fontColor('#1A1A2E')
             .margin({ bottom: 12 })
 
           Text('短幕剧工作台')
-            .fontSize(16)
+            .fontSize(this.sf(16))
             .fontWeight(FontWeight.Medium)
             .fontColor('#1A1A2E')
             .margin({ bottom: 8 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 快速创作竖屏短幕剧、微电影')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontColor('#6B7280')
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 提供多种剧本模板和结构')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontColor('#6B7280')
             .margin({ bottom: 16 })
             .alignSelf(ItemAlign.Start)
 
           Text('中长篇工作台')
-            .fontSize(16)
+            .fontSize(this.sf(16))
             .fontWeight(FontWeight.Medium)
             .fontColor('#1A1A2E')
             .margin({ bottom: 8 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 系统规划长篇小说、剧本')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontColor('#6B7280')
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 章节管理、人物设定、世界观构建')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontColor('#6B7280')
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
@@ -377,47 +378,47 @@ struct Index {
         // 第2页：AI对话
         if (this.onboardingPage === 2) {
           Text('🤖')
-            .fontSize(60)
+            .fontSize(this.sf(60))
             .margin({ bottom: 16 })
 
           Text('AI智能对话')
-            .fontSize(24)
+            .fontSize(this.sf(24))
             .fontWeight(FontWeight.Bold)
             .fontColor('#1A1A2E')
             .margin({ bottom: 12 })
 
           Text('• 与AI实时对话，碰撞灵感火花')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontColor('#6B7280')
             .margin({ bottom: 8 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 一键保存思维链路为文档')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontColor('#6B7280')
             .margin({ bottom: 8 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 支持多种AI模型')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontColor('#6B7280')
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
           Text('  - DeepSeek、智谱GLM、百度文心')
-            .fontSize(13)
+            .fontSize(this.sf(13))
             .fontColor('#9CA3AF')
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
           Text('  - 小艺助手、本地GGUF模型')
-            .fontSize(13)
+            .fontSize(this.sf(13))
             .fontColor('#9CA3AF')
             .margin({ bottom: 16 })
             .alignSelf(ItemAlign.Start)
 
           Text('💡 提示：在设置中配置API Key即可使用')
-            .fontSize(13)
+            .fontSize(this.sf(13))
             .fontColor('#FF2D55')
             .alignSelf(ItemAlign.Start)
         }
@@ -425,55 +426,55 @@ struct Index {
         // 第3页：章节管理
         if (this.onboardingPage === 3) {
           Text('📝')
-            .fontSize(60)
+            .fontSize(this.sf(60))
             .margin({ bottom: 16 })
 
           Text('章节与版本管理')
-            .fontSize(24)
+            .fontSize(this.sf(24))
             .fontWeight(FontWeight.Bold)
             .fontColor('#1A1A2E')
             .margin({ bottom: 12 })
 
           Text('章节管理')
-            .fontSize(16)
+            .fontSize(this.sf(16))
             .fontWeight(FontWeight.Medium)
             .fontColor('#1A1A2E')
             .margin({ bottom: 8 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 创建、编辑、删除章节')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontColor('#6B7280')
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 分类管理：大纲、人设、正文等')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontColor('#6B7280')
             .margin({ bottom: 16 })
             .alignSelf(ItemAlign.Start)
 
           Text('版本历史')
-            .fontSize(16)
+            .fontSize(this.sf(16))
             .fontWeight(FontWeight.Medium)
             .fontColor('#1A1A2E')
             .margin({ bottom: 8 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 自动保存修改历史')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontColor('#6B7280')
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 随时回溯到任意版本')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontColor('#6B7280')
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 修改内容自动高亮显示')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontColor('#6B7280')
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
@@ -482,48 +483,48 @@ struct Index {
         // 第4页：隐私与登录
         if (this.onboardingPage === 4) {
           Text('🔒')
-            .fontSize(60)
+            .fontSize(this.sf(60))
             .margin({ bottom: 16 })
 
           Text('隐私保护')
-            .fontSize(24)
+            .fontSize(this.sf(24))
             .fontWeight(FontWeight.Bold)
             .fontColor('#1A1A2E')
             .margin({ bottom: 12 })
 
           Text('• 您的API Key仅存储在本地')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontColor('#6B7280')
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 作品数据完全保存在您的设备上')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontColor('#6B7280')
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 不会上传任何用户内容到服务器')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontColor('#6B7280')
             .margin({ bottom: 20 })
             .alignSelf(ItemAlign.Start)
 
           Text('华为账号登录（可选）')
-            .fontSize(16)
+            .fontSize(this.sf(16))
             .fontWeight(FontWeight.Medium)
             .fontColor('#1A1A2E')
             .margin({ bottom: 8 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 一键登录，快速开始创作')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontColor('#6B7280')
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 未来支持云同步功能')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontColor('#6B7280')
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
@@ -533,7 +534,7 @@ struct Index {
         Row() {
           if (this.onboardingPage > 0) {
             Button('上一步')
-              .fontSize(14)
+              .fontSize(this.sf(14))
               .fontColor('#6B7280')
               .backgroundColor('#F3F4F6')
               .borderRadius(20)
@@ -547,7 +548,7 @@ struct Index {
 
           if (this.onboardingPage < 4) {
             Button('下一步')
-              .fontSize(14)
+              .fontSize(this.sf(14))
               .fontColor('#FFFFFF')
               .backgroundColor('#FF2D55')
               .borderRadius(20)
@@ -559,7 +560,7 @@ struct Index {
               })
           } else {
             Button('开始使用')
-              .fontSize(14)
+              .fontSize(this.sf(14))
               .fontColor('#FFFFFF')
               .backgroundColor('#FF2D55')
               .borderRadius(20)
@@ -595,12 +596,12 @@ struct Index {
     Column() {
       Row() {
         Text('📖 书架')
-          .fontSize(20)
+          .fontSize(this.sf(20))
           .fontWeight(FontWeight.Bold)
           .fontColor(this.textColor)
         Blank()
         Button('新建')
-          .fontSize(14)
+          .fontSize(this.sf(14))
           .fontColor('#FFFFFF')
           .backgroundColor('#FF2D55')
           .borderRadius(20)
@@ -621,7 +622,7 @@ struct Index {
               // 封面缩略图
               Column() {
                 Text((work.title || '未命名').charAt(0))
-                  .fontSize(18)
+                  .fontSize(this.sf(18))
                   .fontColor('#FFFFFF')
                   .fontWeight(FontWeight.Bold)
               }
@@ -634,17 +635,17 @@ struct Index {
 
               Column() {
                 Text(work.title || '未命名作品')
-                  .fontSize(14)
+                  .fontSize(this.sf(14))
                   .fontWeight(FontWeight.Medium)
                   .fontColor(this.textColor)
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
                 Text(work.templateName)
-                  .fontSize(11)
+                  .fontSize(this.sf(11))
                   .fontColor('#FF2D55')
                   .margin({ top: 2 })
                 Text(work.updateTime)
-                  .fontSize(10)
+                  .fontSize(this.sf(10))
                   .fontColor('#9CA3AF')
                   .margin({ top: 2 })
               }
@@ -652,7 +653,7 @@ struct Index {
               .layoutWeight(1)
 
               Text('归档')
-                .fontSize(12)
+                .fontSize(this.sf(12))
                 .fontColor('#3B82F6')
                 .padding({ left: 8, right: 8 })
                 .onClick(() => {
@@ -661,7 +662,7 @@ struct Index {
                 })
 
               Text('>')
-                .fontSize(16)
+                .fontSize(this.sf(16))
                 .fontColor('#D1D5DB')
             }
             .width('100%')
@@ -694,7 +695,7 @@ struct Index {
     Column() {
       Row() {
         Text('📦 旧档区')
-          .fontSize(20)
+          .fontSize(this.sf(20))
           .fontWeight(FontWeight.Bold)
           .fontColor(this.textColor)
         Blank()
@@ -711,7 +712,7 @@ struct Index {
                 // 封面缩略图
                 Column() {
                   Text((work.title || '未命名').charAt(0))
-                    .fontSize(18)
+                    .fontSize(this.sf(18))
                     .fontColor('#FFFFFF')
                     .fontWeight(FontWeight.Bold)
                 }
@@ -724,17 +725,17 @@ struct Index {
 
                 Column() {
                   Text(work.title || '未命名作品')
-                    .fontSize(14)
+                    .fontSize(this.sf(14))
                     .fontWeight(FontWeight.Medium)
                     .fontColor(this.textColor)
                     .maxLines(1)
                     .textOverflow({ overflow: TextOverflow.Ellipsis })
                   Text(work.templateName)
-                    .fontSize(11)
+                    .fontSize(this.sf(11))
                     .fontColor('#FF2D55')
                     .margin({ top: 2 })
                   Text(work.updateTime)
-                    .fontSize(10)
+                    .fontSize(this.sf(10))
                     .fontColor('#9CA3AF')
                     .margin({ top: 2 })
                 }
@@ -742,7 +743,7 @@ struct Index {
                 .layoutWeight(1)
 
                 Text('移回书架')
-                  .fontSize(12)
+                  .fontSize(this.sf(12))
                   .fontColor('#3B82F6')
                   .padding({ left: 8, right: 8 })
                   .onClick(() => {
@@ -751,7 +752,7 @@ struct Index {
                   })
 
                 Text('>')
-                  .fontSize(16)
+                  .fontSize(this.sf(16))
                   .fontColor('#D1D5DB')
               }
               .width('100%')
@@ -770,11 +771,11 @@ struct Index {
           } else {
             Column() {
               Text('📦 暂无归档作品')
-                .fontSize(16)
+                .fontSize(this.sf(16))
                 .fontColor('#9CA3AF')
                 .margin({ bottom: 8 })
               Text('在书架中长按作品可移入旧档区')
-                .fontSize(13)
+                .fontSize(this.sf(13))
                 .fontColor('#B0B7C3')
             }
             .width('100%')
@@ -801,9 +802,9 @@ struct Index {
       // 短幕剧
       Column() {
         Text('🎬')
-          .fontSize(26)
+          .fontSize(this.sf(26))
         Text('短幕剧')
-          .fontSize(12)
+          .fontSize(this.sf(12))
           .fontColor(this.currentIndex === 0 ? '#FF2D55' : (this.isDarkMode ? '#E5E7EB' : '#374151'))
           .margin({ top: 3 })
       }
@@ -816,9 +817,9 @@ struct Index {
       // 中长篇
       Column() {
         Text('📚')
-          .fontSize(26)
+          .fontSize(this.sf(26))
         Text('中长篇')
-          .fontSize(12)
+          .fontSize(this.sf(12))
           .fontColor(this.currentIndex === 1 ? '#FF2D55' : (this.isDarkMode ? '#E5E7EB' : '#374151'))
           .margin({ top: 3 })
       }
@@ -831,9 +832,9 @@ struct Index {
       // 书架
       Column() {
         Text('📖')
-          .fontSize(26)
+          .fontSize(this.sf(26))
         Text('书架')
-          .fontSize(12)
+          .fontSize(this.sf(12))
           .fontColor(this.currentIndex === 2 ? '#FF2D55' : (this.isDarkMode ? '#E5E7EB' : '#374151'))
           .margin({ top: 3 })
       }
@@ -846,9 +847,9 @@ struct Index {
       // 旧档
       Column() {
         Text('📦')
-          .fontSize(26)
+          .fontSize(this.sf(26))
         Text('旧档')
-          .fontSize(12)
+          .fontSize(this.sf(12))
           .fontColor(this.currentIndex === 3 ? '#FF2D55' : (this.isDarkMode ? '#E5E7EB' : '#374151'))
           .margin({ top: 3 })
       }
@@ -861,9 +862,9 @@ struct Index {
       // 设置
       Column() {
         Text('⚙️')
-          .fontSize(26)
+          .fontSize(this.sf(26))
         Text('设置')
-          .fontSize(12)
+          .fontSize(this.sf(12))
           .fontColor(this.currentIndex === 4 ? '#FF2D55' : (this.isDarkMode ? '#E5E7EB' : '#374151'))
           .margin({ top: 3 })
       }
@@ -897,9 +898,9 @@ struct Index {
   TabBuilder(title: string, icon: string, index: number) {
     Column() {
       Text(icon)
-        .fontSize(20)
+        .fontSize(this.sf(20))
       Text(title)
-        .fontSize(10)
+        .fontSize(this.sf(10))
         .fontColor(this.currentIndex === index ? '#FF2D55' : '#9CA3AF')
         .margin({ top: 2 })
     }
@@ -917,11 +918,16 @@ struct ShortDramaTab {
   @Prop cardBg: string;
   @Prop textColor: string;
   @Prop bgColor: string;
+  @StorageProp('appFontSize') fontSize: number = 14;
   @State templates: TemplateInfo[] = [];
   @State works: WorkItem[] = [];
   @State archivedWorks: WorkItem[] = [];
   @State showArchive: boolean = false;
   private unsubscribe: (() => void) | null = null;
+
+  sf(base: number): number {
+    return Math.round(base * this.fontSize / 14);
+  }
 
   /** 短幕剧工作台覆盖的模板品类 */
   private readonly categories: string[] = ['剧本类', '喜剧类', '灵感类', '广告类', '交互沉浸类', '创意引擎'];
@@ -994,12 +1000,12 @@ struct ShortDramaTab {
     Column() {
       Row() {
         Text('短幕剧工作台')
-          .fontSize(18)
+          .fontSize(this.sf(18))
           .fontWeight(FontWeight.Bold)
           .fontColor(this.textColor)
         Blank()
         Button('新建')
-          .fontSize(14)
+          .fontSize(this.sf(14))
           .fontColor('#FFFFFF')
           .backgroundColor('#FF2D55')
           .borderRadius(20)
@@ -1020,15 +1026,15 @@ struct ShortDramaTab {
               // 分类标题
               Row() {
                 Text(this.getCategoryEmoji(category))
-                  .fontSize(14)
+                  .fontSize(this.sf(14))
                 Text(category)
-                  .fontSize(14)
+                  .fontSize(this.sf(14))
                   .fontWeight(FontWeight.Bold)
                   .fontColor(this.textColor)
                   .margin({ left: 6 })
                 Blank()
                 Text(`${this.templates.filter(t => t.category === category).length}个模板`)
-                  .fontSize(11)
+                  .fontSize(this.sf(11))
                   .fontColor('#9CA3AF')
               }
               .width('100%')
@@ -1073,7 +1079,7 @@ struct ShortDramaTab {
           .fill(template.color)
         if (typeof template.icon === 'string') {
           Text(template.icon)
-            .fontSize(16)
+            .fontSize(this.sf(16))
             .fontColor('#FFFFFF')
         } else {
           Image(template.icon)
@@ -1086,7 +1092,7 @@ struct ShortDramaTab {
       .height(36)
 
       Text(template.name)
-        .fontSize(13)
+        .fontSize(this.sf(13))
         .fontWeight(FontWeight.Medium)
         .fontColor(this.textColor)
         .margin({ left: 10 })
@@ -1095,7 +1101,7 @@ struct ShortDramaTab {
         .textOverflow({ overflow: TextOverflow.Ellipsis })
 
       Text('›')
-        .fontSize(18)
+        .fontSize(this.sf(18))
         .fontColor('#9CA3AF')
     }
     .width('100%')
@@ -1118,7 +1124,7 @@ struct ShortDramaTab {
       // 封面缩略图
       Column() {
         Text((work.title || '未命名').charAt(0))
-          .fontSize(20)
+          .fontSize(this.sf(20))
           .fontColor('#FFFFFF')
           .fontWeight(FontWeight.Bold)
       }
@@ -1131,17 +1137,17 @@ struct ShortDramaTab {
 
       Column() {
         Text(work.title || '未命名作品')
-          .fontSize(14)
+          .fontSize(this.sf(14))
           .fontWeight(FontWeight.Medium)
           .fontColor(this.textColor)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
         Text(work.templateName)
-          .fontSize(11)
+          .fontSize(this.sf(11))
           .fontColor('#FF2D55')
           .margin({ top: 2 })
         Text(work.updateTime)
-          .fontSize(10)
+          .fontSize(this.sf(10))
           .fontColor('#9CA3AF')
           .margin({ top: 2 })
       }
@@ -1149,7 +1155,7 @@ struct ShortDramaTab {
       .layoutWeight(1)
 
       Text(isArchived ? '移回书架' : '归档')
-        .fontSize(12)
+        .fontSize(this.sf(12))
         .fontColor('#3B82F6')
         .padding({ left: 8, right: 8 })
         .onClick(() => {
@@ -1163,7 +1169,7 @@ struct ShortDramaTab {
         })
 
       Text('删除')
-        .fontSize(12)
+        .fontSize(this.sf(12))
         .fontColor('#EF4444')
         .padding({ left: 8, right: 8 })
         .onClick(() => {
@@ -1171,7 +1177,7 @@ struct ShortDramaTab {
         })
 
       Text('>')
-        .fontSize(16)
+        .fontSize(this.sf(16))
         .fontColor('#D1D5DB')
     }
     .width('100%')
@@ -1212,6 +1218,7 @@ struct NovelTab {
   @Prop cardBg: string;
   @Prop textColor: string;
   @Prop bgColor: string;
+  @StorageProp('appFontSize') fontSize: number = 14;
   @State templates: TemplateInfo[] = [];
   @State works: WorkItem[] = [];
   @State archivedWorks: WorkItem[] = [];
@@ -1220,6 +1227,10 @@ struct NovelTab {
   @State selectedWorkId: string = '';
   @State selectedWorkTitle: string = '';
   private unsubscribe: (() => void) | null = null;
+
+  sf(base: number): number {
+    return Math.round(base * this.fontSize / 14);
+  }
 
   /** 中长篇工作台覆盖的模板品类 */
   private readonly categories: string[] = ['叙事类', '互动类', '中长篇', '世界观专项', '人物专项', '时间线专项', '写作工具', '出版分享'];
@@ -1299,12 +1310,12 @@ struct NovelTab {
     Column() {
       Row() {
         Text('中长篇工作台')
-          .fontSize(18)
+          .fontSize(this.sf(18))
           .fontWeight(FontWeight.Bold)
           .fontColor(this.textColor)
         Blank()
         Button('新建')
-          .fontSize(14)
+          .fontSize(this.sf(14))
           .fontColor('#FFFFFF')
           .backgroundColor('#FF2D55')
           .borderRadius(20)
@@ -1325,15 +1336,15 @@ struct NovelTab {
               // 分类标题
               Row() {
                 Text(this.getCategoryEmoji(category))
-                  .fontSize(14)
+                  .fontSize(this.sf(14))
                 Text(category)
-                  .fontSize(14)
+                  .fontSize(this.sf(14))
                   .fontWeight(FontWeight.Bold)
                   .fontColor(this.textColor)
                   .margin({ left: 6 })
                 Blank()
                 Text(`${this.templates.filter(t => t.category === category).length}个模板`)
-                  .fontSize(11)
+                  .fontSize(this.sf(11))
                   .fontColor('#9CA3AF')
               }
               .width('100%')
@@ -1392,7 +1403,7 @@ struct NovelTab {
           .fill(template.color)
         if (typeof template.icon === 'string') {
           Text(template.icon)
-            .fontSize(16)
+            .fontSize(this.sf(16))
             .fontColor('#FFFFFF')
         } else {
           Image(template.icon)
@@ -1405,7 +1416,7 @@ struct NovelTab {
       .height(36)
 
       Text(template.name)
-        .fontSize(13)
+        .fontSize(this.sf(13))
         .fontWeight(FontWeight.Medium)
         .fontColor(this.textColor)
         .margin({ left: 10 })
@@ -1414,7 +1425,7 @@ struct NovelTab {
         .textOverflow({ overflow: TextOverflow.Ellipsis })
 
       Text('›')
-        .fontSize(18)
+        .fontSize(this.sf(18))
         .fontColor('#9CA3AF')
     }
     .width('100%')
@@ -1437,7 +1448,7 @@ struct NovelTab {
       // 封面缩略图
       Column() {
         Text((work.title || '未命名').charAt(0))
-          .fontSize(20)
+          .fontSize(this.sf(20))
           .fontColor('#FFFFFF')
           .fontWeight(FontWeight.Bold)
       }
@@ -1450,17 +1461,17 @@ struct NovelTab {
 
       Column() {
         Text(work.title || '未命名作品')
-          .fontSize(14)
+          .fontSize(this.sf(14))
           .fontWeight(FontWeight.Medium)
           .fontColor(this.textColor)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
         Text(work.templateName)
-          .fontSize(11)
+          .fontSize(this.sf(11))
           .fontColor('#FF2D55')
           .margin({ top: 2 })
         Text(work.updateTime)
-          .fontSize(10)
+          .fontSize(this.sf(10))
           .fontColor('#9CA3AF')
           .margin({ top: 2 })
       }
@@ -1468,14 +1479,14 @@ struct NovelTab {
       .layoutWeight(1)
 
       Text('📋')
-        .fontSize(18)
+        .fontSize(this.sf(18))
         .margin({ right: 8 })
         .onClick(() => {
           this.openOutlinePanel(work);
         })
 
       Text(isArchived ? '移回书架' : '归档')
-        .fontSize(12)
+        .fontSize(this.sf(12))
         .fontColor('#3B82F6')
         .padding({ left: 4, right: 4 })
         .onClick(() => {
@@ -1489,7 +1500,7 @@ struct NovelTab {
         })
 
       Text('删除')
-        .fontSize(12)
+        .fontSize(this.sf(12))
         .fontColor('#EF4444')
         .padding({ left: 4, right: 4 })
         .onClick(() => {
@@ -1497,7 +1508,7 @@ struct NovelTab {
         })
 
       Text('>')
-        .fontSize(16)
+        .fontSize(this.sf(16))
         .fontColor('#D1D5DB')
     }
     .width('100%')
@@ -1543,7 +1554,6 @@ struct SettingsTab {
   @State showCustomUrlInput: boolean = false;
   @State customUrlInput: string = '';
   @State followSystemDark: boolean = false;
-  @State autoLightMode: boolean = false;
   @State prevFollowSystemDark: boolean = false;
   @State showModelPickerPanel: boolean = false;
   @State showPrivacyPanel: boolean = false;
@@ -1552,7 +1562,7 @@ struct SettingsTab {
   @State isLoggedIn: boolean = false;
   @State userName: string = '';
   @State autoSaveInterval: number = 5;
-  @State fontSize: number = 14;
+  @StorageProp('appFontSize') fontSize: number = 14;
   @State aiTimeout: number = 30;
   @State showImportPanel: boolean = false;
   @State importText: string = '';
@@ -1565,6 +1575,10 @@ struct SettingsTab {
   @State showFontPicker: boolean = false;
   @State localModelPath: string = '';
   @State showModelPicker: boolean = false;
+  @State ggufContextLength: number = 2048;
+  @State ggufThreads: number = 4;
+  @State ggufMaxTokens: number = 512;
+  @State ggufTemperature: number = 0.8;
 
   aboutToAppear() {
     if (settingsManager.initPromise) {
@@ -1591,11 +1605,9 @@ struct SettingsTab {
     return parts[parts.length - 1] || fullPath;
   }
 
-  /** 根据当前设置计算并应用暗色模式（替代Index.updateDarkMode） */
+  /** 根据当前设置计算并应用暗色模式 */
   applyDarkMode(): void {
-    if (settingsManager.settings.autoLightMode) {
-      this.isDarkMode = AppStorage.get<boolean>('sysDarkMode') ?? false;
-    } else if (settingsManager.settings.followSystemDark) {
+    if (settingsManager.settings.followSystemDark) {
       const ctx = getContext(this) as common.UIAbilityContext;
       if (ctx.config && ctx.config.colorMode !== undefined) {
         this.isDarkMode = ctx.config.colorMode === 1;
@@ -1608,7 +1620,7 @@ struct SettingsTab {
   build() {
     Column() {
       Text('设置')
-        .fontSize(20)
+        .fontSize(this.sf(20))
         .fontWeight(FontWeight.Bold)
         .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
         .alignSelf(ItemAlign.Start)
@@ -1657,6 +1669,140 @@ struct SettingsTab {
           this.showModelPicker = true;
         })
 
+        if (this.selectedModel === 'gguf') {
+          ListItem() {
+            Column() {
+              Row() {
+                Text('上下文长度')
+                  .fontSize(this.sf(14))
+                  .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+                Blank()
+                Text(`${this.ggufContextLength}`)
+                  .fontSize(this.sf(14))
+                  .fontColor('#9CA3AF')
+              }
+              .width('100%')
+              .padding({ top: 8, bottom: 4 })
+
+              Slider({
+                value: this.ggufContextLength,
+                min: 512,
+                max: 8192,
+                step: 512
+              })
+                .width('100%')
+                .trackColor(this.isDarkMode ? '#3A3A3A' : '#E0E0E0')
+                .selectedColor('#007DFF')
+                .onChange((value: number) => {
+                  this.ggufContextLength = value;
+                  settingsManager.settings.ggufContextLength = value;
+                  settingsManager.save();
+                })
+            }
+            .width('100%')
+            .padding({ left: 16, right: 16, bottom: 8 })
+          }
+
+          ListItem() {
+            Column() {
+              Row() {
+                Text('推理线程数')
+                  .fontSize(this.sf(14))
+                  .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+                Blank()
+                Text(`${this.ggufThreads}`)
+                  .fontSize(this.sf(14))
+                  .fontColor('#9CA3AF')
+              }
+              .width('100%')
+              .padding({ top: 8, bottom: 4 })
+
+              Slider({
+                value: this.ggufThreads,
+                min: 1,
+                max: 8,
+                step: 1
+              })
+                .width('100%')
+                .trackColor(this.isDarkMode ? '#3A3A3A' : '#E0E0E0')
+                .selectedColor('#007DFF')
+                .onChange((value: number) => {
+                  this.ggufThreads = value;
+                  settingsManager.settings.ggufThreads = value;
+                  settingsManager.save();
+                })
+            }
+            .width('100%')
+            .padding({ left: 16, right: 16, bottom: 8 })
+          }
+
+          ListItem() {
+            Column() {
+              Row() {
+                Text('最大生成Token')
+                  .fontSize(this.sf(14))
+                  .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+                Blank()
+                Text(`${this.ggufMaxTokens}`)
+                  .fontSize(this.sf(14))
+                  .fontColor('#9CA3AF')
+              }
+              .width('100%')
+              .padding({ top: 8, bottom: 4 })
+
+              Slider({
+                value: this.ggufMaxTokens,
+                min: 128,
+                max: 2048,
+                step: 128
+              })
+                .width('100%')
+                .trackColor(this.isDarkMode ? '#3A3A3A' : '#E0E0E0')
+                .selectedColor('#007DFF')
+                .onChange((value: number) => {
+                  this.ggufMaxTokens = value;
+                  settingsManager.settings.ggufMaxTokens = value;
+                  settingsManager.save();
+                })
+            }
+            .width('100%')
+            .padding({ left: 16, right: 16, bottom: 8 })
+          }
+
+          ListItem() {
+            Column() {
+              Row() {
+                Text('采样温度')
+                  .fontSize(this.sf(14))
+                  .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+                Blank()
+                Text(`${this.ggufTemperature.toFixed(1)}`)
+                  .fontSize(this.sf(14))
+                  .fontColor('#9CA3AF')
+              }
+              .width('100%')
+              .padding({ top: 8, bottom: 4 })
+
+              Slider({
+                value: this.ggufTemperature * 10,
+                min: 1,
+                max: 20,
+                step: 1
+              })
+                .width('100%')
+                .trackColor(this.isDarkMode ? '#3A3A3A' : '#E0E0E0')
+                .selectedColor('#007DFF')
+                .onChange((value: number) => {
+                  this.ggufTemperature = value / 10;
+                  settingsManager.settings.ggufTemperature = value / 10;
+                  settingsManager.save();
+                })
+            }
+            .width('100%')
+            .padding({ left: 16, right: 16, bottom: 8 })
+          }
+        }
+
         // ===== 写作设置 =====
         ListItem() {
           this.SectionTitle('写作设置')
@@ -1677,11 +1823,41 @@ struct SettingsTab {
         })
 
         ListItem() {
-          this.SettingRow('字体大小', `${this.fontSize}px`, true)
+          Row() {
+            Text('📝 字体大小')
+              .fontSize(this.sf(14))
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this._textPrimary)
+
+            Slider({
+              value: this.fontSize,
+              min: 12,
+              max: 24,
+              step: 2,
+              style: SliderStyle.OutSet
+            })
+              .layoutWeight(1)
+              .margin({ left: 12, right: 12 })
+              .trackThickness(6)
+              .selectedColor(this.isDarkMode ? '#0A84FF' : '#007AFF')
+              .blockColor(this.isDarkMode ? '#0A84FF' : '#007AFF')
+              .onChange((value: number) => {
+                this.fontSize = value;
+                AppStorage.setOrCreate('appFontSize', value);
+                settingsManager.settings.fontSize = value;
+                settingsManager.save();
+              })
+
+            Text(`${this.fontSize}px`)
+              .fontSize(this.sf(13))
+              .fontColor(this._textSecondary)
+              .width(40)
+              .textAlign(TextAlign.End)
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16 })
+          .height(56)
         }
-        .onClick(() => {
-          this.selectFontSize();
-        })
 
         ListItem() {
           this.SettingRow('本地字体文件', this.localFontPath ? this.getFileName(this.localFontPath) : '未选择', true)
@@ -1696,46 +1872,6 @@ struct SettingsTab {
         .onClick(() => {
           this.selectDarkMode();
         })
-
-        ListItem() {
-          Row() {
-            Column() {
-              Text('🌙 光感自动深色')
-                .fontSize(14)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this._textPrimary)
-              Text('自动跟随环境光线切换深色/浅色')
-                .fontSize(11)
-                .fontColor(this._textSecondary)
-                .margin({ top: 2 })
-            }
-            .alignItems(HorizontalAlign.Start)
-            .layoutWeight(1)
-
-            Toggle({ type: ToggleType.Switch, isOn: this.autoLightMode })
-              .selectedColor('#FF2D55')
-              .switchPointColor('#FFFFFF')
-              .onChange((isOn: boolean) => {
-                this.autoLightMode = isOn;
-                settingsManager.settings.autoLightMode = isOn;
-                if (isOn) {
-                  // 开启光感时保存之前的跟随状态
-                  this.prevFollowSystemDark = this.followSystemDark;
-                  settingsManager.settings.followSystemDark = true;
-                  this.followSystemDark = true;
-                } else {
-                  // 关闭光感时恢复到之前的跟随状态
-                  settingsManager.settings.followSystemDark = this.prevFollowSystemDark;
-                  this.followSystemDark = this.prevFollowSystemDark;
-                }
-                settingsManager.save();
-                this.applyDarkMode(); // 直接刷新，不弹菜单
-              })
-          }
-          .width('100%')
-          .padding({ left: 16, right: 16 })
-          .height(56)
-        }
 
         // ===== 数据管理 =====
         ListItem() {
@@ -1846,18 +1982,18 @@ struct SettingsTab {
         Column() {
           Column() {
             Text('设置 API Key')
-              .fontSize(16)
+              .fontSize(this.sf(16))
               .fontWeight(FontWeight.Bold)
               .fontColor(this._textPrimary)
               .margin({ bottom: 8 })
             Text('仅本地存储，不会上传到任何服务器')
-              .fontSize(12)
+              .fontSize(this.sf(12))
               .fontColor('#9CA3AF')
               .margin({ bottom: 12 })
             TextInput({ placeholder: '请输入 API Key', text: this.apiKeyInput })
               .width('100%')
               .height(44)
-              .fontSize(14)
+              .fontSize(this.sf(14))
               .backgroundColor(this._inputBg)
               .borderRadius(8)
               .padding({ left: 12, right: 12 })
@@ -1866,7 +2002,7 @@ struct SettingsTab {
               })
             Row() {
               Button('取消')
-                .fontSize(14)
+                .fontSize(this.sf(14))
                 .fontColor(this._cancelText)
                 .backgroundColor(this._cancelBg)
                 .borderRadius(20)
@@ -1877,7 +2013,7 @@ struct SettingsTab {
                   this.showApiKeyInput = false;
                 })
               Button('保存')
-                .fontSize(14)
+                .fontSize(this.sf(14))
                 .fontColor('#FFFFFF')
                 .backgroundColor('#FF2D55')
                 .borderRadius(20)
@@ -1915,18 +2051,18 @@ struct SettingsTab {
         Column() {
           Column() {
             Text('设置自定义接口地址')
-              .fontSize(16)
+              .fontSize(this.sf(16))
               .fontWeight(FontWeight.Bold)
               .fontColor(this._textPrimary)
               .margin({ bottom: 8 })
             Text('用于自定义AI模型API端点')
-              .fontSize(12)
+              .fontSize(this.sf(12))
               .fontColor('#9CA3AF')
               .margin({ bottom: 12 })
             TextInput({ placeholder: '请输入 API 地址', text: this.customUrlInput })
               .width('100%')
               .height(44)
-              .fontSize(14)
+              .fontSize(this.sf(14))
               .backgroundColor(this._inputBg)
               .borderRadius(8)
               .padding({ left: 12, right: 12 })
@@ -1935,7 +2071,7 @@ struct SettingsTab {
               })
             Row() {
               Button('取消')
-                .fontSize(14)
+                .fontSize(this.sf(14))
                 .fontColor(this._cancelText)
                 .backgroundColor(this._cancelBg)
                 .borderRadius(20)
@@ -1946,7 +2082,7 @@ struct SettingsTab {
                   this.showCustomUrlInput = false;
                 })
               Button('保存')
-                .fontSize(14)
+                .fontSize(this.sf(14))
                 .fontColor('#FFFFFF')
                 .backgroundColor('#FF2D55')
                 .borderRadius(20)
@@ -1984,7 +2120,7 @@ struct SettingsTab {
         Column() {
           Column() {
             Text('选择AI模型')
-              .fontSize(16)
+              .fontSize(this.sf(16))
               .fontColor(this._textPrimary)
               .margin({ bottom: 16 })
 
@@ -1996,7 +2132,7 @@ struct SettingsTab {
             this.ModelOption('自定义接口', 'custom')
 
             Button('取消')
-              .fontSize(14)
+              .fontSize(this.sf(14))
               .fontColor(this._cancelText)
               .backgroundColor(this._cancelBg)
               .borderRadius(20)
@@ -2029,19 +2165,19 @@ struct SettingsTab {
         Column() {
           Column() {
             Text('账号登录')
-              .fontSize(16)
+              .fontSize(this.sf(16))
               .fontWeight(FontWeight.Bold)
               .fontColor(this._textPrimary)
               .margin({ bottom: 8 })
 
             if (this.isLoggedIn) {
               Text(`已登录: ${this.userName}`)
-                .fontSize(14)
+                .fontSize(this.sf(14))
                 .fontColor(this._textSecondary)
                 .margin({ bottom: 16 })
 
               Button('退出登录')
-                .fontSize(14)
+                .fontSize(this.sf(14))
                 .fontColor('#FFFFFF')
                 .backgroundColor('#FF4D4D')
                 .borderRadius(20)
@@ -2052,13 +2188,13 @@ struct SettingsTab {
                 })
             } else {
               Text('登录后即可使用AI功能和修改API设置')
-                .fontSize(13)
+                .fontSize(this.sf(13))
                 .fontColor('#9CA3AF')
                 .margin({ bottom: 16 })
                 .textAlign(TextAlign.Center)
 
               Button('华为账号一键登录')
-                .fontSize(14)
+                .fontSize(this.sf(14))
                 .fontColor('#FFFFFF')
                 .backgroundColor('#FF2D55')
                 .borderRadius(20)
@@ -2070,7 +2206,7 @@ struct SettingsTab {
                 })
 
               Button('暂不登录')
-                .fontSize(13)
+                .fontSize(this.sf(13))
                 .fontColor('#9CA3AF')
                 .backgroundColor('transparent')
                 .height(36)
@@ -2102,39 +2238,39 @@ struct SettingsTab {
         Column() {
           Column() {
             Text('用户协议与隐私政策')
-              .fontSize(16)
+              .fontSize(this.sf(16))
               .fontWeight(FontWeight.Bold)
               .fontColor(this._textPrimary)
               .margin({ bottom: 12 })
 
             Text('【用户协议】')
-              .fontSize(14)
+              .fontSize(this.sf(14))
               .fontWeight(FontWeight.Bold)
               .fontColor(this._textPrimary)
               .margin({ bottom: 8 })
               .alignSelf(ItemAlign.Start)
 
             Text('1. 本应用仅供个人学习和创作使用，不得用于商业侵权用途。\n2. 用户需遵守相关法律法规，不得利用本应用生成违法违规内容。\n3. AI生成的内容版权归用户所有，用户需自行承担使用风险。\n4. 用户应妥善保管API Key，不得将其分享给他人使用。\n5. 本应用不对AI生成内容的准确性和合法性负责。')
-              .fontSize(12)
+              .fontSize(this.sf(12))
               .fontColor(this._textSecondary)
               .margin({ bottom: 16 })
               .alignSelf(ItemAlign.Start)
 
             Text('【隐私政策】')
-              .fontSize(14)
+              .fontSize(this.sf(14))
               .fontWeight(FontWeight.Bold)
               .fontColor(this._textPrimary)
               .margin({ bottom: 8 })
               .alignSelf(ItemAlign.Start)
 
             Text('1. 您的API Key仅存储在本地，不会上传到任何服务器。\n2. 作品数据完全保存在您的设备上，我们不会收集您的创作内容。\n3. 本应用不会收集您的个人信息、位置、通讯录等隐私数据。\n4. 当您使用华为账号登录时，我们仅会获取必要的用户标识用于登录验证。\n5. 我们不会将您的任何数据分享给第三方。')
-              .fontSize(12)
+              .fontSize(this.sf(12))
               .fontColor(this._textSecondary)
               .margin({ bottom: 16 })
               .alignSelf(ItemAlign.Start)
 
             Button('我知道了')
-              .fontSize(14)
+              .fontSize(this.sf(14))
               .fontColor('#FFFFFF')
               .backgroundColor('#FF2D55')
               .borderRadius(20)
@@ -2166,41 +2302,41 @@ struct SettingsTab {
         Column() {
           Column() {
             Text('关于 创意写作')
-              .fontSize(16)
+              .fontSize(this.sf(16))
               .fontWeight(FontWeight.Bold)
               .fontColor(this._textPrimary)
               .margin({ bottom: 12 })
 
             Text('🤖 AI')
-              .fontSize(24)
+              .fontSize(this.sf(24))
               .margin({ bottom: 8 })
 
             Text('创意写作 v1.2.0')
-              .fontSize(16)
+              .fontSize(this.sf(16))
               .fontWeight(FontWeight.Bold)
               .fontColor('#FF2D55')
               .margin({ bottom: 8 })
 
             Text('AI驱动的写作助手')
-              .fontSize(13)
+              .fontSize(this.sf(13))
               .fontColor(this._textSecondary)
               .margin({ bottom: 16 })
 
             Text('功能特性：')
-              .fontSize(14)
+              .fontSize(this.sf(14))
               .fontWeight(FontWeight.Bold)
               .fontColor(this._textPrimary)
               .margin({ bottom: 8 })
               .alignSelf(ItemAlign.Start)
 
             Text('• 短幕剧/中长篇双工作台，独立管理\n• AI对话生成，一键保存思维链路\n• 自动版本归档，修改历史可追溯\n• 书架与旧档区，作品归档一目了然\n• 支持多种AI模型：DeepSeek、智谱GLM、百度文心、小艺助手、本地GGUF\n• 丰富的模板库，支持自定义提示词\n• 深色模式，保护您的视力')
-              .fontSize(12)
+              .fontSize(this.sf(12))
               .fontColor('#6B7280')
               .margin({ bottom: 16 })
               .alignSelf(ItemAlign.Start)
 
             Button('关闭')
-              .fontSize(14)
+              .fontSize(this.sf(14))
               .fontColor('#FFFFFF')
               .backgroundColor('#FF2D55')
               .borderRadius(20)
@@ -2232,25 +2368,25 @@ struct SettingsTab {
         Column() {
           Column() {
             Text('选择本地字体文件')
-              .fontSize(16)
+              .fontSize(this.sf(16))
               .fontWeight(FontWeight.Bold)
               .fontColor(this._textPrimary)
               .margin({ bottom: 16 })
 
             Text('支持 .ttf / .otf 格式的字体文件')
-              .fontSize(12)
+              .fontSize(this.sf(12))
               .fontColor(this._textSecondary)
               .margin({ bottom: 12 })
 
             if (this.localFontPath) {
               Text(`当前: ${this.getFileName(this.localFontPath)}`)
-                .fontSize(13)
+                .fontSize(this.sf(13))
                 .fontColor('#3B82F6')
                 .margin({ bottom: 12 })
             }
 
             Button('从文件管理器选择')
-              .fontSize(14)
+              .fontSize(this.sf(14))
               .fontColor('#FFFFFF')
               .backgroundColor('#FF2D55')
               .borderRadius(20)
@@ -2274,7 +2410,7 @@ struct SettingsTab {
               })
 
             Button('清除选择')
-              .fontSize(14)
+              .fontSize(this.sf(14))
               .fontColor(this._cancelText)
               .backgroundColor(this._cancelBg)
               .borderRadius(20)
@@ -2309,25 +2445,25 @@ struct SettingsTab {
         Column() {
           Column() {
             Text('选择本地AI模型文件')
-              .fontSize(16)
+              .fontSize(this.sf(16))
               .fontWeight(FontWeight.Bold)
               .fontColor(this._textPrimary)
               .margin({ bottom: 16 })
 
             Text('支持 .gguf 格式的AI模型文件')
-              .fontSize(12)
+              .fontSize(this.sf(12))
               .fontColor(this._textSecondary)
               .margin({ bottom: 12 })
 
             if (this.localModelPath) {
               Text(`当前: ${this.getFileName(this.localModelPath)}`)
-                .fontSize(13)
+                .fontSize(this.sf(13))
                 .fontColor('#3B82F6')
                 .margin({ bottom: 12 })
             }
 
             Button('从文件管理器选择')
-              .fontSize(14)
+              .fontSize(this.sf(14))
               .fontColor('#FFFFFF')
               .backgroundColor('#FF2D55')
               .borderRadius(20)
@@ -2351,7 +2487,7 @@ struct SettingsTab {
               })
 
             Button('清除选择')
-              .fontSize(14)
+              .fontSize(this.sf(14))
               .fontColor(this._cancelText)
               .backgroundColor(this._cancelBg)
               .borderRadius(20)
@@ -2386,18 +2522,18 @@ struct SettingsTab {
         Column() {
           Column() {
             Text('导入数据')
-              .fontSize(16)
+              .fontSize(this.sf(16))
               .fontWeight(FontWeight.Bold)
               .fontColor(this._textPrimary)
               .margin({ bottom: 8 })
             Text('粘贴此前导出的备份JSON，重复作品会自动跳过')
-              .fontSize(12)
+              .fontSize(this.sf(12))
               .fontColor('#9CA3AF')
               .margin({ bottom: 12 })
             TextArea({ placeholder: '粘贴备份JSON内容...' })
               .width('100%')
               .height(160)
-              .fontSize(13)
+              .fontSize(this.sf(13))
               .backgroundColor(this._inputBg)
               .borderRadius(8)
               .padding(12)
@@ -2406,7 +2542,7 @@ struct SettingsTab {
               })
             Row() {
               Button('取消')
-                .fontSize(14)
+                .fontSize(this.sf(14))
                 .fontColor(this._cancelText)
                 .backgroundColor(this._cancelBg)
                 .borderRadius(20)
@@ -2417,7 +2553,7 @@ struct SettingsTab {
                   this.showImportPanel = false;
                 })
               Button('导入')
-                .fontSize(14)
+                .fontSize(this.sf(14))
                 .fontColor('#FFFFFF')
                 .backgroundColor('#FF2D55')
                 .borderRadius(20)
@@ -2452,7 +2588,7 @@ struct SettingsTab {
         Column() {
           Column() {
             Text('权限管理')
-              .fontSize(16)
+              .fontSize(this.sf(16))
               .fontWeight(FontWeight.Bold)
               .fontColor(this._textPrimary)
               .margin({ bottom: 12 })
@@ -2461,11 +2597,11 @@ struct SettingsTab {
               Row() {
                 Column() {
                   Text(item.name)
-                    .fontSize(14)
+                    .fontSize(this.sf(14))
                     .fontWeight(FontWeight.Medium)
                     .fontColor(this._textPrimary)
                   Text(item.reason)
-                    .fontSize(12)
+                    .fontSize(this.sf(12))
                     .fontColor('#9CA3AF')
                     .margin({ top: 2 })
                 }
@@ -2474,11 +2610,11 @@ struct SettingsTab {
 
                 if (item.granted) {
                   Text('已授权')
-                    .fontSize(12)
+                    .fontSize(this.sf(12))
                     .fontColor('#10B981')
                 } else {
                   Button('申请')
-                    .fontSize(12)
+                    .fontSize(this.sf(12))
                     .fontColor('#FFFFFF')
                     .backgroundColor('#FF2D55')
                     .borderRadius(14)
@@ -2494,13 +2630,13 @@ struct SettingsTab {
             }, (item: PermissionItem) => item.permission)
 
             Text('提示：网络相关权限为系统级授权，安装时自动授予；如被拒绝可在此重新申请。')
-              .fontSize(11)
+              .fontSize(this.sf(11))
               .fontColor('#9CA3AF')
               .margin({ top: 8, bottom: 12 })
               .alignSelf(ItemAlign.Start)
 
             Button('关闭')
-              .fontSize(14)
+              .fontSize(this.sf(14))
               .fontColor('#FFFFFF')
               .backgroundColor('#FF2D55')
               .borderRadius(20)
@@ -2532,7 +2668,7 @@ struct SettingsTab {
         Column() {
           Column() {
             Text('帮助中心')
-              .fontSize(16)
+              .fontSize(this.sf(16))
               .fontWeight(FontWeight.Bold)
               .fontColor(this._textPrimary)
               .margin({ bottom: 12 })
@@ -2540,25 +2676,25 @@ struct SettingsTab {
             Scroll() {
               Column() {
                 Text('【快速上手】')
-                  .fontSize(14)
+                  .fontSize(this.sf(14))
                   .fontWeight(FontWeight.Bold)
                   .fontColor(this._textPrimary)
                   .margin({ bottom: 8 })
                   .alignSelf(ItemAlign.Start)
                 Text('1. 在短幕剧/中长篇工作台选择模板，填写字段即可生成创作框架。\n2. 点击"AI生成"按钮，由AI补全完整内容（需在设置中配置API Key）。\n3. 保存后作品进入书架，可随时归档到旧档区。')
-                  .fontSize(12)
+                  .fontSize(this.sf(12))
                   .fontColor(this._textSecondary)
                   .margin({ bottom: 16 })
                   .alignSelf(ItemAlign.Start)
 
                 Text('【常见问题】')
-                  .fontSize(14)
+                  .fontSize(this.sf(14))
                   .fontWeight(FontWeight.Bold)
                   .fontColor(this._textPrimary)
                   .margin({ bottom: 8 })
                   .alignSelf(ItemAlign.Start)
                 Text('Q: AI生成失败怎么办？\nA: 请检查设置中的API Key是否正确、网络是否可用，也可尝试调大AI超时时间。\n\nQ: 作品如何备份？\nA: 设置 → 导出数据，将备份JSON复制保存；换设备后用"导入数据"恢复。\n\nQ: 版本历史在哪里？\nA: 打开作品后点击底部"历史"按钮，可预览并恢复任意历史版本。')
-                  .fontSize(12)
+                  .fontSize(this.sf(12))
                   .fontColor('#6B7280')
                   .margin({ bottom: 16 })
                   .alignSelf(ItemAlign.Start)
@@ -2569,7 +2705,7 @@ struct SettingsTab {
             .scrollBar(BarState.Auto)
 
             Button('关闭')
-              .fontSize(14)
+              .fontSize(this.sf(14))
               .fontColor('#FFFFFF')
               .backgroundColor('#FF2D55')
               .borderRadius(20)
@@ -2602,18 +2738,18 @@ struct SettingsTab {
         Column() {
           Column() {
             Text('联系反馈')
-              .fontSize(16)
+              .fontSize(this.sf(16))
               .fontWeight(FontWeight.Bold)
               .fontColor(this._textPrimary)
               .margin({ bottom: 8 })
             Text('描述您遇到的问题或建议，提交后会复制到剪贴板，可发送至支持邮箱 support@creativewriting.app')
-              .fontSize(12)
+              .fontSize(this.sf(12))
               .fontColor('#9CA3AF')
               .margin({ bottom: 12 })
             TextArea({ placeholder: '请输入反馈内容...' })
               .width('100%')
               .height(140)
-              .fontSize(13)
+              .fontSize(this.sf(13))
               .backgroundColor(this._inputBg)
               .borderRadius(8)
               .padding(12)
@@ -2622,7 +2758,7 @@ struct SettingsTab {
               })
             Row() {
               Button('取消')
-                .fontSize(14)
+                .fontSize(this.sf(14))
                 .fontColor(this._cancelText)
                 .backgroundColor(this._cancelBg)
                 .borderRadius(20)
@@ -2633,7 +2769,7 @@ struct SettingsTab {
                   this.showFeedbackPanel = false;
                 })
               Button('提交')
-                .fontSize(14)
+                .fontSize(this.sf(14))
                 .fontColor('#FFFFFF')
                 .backgroundColor('#FF2D55')
                 .borderRadius(20)
@@ -2673,11 +2809,11 @@ struct SettingsTab {
     Row() {
       Column() {
         Text(title)
-          .fontSize(15)
+          .fontSize(this.sf(15))
           .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
         if (subtitle) {
           Text(subtitle)
-            .fontSize(12)
+            .fontSize(this.sf(12))
             .fontColor('#9CA3AF')
             .margin({ top: 2 })
         }
@@ -2687,7 +2823,7 @@ struct SettingsTab {
 
       if (hasArrow) {
         Text('›')
-          .fontSize(20)
+          .fontSize(this.sf(20))
           .fontColor('#D1D5DB')
       }
     }
@@ -2699,7 +2835,7 @@ struct SettingsTab {
   @Builder
   SectionTitle(title: string) {
     Text(title)
-      .fontSize(12)
+      .fontSize(this.sf(12))
       .fontWeight(FontWeight.Bold)
       .fontColor('#9CA3AF')
       .margin({ top: 8, bottom: 4 })
@@ -2723,14 +2859,14 @@ struct SettingsTab {
   ModelOption(label: string, modelKey: string) {
     Row() {
       Text(label)
-        .fontSize(15)
+        .fontSize(this.sf(15))
         .fontColor(this.selectedModel === modelKey ? '#FF2D55' : (this.isDarkMode ? '#FFFFFF' : '#1A1A2E'))
         .fontWeight(this.selectedModel === modelKey ? FontWeight.Bold : FontWeight.Normal)
         .layoutWeight(1)
 
       if (this.selectedModel === modelKey) {
         Text('✓')
-          .fontSize(16)
+          .fontSize(this.sf(16))
           .fontColor('#FF2D55')
       }
     }
@@ -2782,9 +2918,7 @@ struct SettingsTab {
       if (result.index === 0) {
         // 关
         settingsManager.settings.followSystemDark = false;
-        settingsManager.settings.autoLightMode = false;
         settingsManager.settings.isDarkMode = false;
-        this.autoLightMode = false;
         this.followSystemDark = false;
         this.prevFollowSystemDark = false;
         this.applyDarkMode();
@@ -2793,9 +2927,7 @@ struct SettingsTab {
       } else if (result.index === 1) {
         // 开
         settingsManager.settings.followSystemDark = false;
-        settingsManager.settings.autoLightMode = false;
         settingsManager.settings.isDarkMode = true;
-        this.autoLightMode = false;
         this.followSystemDark = false;
         this.prevFollowSystemDark = false;
         this.applyDarkMode();
@@ -2804,9 +2936,7 @@ struct SettingsTab {
       } else if (result.index === 2) {
         // 跟随系统
         settingsManager.settings.followSystemDark = true;
-        settingsManager.settings.autoLightMode = false;
         this.followSystemDark = true;
-        this.autoLightMode = false;
         this.prevFollowSystemDark = true;
         this.applyDarkMode();
         settingsManager.save();
@@ -2851,28 +2981,6 @@ struct SettingsTab {
         this.saveSettings();
         const toastOpts: ToastOptions = { message: `已设置为 ${this.autoSaveInterval}分钟`, duration: 2000 };
         promptAction.showToast(toastOpts);
-      }
-    });
-  }
-
-  selectFontSize() {
-    const sizes: number[] = [12, 14, 16, 18, 20, 24];
-    const labels: string[] = sizes.map((s: number) => s + 'px');
-    this.getUIContext().getPromptAction().showActionMenu({
-      title: '字体大小',
-      buttons: [
-        { text: labels[0], color: this._textPrimary } as MenuButton,
-        { text: labels[1], color: this._textPrimary } as MenuButton,
-        { text: labels[2], color: this._textPrimary } as MenuButton,
-        { text: labels[3], color: this._textPrimary } as MenuButton,
-        { text: labels[4], color: this._textPrimary } as MenuButton,
-        { text: labels[5], color: this._textPrimary } as MenuButton
-      ] as [MenuButton, MenuButton, MenuButton, MenuButton, MenuButton, MenuButton]
-    }).then((result: promptAction.ActionMenuSuccessResponse) => {
-      if (result.index < 6) {
-        this.fontSize = sizes[result.index];
-        this.saveSettings();
-        promptAction.showToast({ message: `字体大小已设置为 ${this.fontSize}px`, duration: 2000 });
       }
     });
   }
@@ -2940,20 +3048,28 @@ struct SettingsTab {
     promptAction.showToast({ message: '缓存已清除', duration: 2000 });
   }
 
+  sf(base: number): number {
+    return Math.round(base * this.fontSize / 14);
+  }
+
   loadSettings() {
     this.apiKey = settingsManager.settings.apiKey;
     this.selectedModel = settingsManager.settings.selectedModel;
     this.customUrl = settingsManager.settings.customUrl;
     this.followSystemDark = settingsManager.settings.followSystemDark;
     this.prevFollowSystemDark = settingsManager.settings.followSystemDark;
-    this.autoLightMode = settingsManager.settings.autoLightMode || false;
     this.autoSaveInterval = settingsManager.settings.autoSaveInterval || 5;
     this.fontSize = settingsManager.settings.fontSize || 14;
+    AppStorage.setOrCreate('appFontSize', this.fontSize);
     this.aiTimeout = settingsManager.settings.aiTimeout || 30;
     this.isLoggedIn = settingsManager.settings.isLoggedIn;
     this.userName = settingsManager.settings.userName;
     this.localFontPath = settingsManager.settings.localFontPath || '';
     this.localModelPath = settingsManager.settings.localModelPath || '';
+    this.ggufContextLength = settingsManager.settings.ggufContextLength ?? 2048;
+    this.ggufThreads = settingsManager.settings.ggufThreads ?? 4;
+    this.ggufMaxTokens = settingsManager.settings.ggufMaxTokens ?? 512;
+    this.ggufTemperature = settingsManager.settings.ggufTemperature ?? 0.8;
   }
 
   saveSettings() {
@@ -2965,7 +3081,6 @@ struct SettingsTab {
     settingsManager.settings.aiTimeout = this.aiTimeout;
     settingsManager.settings.isDarkMode = this.isDarkMode;
     settingsManager.settings.followSystemDark = this.followSystemDark;
-    settingsManager.settings.autoLightMode = this.autoLightMode;
     settingsManager.settings.localFontPath = this.localFontPath;
     settingsManager.settings.localModelPath = this.localModelPath;
     settingsManager.save();

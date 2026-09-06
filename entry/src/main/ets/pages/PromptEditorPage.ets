@@ -45,6 +45,11 @@ struct PromptEditorPage {
   @State autoSaveTimer: number = 0;
   @State isDarkMode: boolean = false;
   @State bgTheme: string = 'default';
+  @StorageProp('appFontSize') fontSize: number = 14;
+
+  sf(base: number): number {
+    return Math.round(base * this.fontSize / 14);
+  }
 
   get isWide(): boolean {
     return this.currentBreakpoint === 'md' || this.currentBreakpoint === 'lg';
@@ -59,9 +64,6 @@ struct PromptEditorPage {
     return 10000;
   }
 
-  get fontSize(): number {
-    return settingsManager.settings.fontSize || 14;
-  }
 
   get bgColor(): string {
     return this.isDarkMode ? '#1A1A2E' : '#F5F5F5';
@@ -98,6 +100,7 @@ struct PromptEditorPage {
 
   aboutToAppear() {
     this.isDarkMode = settingsManager.settings.isDarkMode;
+    AppStorage.setOrCreate('appFontSize', settingsManager.settings.fontSize || 14);
     const params = router.getParams() as Record<string, string>;
     if (params) {
       this.mode = params['mode'] || 'short_drama';
@@ -176,7 +179,7 @@ struct PromptEditorPage {
       // 顶部导航
       Row() {
         Text('←')
-          .fontSize(20)
+          .fontSize(this.sf(20))
           .fontColor('#FF2D55')
           .onClick(() => {
             router.back();
@@ -184,7 +187,7 @@ struct PromptEditorPage {
           .padding({ left: 16, right: 12 })
 
         Text(this.getTitle())
-          .fontSize(18)
+          .fontSize(this.sf(18))
           .fontWeight(FontWeight.Bold)
           .fontColor(this.textColor)
           .layoutWeight(1)
@@ -194,7 +197,7 @@ struct PromptEditorPage {
 
         if (this.mode !== 'prompt_edit') {
           Text('AI')
-            .fontSize(12)
+            .fontSize(this.sf(12))
             .fontColor('#FFFFFF')
             .backgroundColor('#FF2D55')
             .borderRadius(4)
@@ -206,7 +209,7 @@ struct PromptEditorPage {
 
           // 背景主题切换
           Text('🎨')
-            .fontSize(18)
+            .fontSize(this.sf(18))
             .padding({ right: 12 })
             .onClick(() => {
               const themes = ['default', 'warm', 'cool', 'parchment'];
@@ -218,7 +221,7 @@ struct PromptEditorPage {
           // 封面颜色切换
           if (this.work) {
             Text('📕')
-              .fontSize(18)
+              .fontSize(this.sf(18))
               .padding({ right: 16 })
               .onClick(() => {
                 const colors = ['#FF2D55', '#10B981', '#007DFF', '#F59E0B', '#8B5CF6', '#EF4444'];
@@ -269,7 +272,7 @@ struct PromptEditorPage {
       if (this.mode !== 'prompt_edit') {
         Row() {
           Text(this.generatedContent.length + ' 字')
-            .fontSize(12)
+            .fontSize(this.sf(12))
             .fontColor(this.subTextColor)
 
           Blank()
@@ -277,7 +280,7 @@ struct PromptEditorPage {
           if (this.work) {
             if (this.work.chapters && this.work.chapters.length > 0) {
               Button('章节')
-                .fontSize(14)
+                .fontSize(this.sf(14))
                 .fontWeight(FontWeight.Medium)
                 .fontColor('#FF2D55')
                 .backgroundColor(this.cardBg)
@@ -292,7 +295,7 @@ struct PromptEditorPage {
 
             if (this.work.versions && this.work.versions.length > 0) {
               Button('历史')
-                .fontSize(14)
+                .fontSize(this.sf(14))
                 .fontWeight(FontWeight.Medium)
                 .fontColor('#3B82F6')
                 .backgroundColor(this.cardBg)
@@ -306,7 +309,7 @@ struct PromptEditorPage {
             }
 
             Button('导出')
-              .fontSize(14)
+              .fontSize(this.sf(14))
               .fontWeight(FontWeight.Medium)
               .fontColor('#10B981')
               .backgroundColor(this.cardBg)
@@ -320,7 +323,7 @@ struct PromptEditorPage {
           }
 
           Button('保存')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontWeight(FontWeight.Medium)
             .fontColor('#FFFFFF')
             .backgroundColor('#FF2D55')
@@ -331,7 +334,7 @@ struct PromptEditorPage {
 
           if (!this.isAiMode) {
             Button('AI生成')
-              .fontSize(14)
+              .fontSize(this.sf(14))
               .fontWeight(FontWeight.Medium)
               .fontColor('#FFFFFF')
               .backgroundColor('#10B981')
@@ -344,7 +347,7 @@ struct PromptEditorPage {
 
           // 小艺助手按钮
           Button('小艺')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontWeight(FontWeight.Medium)
             .fontColor('#FFFFFF')
             .backgroundColor('#007DFF')
@@ -370,21 +373,21 @@ struct PromptEditorPage {
   PromptEditView() {
     Column() {
       Text('自定义AI提示词')
-        .fontSize(16)
+        .fontSize(this.sf(16))
         .fontWeight(FontWeight.Medium)
         .fontColor(this.textColor)
         .margin({ left: 16, top: 16, bottom: 8 })
         .alignSelf(ItemAlign.Start)
 
       Text('这个提示词将作为AI的系统指令，指导AI的写作风格和行为')
-        .fontSize(13)
+        .fontSize(this.sf(13))
         .fontColor(this.subTextColor)
         .margin({ left: 16, right: 16, bottom: 12 })
 
       TextArea({ placeholder: '请输入自定义提示词...', text: this.promptText })
         .width('90%')
         .layoutWeight(1)
-        .fontSize(14)
+        .fontSize(this.fontSize)
         .backgroundColor(this.cardBg)
         .borderRadius(8)
         .padding(12)
@@ -395,7 +398,7 @@ struct PromptEditorPage {
       Button('保存提示词')
         .width('90%')
         .height(48)
-        .fontSize(16)
+        .fontSize(this.sf(16))
         .fontWeight(FontWeight.Medium)
         .fontColor('#FFFFFF')
         .backgroundColor('#FF2D55')
@@ -421,7 +424,7 @@ struct PromptEditorPage {
           TextInput({ placeholder: '请输入作品标题', text: this.title })
             .width('90%')
             .height(48)
-            .fontSize(16)
+            .fontSize(this.fontSize)
             .fontWeight(FontWeight.Medium)
             .backgroundColor(this.cardBg)
             .padding({ left: 16, right: 16 })
@@ -433,7 +436,7 @@ struct PromptEditorPage {
           // 自由创作内容输入区
           Column() {
             Text('自由创作')
-              .fontSize(14)
+              .fontSize(this.sf(14))
               .fontWeight(FontWeight.Medium)
               .fontColor(this.textColor)
               .margin({ bottom: 8 })
@@ -441,7 +444,7 @@ struct PromptEditorPage {
             TextArea({ placeholder: '直接输入创作内容，或点击右上角AI进入对话模式生成...', text: this.generatedContent })
               .width('100%')
               .height(240)
-              .fontSize(14)
+              .fontSize(this.fontSize)
               .backgroundColor(this.bgColor)
               .borderRadius(8)
               .padding(12)
@@ -459,7 +462,7 @@ struct PromptEditorPage {
         if (this.template) {
           Column() {
             Text('写作提示')
-              .fontSize(14)
+              .fontSize(this.sf(14))
               .fontWeight(FontWeight.Medium)
               .fontColor('#FF6B35')
               .margin({ left: 16, top: 12, bottom: 8 })
@@ -468,11 +471,11 @@ struct PromptEditorPage {
             ForEach(this.template.tips, (tip: string, index: number) => {
               Row() {
                 Text('•')
-                  .fontSize(14)
+                  .fontSize(this.sf(14))
                   .fontColor('#FF6B35')
                   .margin({ right: 8 })
                 Text(tip)
-                  .fontSize(13)
+                  .fontSize(this.sf(13))
                   .fontColor(this.subTextColor)
                   .layoutWeight(1)
               }
@@ -492,7 +495,7 @@ struct PromptEditorPage {
             ForEach(this.template.fields, (field: TemplateField) => {
               Column() {
                 Text(field.label + (field.required ? ' *' : ''))
-                  .fontSize(14)
+                  .fontSize(this.sf(14))
                   .fontWeight(FontWeight.Medium)
                   .fontColor(this.textColor)
                   .margin({ bottom: 8 })
@@ -503,7 +506,7 @@ struct PromptEditorPage {
                   })
                     .width('100%')
                     .height(100)
-                    .fontSize(14)
+                    .fontSize(this.fontSize)
                     .backgroundColor(this.bgColor)
                     .borderRadius(8)
                     .padding(12)
@@ -515,7 +518,7 @@ struct PromptEditorPage {
                   Flex({ wrap: FlexWrap.Wrap }) {
                     ForEach(field.options || [], (option: string) => {
                       Button(option)
-                        .fontSize(12)
+                        .fontSize(this.sf(12))
                         .fontColor(this.fieldValues[field.key] === option ? '#FFFFFF' : this.subTextColor)
                         .backgroundColor(this.fieldValues[field.key] === option ? '#FF2D55' : '#E5E7EB')
                         .borderRadius(16)
@@ -534,7 +537,7 @@ struct PromptEditorPage {
                     .type(InputType.Number)
                     .width('100%')
                     .height(44)
-                    .fontSize(14)
+                    .fontSize(this.fontSize)
                     .backgroundColor(this.bgColor)
                     .borderRadius(8)
                     .padding({ left: 12, right: 12 })
@@ -546,7 +549,7 @@ struct PromptEditorPage {
                   TextInput({ placeholder: field.placeholder })
                     .width('100%')
                     .height(44)
-                    .fontSize(14)
+                    .fontSize(this.fontSize)
                     .backgroundColor(this.bgColor)
                     .borderRadius(8)
                     .padding({ left: 12, right: 12 })
@@ -571,14 +574,14 @@ struct PromptEditorPage {
         Column() {
           Row() {
             Text('输出窗口')
-              .fontSize(14)
+              .fontSize(this.sf(14))
               .fontWeight(FontWeight.Medium)
               .fontColor(this.textColor)
 
             Blank()
 
             Text(this.generatedContent.length + ' 字')
-              .fontSize(12)
+              .fontSize(this.sf(12))
               .fontColor(this.subTextColor)
           }
           .width('100%')
@@ -593,11 +596,11 @@ struct PromptEditorPage {
           } else {
             Column() {
               Text('📝 填写上方模板字段后，点击底部的 AI 生成或小艺按钮')
-                .fontSize(13)
+                .fontSize(this.sf(13))
                 .fontColor(this.subTextColor)
                 .margin({ bottom: 4 })
               Text('生成的内容将自动显示在此处，支持直接编辑与复制')
-                .fontSize(12)
+                .fontSize(this.sf(12))
                 .fontColor('#B0B7C3')
             }
             .width('100%')
@@ -626,11 +629,11 @@ struct PromptEditorPage {
           ListItem() {
             Column() {
               Text(index % 2 === 0 ? '用户' : 'AI')
-                .fontSize(12)
+                .fontSize(this.sf(12))
                 .fontColor(this.subTextColor)
                 .margin({ bottom: 4 })
               Text(msg)
-                .fontSize(14)
+                .fontSize(this.fontSize)
                 .fontColor(this.textColor)
                 .lineHeight(20)
             }
@@ -649,7 +652,7 @@ struct PromptEditorPage {
       if (this.conversationHistory.length > 0) {
         Row() {
           Button('保存思维链路')
-            .fontSize(13)
+            .fontSize(this.sf(13))
             .fontColor('#FFFFFF')
             .backgroundColor('#3B82F6')
             .borderRadius(20)
@@ -660,7 +663,7 @@ struct PromptEditorPage {
             .onClick(() => this.saveThoughtChain())
 
           Button('保存最终方案')
-            .fontSize(13)
+            .fontSize(this.sf(13))
             .fontColor('#FFFFFF')
             .backgroundColor('#10B981')
             .borderRadius(20)
@@ -680,7 +683,7 @@ struct PromptEditorPage {
           .layoutWeight(1)
           .maxLines(4)
           .height(40)
-          .fontSize(14)
+          .fontSize(this.fontSize)
           .backgroundColor(this.bgColor)
           .borderRadius(20)
           .padding({ left: 16, right: 16, top: 8, bottom: 8 })
@@ -689,7 +692,7 @@ struct PromptEditorPage {
           })
 
         Button(this.isGenerating ? '...' : '发送')
-          .fontSize(14)
+          .fontSize(this.sf(14))
           .fontColor('#FFFFFF')
           .backgroundColor(this.isGenerating ? '#9CA3AF' : '#FF2D55')
           .borderRadius(20)
@@ -1036,19 +1039,19 @@ struct PromptEditorPage {
       // 标题栏
       Row() {
         Text('章节管理')
-          .fontSize(18)
+          .fontSize(this.sf(18))
           .fontWeight(FontWeight.Bold)
           .fontColor(this.textColor)
         Blank()
         Text('+')
-          .fontSize(24)
+          .fontSize(this.sf(24))
           .fontColor('#FF2D55')
           .margin({ right: 16 })
           .onClick(() => {
             this.showCreateChapterDialog = true;
           })
         Text('×')
-          .fontSize(24)
+          .fontSize(this.sf(24))
           .fontColor(this.subTextColor)
           .onClick(() => {
             this.showChapterList = false;
@@ -1063,7 +1066,7 @@ struct PromptEditorPage {
         Row() {
           ForEach(['全部', '大纲', '人设', '场景', '章节', '时间线', '世界观', '思维链路', '最终方案'], (category: string) => {
             Button(category)
-              .fontSize(13)
+              .fontSize(this.sf(13))
               .fontColor(this.selectedCategory === category ? '#FFFFFF' : this.subTextColor)
               .backgroundColor(this.selectedCategory === category ? '#FF2D55' : '#F3F4F6')
               .borderRadius(16)
@@ -1090,17 +1093,17 @@ struct PromptEditorPage {
                 Row() {
                   Column() {
                     Text(chapter.title)
-                      .fontSize(15)
+                      .fontSize(this.sf(15))
                       .fontWeight(FontWeight.Medium)
                       .fontColor(this.textColor)
                       .maxLines(1)
                       .textOverflow({ overflow: TextOverflow.Ellipsis })
                     Text(chapter.category)
-                      .fontSize(12)
+                      .fontSize(this.sf(12))
                       .fontColor('#FF2D55')
                       .margin({ top: 4 })
                     Text(chapter.updateTime)
-                      .fontSize(11)
+                      .fontSize(this.sf(11))
                       .fontColor(this.subTextColor)
                       .margin({ top: 2 })
                   }
@@ -1109,7 +1112,7 @@ struct PromptEditorPage {
 
                   Row() {
                     Text('查看')
-                      .fontSize(13)
+                      .fontSize(this.sf(13))
                       .fontColor('#FF2D55')
                       .onClick(() => {
                         this.currentChapter = chapter;
@@ -1118,7 +1121,7 @@ struct PromptEditorPage {
                         promptAction.showToast({ message: '已加载章节内容', duration: 2000 });
                       })
                     Text('编辑')
-                      .fontSize(13)
+                      .fontSize(this.sf(13))
                       .fontColor('#3B82F6')
                       .margin({ left: 12 })
                       .onClick(() => {
@@ -1127,7 +1130,7 @@ struct PromptEditorPage {
                         this.showEditChapterDialog = true;
                       })
                     Text('删除')
-                      .fontSize(13)
+                      .fontSize(this.sf(13))
                       .fontColor('#EF4444')
                       .margin({ left: 12 })
                       .onClick(() => {
@@ -1158,17 +1161,17 @@ struct PromptEditorPage {
     Column() {
       Column() {
         Text('创建章节')
-          .fontSize(18)
+          .fontSize(this.sf(18))
           .fontWeight(FontWeight.Bold)
           .fontColor(this.textColor)
           .margin({ bottom: 16 })
 
         Text('章节标题')
-          .fontSize(14)
+          .fontSize(this.sf(14))
           .fontColor(this.subTextColor)
           .margin({ bottom: 8 })
         TextInput({ placeholder: '请输入章节标题' })
-          .fontSize(14)
+          .fontSize(this.fontSize)
           .height(40)
           .backgroundColor(this.bgColor)
           .borderRadius(8)
@@ -1177,13 +1180,13 @@ struct PromptEditorPage {
           })
 
         Text('章节分类')
-          .fontSize(14)
+          .fontSize(this.sf(14))
           .fontColor(this.subTextColor)
           .margin({ top: 16, bottom: 8 })
         Row() {
           ForEach(['大纲', '人设', '场景', '章节', '时间线', '世界观', '思维链路', '最终方案'], (category: string) => {
             Button(category)
-              .fontSize(13)
+              .fontSize(this.sf(13))
               .fontColor(this.newChapterCategory === category ? '#FFFFFF' : this.subTextColor)
               .backgroundColor(this.newChapterCategory === category ? '#FF2D55' : this.bgColor)
               .borderRadius(16)
@@ -1197,11 +1200,11 @@ struct PromptEditorPage {
         }
 
         Text('章节内容')
-          .fontSize(14)
+          .fontSize(this.sf(14))
           .fontColor(this.subTextColor)
           .margin({ top: 16, bottom: 8 })
         TextArea({ placeholder: '请输入章节内容（可选）' })
-          .fontSize(14)
+          .fontSize(this.fontSize)
           .height(150)
           .backgroundColor(this.bgColor)
           .borderRadius(8)
@@ -1211,7 +1214,7 @@ struct PromptEditorPage {
 
         Row() {
           Button('取消')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontColor(this.subTextColor)
             .backgroundColor(this.bgColor)
             .borderRadius(8)
@@ -1225,7 +1228,7 @@ struct PromptEditorPage {
               this.newChapterContent = '';
             })
           Button('创建')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontColor('#FFFFFF')
             .backgroundColor('#FF2D55')
             .borderRadius(8)
@@ -1256,20 +1259,20 @@ struct PromptEditorPage {
     Column() {
       Column() {
         Text('编辑章节')
-          .fontSize(18)
+          .fontSize(this.sf(18))
           .fontWeight(FontWeight.Bold)
           .fontColor(this.textColor)
           .margin({ bottom: 8 })
 
         if (this.editingChapter) {
           Text(this.editingChapter.title)
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontColor(this.subTextColor)
             .margin({ bottom: 16 })
         }
 
         TextArea({ placeholder: '请输入章节内容', text: this.editingChapterContent })
-          .fontSize(14)
+          .fontSize(this.fontSize)
           .height(300)
           .backgroundColor(this.bgColor)
           .borderRadius(8)
@@ -1279,7 +1282,7 @@ struct PromptEditorPage {
 
         Row() {
           Button('取消')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontColor(this.subTextColor)
             .backgroundColor(this.bgColor)
             .borderRadius(8)
@@ -1292,7 +1295,7 @@ struct PromptEditorPage {
               this.editingChapterContent = '';
             })
           Button('保存')
-            .fontSize(14)
+            .fontSize(this.sf(14))
             .fontColor('#FFFFFF')
             .backgroundColor('#FF2D55')
             .borderRadius(8)
@@ -1324,12 +1327,12 @@ struct PromptEditorPage {
       // 标题栏
       Row() {
         Text('版本历史')
-          .fontSize(18)
+          .fontSize(this.sf(18))
           .fontWeight(FontWeight.Bold)
           .fontColor(this.textColor)
         Blank()
         Text('×')
-          .fontSize(24)
+          .fontSize(this.sf(24))
           .fontColor(this.subTextColor)
           .onClick(() => {
             this.showVersionHistory = false;
@@ -1348,16 +1351,16 @@ struct PromptEditorPage {
                 Row() {
                   Column() {
                     Text('版本 ' + (this.work!.versions!.length - index))
-                      .fontSize(15)
+                      .fontSize(this.sf(15))
                       .fontWeight(FontWeight.Medium)
                       .fontColor(this.textColor)
                     Text(version.timestamp)
-                      .fontSize(11)
+                      .fontSize(this.sf(11))
                       .fontColor(this.subTextColor)
                       .margin({ top: 4 })
                     if (version.changeNote) {
                       Text(version.changeNote)
-                        .fontSize(12)
+                        .fontSize(this.sf(12))
                         .fontColor(this.subTextColor)
                         .margin({ top: 2 })
                     }
@@ -1367,7 +1370,7 @@ struct PromptEditorPage {
 
                   Column() {
                     Text('预览')
-                      .fontSize(13)
+                      .fontSize(this.sf(13))
                       .fontColor('#FF2D55')
                       .onClick(() => {
                         this.selectedVersion = index;
@@ -1378,7 +1381,7 @@ struct PromptEditorPage {
                       })
                     if (this.selectedVersion === index) {
                       Text('恢复')
-                        .fontSize(13)
+                        .fontSize(this.sf(13))
                         .fontColor('#10B981')
                         .margin({ top: 8 })
                         .onClick(() => {
@@ -1416,7 +1419,7 @@ struct PromptEditorPage {
 
       // 底部提示
       Text('提示：点击预览可查看历史版本内容，点击恢复可回退到该版本')
-        .fontSize(12)
+        .fontSize(this.sf(12))
         .fontColor(this.subTextColor)
         .padding({ left: 16, right: 16, top: 12, bottom: 12 })
         .width('100%')

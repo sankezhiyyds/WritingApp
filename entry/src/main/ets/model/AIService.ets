@@ -1,4 +1,5 @@
 import { settingsManager } from './SettingsManager';
+import { ggufService } from './GGUFService';
 import http from '@ohos.net.http';
 import common from '@ohos.app.ability.common';
 import { Want } from '@kit.AbilityKit';
@@ -320,10 +321,46 @@ export class AIService {
   }
 
   private async callLocalGGUF(prompt: string, context?: string): Promise<AIResponse> {
-    // 本地GGUF模型调用（示例）
+    const settings = settingsManager.settings;
+
+    if (!settings.localModelPath) {
+      return { content: '', success: false, error: '请先在设置中选择 GGUF 模型文件' };
+    }
+
+    if (!ggufService.isNativeAvailable()) {
+      return {
+        content: '',
+        success: false,
+        error: '本地推理引擎未安装。\n\n请将 llama.cpp 源码放入 entry/src/main/cpp/third_party/llama.cpp 并重新构建。'
+      };
+    }
+
+    if (!ggufService.isLoaded()) {
+      const loaded = ggufService.loadModel({
+        modelPath: settings.localModelPath,
+        contextLength: settings.ggufContextLength ?? 2048,
+        threads: settings.ggufThreads ?? 4
+      });
+      if (!loaded) {
+        return { content: '', success: false, error: '模型加载失败，请检查文件路径和格式' };
+      }
+    }
+
+    const fullPrompt = context ? `${context}\n\n${prompt}` : prompt;
+    const maxTokens = settings.ggufMaxTokens ?? 512;
+    const temperature = settings.ggufTemperature ?? 0.8;
+
+    const result = ggufService.generate({
+      prompt: fullPrompt,
+      maxTokens: maxTokens,
+      temperature: temperature,
+      topP: 0.9
+    });
+
     return {
-      content: '[本地GGUF模型需要配置本地服务]\n\n当前提示: ' + prompt,
-      success: true
+      content: result.text,
+      success: result.success,
+      error: result.error
     };
   }
 

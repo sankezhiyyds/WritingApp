@@ -1,0 +1,6 @@
+{
+  "name": "libgguf.so",
+  "version": "1.0.0",
+  "description": "GGUF large model inference native module",
+  "main": "Index.d.ts"
+}
