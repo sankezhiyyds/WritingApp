@@ -58,9 +58,13 @@ export class AIService {
   async callAI(prompt: string, context?: string): Promise<AIResponse> {
     const settings = settingsManager.settings;
 
-    // 小艺助手不需要API Key，使用系统内置能力
+    // 小艺助手和本地GGUF模型不需要API Key
     if (settings.selectedModel === 'xiaoyi') {
       return await this.callXiaoyi(prompt, context);
+    }
+
+    if (settings.selectedModel === 'gguf') {
+      return await this.callLocalGGUF(prompt, context);
     }
 
     if (!settings.apiKey) {
@@ -82,8 +86,6 @@ export class AIService {
           return await this.callBaidu(prompt, context);
         case 'xiaoyi':
           return await this.callXiaoyi(prompt, context);
-        case 'gguf':
-          return await this.callLocalGGUF(prompt, context);
         case 'custom':
           return await this.callCustomAPI(prompt, context);
         default:
