@@ -34,8 +34,8 @@ git clone https://github.com/ggerganov/llama.cpp third_party/llama.cpp
 
 | 方法 | 说明 |
 |------|------|
-| `loadModel(path, ctxLen, threads)` | 加载 GGUF 模型 |
-| `generate(prompt, maxTokens, temp, topP, cb)` | 流式生成文本 |
+| `loadModel(path, ctxLen, threads)` | 加载 GGUF 模型（异步，返回 `Promise<boolean>`） |
+| `generate(prompt, maxTokens, temp, topP, cb)` | 流式生成文本（返回 `Promise<string>`） |
 | `unloadModel()` | 卸载模型释放内存 |
 | `isModelLoaded()` | 检查模型是否已加载 |
 | `getModelInfo()` | 获取模型元数据 |

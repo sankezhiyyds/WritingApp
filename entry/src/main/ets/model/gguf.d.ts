@@ -8,7 +8,7 @@ declare module 'libgguf.so' {
     modelPath: string,
     contextLength?: number,
     threads?: number
-  ) => boolean;
+  ) => Promise<boolean>;
 
   export const generate: (
     prompt: string,
@@ -16,7 +16,7 @@ declare module 'libgguf.so' {
     temperature?: number,
     topP?: number,
     onToken?: (token: string) => void
-  ) => string;
+  ) => Promise<string>;
 
   export const unloadModel: () => void;
   export const isModelLoaded: () => boolean;

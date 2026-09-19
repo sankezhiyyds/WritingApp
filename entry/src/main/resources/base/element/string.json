@@ -117,42 +117,6 @@
       "value": "正文内容"
     },
     {
-      "name": "setting_api_hint",
-      "value": "请输入您的 API Key（仅本地存储）"
-    },
-    {
-      "name": "setting_api_placeholder",
-      "value": "sk-xxxxxxxxxxxx"
-    },
-    {
-      "name": "setting_api_saved",
-      "value": "API Key 已保存"
-    },
-    {
-      "name": "setting_select_model",
-      "value": "选择 AI 模型"
-    },
-    {
-      "name": "setting_deepseek",
-      "value": "DeepSeek"
-    },
-    {
-      "name": "setting_glm",
-      "value": "智谱 GLM"
-    },
-    {
-      "name": "setting_baidu",
-      "value": "百度文心"
-    },
-    {
-      "name": "setting_custom",
-      "value": "自定义接口"
-    },
-    {
-      "name": "setting_custom_url",
-      "value": "自定义接口地址"
-    },
-    {
       "name": "empty_works_hint",
       "value": "还没有作品，点击上方按钮创建"
     },
@@ -177,12 +141,8 @@
       "value": "技巧：用具体动作代替抽象形容词"
     },
     {
-      "name": "permission_reason_internet",
-      "value": "用于调用AI模型接口，辅助生成创作内容"
-    },
-    {
-      "name": "permission_reason_network_info",
-      "value": "用于检测网络状态，确保AI请求正常发送"
+      "name": "permission_reason_read_media",
+      "value": "用于加载本地字体文件和本地AI模型文件"
     }
   ]
 }

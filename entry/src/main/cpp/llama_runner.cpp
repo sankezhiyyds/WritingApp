@@ -1,5 +1,8 @@
 #include "llama_runner.h"
 #include <hilog/log.h>
+#include <vector>
+#include <cstring>
+#include <cstdio>
 
 #define LOG_TAG "GGUF_NAPI"
 #define LOGI(fmt, ...) OH_LOG_Print(LOG_APP, LOG_INFO, LOG_DOMAIN, LOG_TAG, fmt, ##__VA_ARGS__)
@@ -15,7 +18,7 @@
 #endif
 
 LlamaRunner::LlamaRunner()
-    : model_(nullptr), context_(nullptr), sampler_(nullptr),
+    : model_(nullptr), context_(nullptr),
       contextLength_(2048), threads_(4), loaded_(false), abortFlag_(false) {}
 
 LlamaRunner::~LlamaRunner() {
@@ -60,14 +63,6 @@ bool LlamaRunner::loadModel(const std::string& modelPath, int contextLength, int
         model_ = nullptr;
         return false;
     }
-
-    // Create sampler chain: top-k -> top-p -> temp
-    llama_sampler_chain_params samplerParams = llama_sampler_chain_default_params();
-    sampler_ = llama_sampler_chain_init(samplerParams);
-    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler_),
-        llama_sampler_init_min_p(0.05f, 1));
-    llama_sampler_chain_add(static_cast<llama_sampler*>(sampler_),
-        llama_sampler_init_temp(0.8f));
 
     contextLength_ = contextLength;
     threads_ = threads;
@@ -126,19 +121,23 @@ std::string LlamaRunner::generate(
     std::lock_guard<std::mutex> lock(mutex_);
     abortFlag_ = false;
 
-    // Update sampler temperature
-    llama_sampler_reset(static_cast<llama_sampler*>(sampler_));
+    // 每次生成按传入的 temperature / top-p 重建采样链，确保参数真正生效
+    auto* sampler = llama_sampler_chain_init(llama_sampler_chain_default_params());
+    if (topP > 0.0f && topP < 1.0f) {
+        llama_sampler_chain_add(sampler, llama_sampler_init_top_p(topP, 1));
+    }
+    llama_sampler_chain_add(sampler, llama_sampler_init_temp(temperature));
 
     // Tokenize prompt
     int32_t* promptTokens = nullptr;
     int promptLen = 0;
     if (!tokenizePrompt(prompt, promptTokens, promptLen)) {
+        llama_sampler_free(sampler);
         return "";
     }
 
     auto* model = static_cast<llama_model*>(model_);
     auto* ctx = static_cast<llama_context*>(context_);
-    auto* sampler = static_cast<llama_sampler*>(sampler_);
     const auto* vocab = llama_model_get_vocab(model);
 
     // Feed prompt tokens into context (batched)
@@ -146,6 +145,7 @@ std::string LlamaRunner::generate(
     if (llama_decode(ctx, batch) != 0) {
         LOGE("Failed to decode prompt");
         delete[] promptTokens;
+        llama_sampler_free(sampler);
         return "";
     }
 
@@ -181,15 +181,12 @@ std::string LlamaRunner::generate(
     }
 
     delete[] promptTokens;
+    llama_sampler_free(sampler);
     LOGI("Generation complete: %{public}d tokens", nCur - promptLen);
     return result;
 }
 
 void LlamaRunner::unloadModel() {
-    if (sampler_) {
-        llama_sampler_free(static_cast<llama_sampler*>(sampler_));
-        sampler_ = nullptr;
-    }
     if (context_) {
         llama_free(static_cast<llama_context*>(context_));
         context_ = nullptr;

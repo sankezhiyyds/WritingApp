@@ -60,7 +60,6 @@ public:
 private:
     void* model_;        // llama_model*
     void* context_;      // llama_context*
-    void* sampler_;      // llama_sampler*
     int contextLength_;
     int threads_;
     std::atomic<bool> loaded_;

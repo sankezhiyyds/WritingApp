@@ -1,24 +1,22 @@
-# 🤖 创意写作 - HarmonyOS AI 写作助手
+# 🤖 创意写作 - HarmonyOS 本地 AI 写作助手
 
-> 一款基于 HarmonyOS 的 AI 创意写作应用，支持短剧、中长篇小说等多种创作模板，集成多种 AI 大模型，完全开源免费。
+> 一款基于 HarmonyOS 的 AI 创意写作应用，支持短剧、中长篇小说等多种创作模板，内置本地 GGUF 大模型离线推理，无联网、无账号、无 API Key，完全开源免费。
 
 ## ✨ 功能特性
 
 ### 📝 创作功能
-- **短剧工作台**：短剧剧本、喜剧剧本等模板，一键 AI 生成
+- **短剧工作台**：短剧剧本、素描喜剧等模板，一键本地 AI 生成
 - **中长篇工作台**：小说、散文等叙事类创作，支持多章节管理
 - **创作模板**：内置多种专业模板，覆盖剧本、叙事等场景
 - **章节管理**：支持多章节创作、对话历史、内容编辑
+- **版本归档**：自动保存历史版本，可随时回溯
 
-### 🧠 AI 集成（BYOK 模式 - 用户自带 API Key）
-| 模型 | 说明 | 是否需要 Key |
-|------|------|:---:|
-| **DeepSeek** | 深度求索大模型，推荐使用 | ✅ |
-| **智谱 GLM** | 智谱 AI ChatGLM | ✅ |
-| **百度文心** | 百度文心一言 | ✅ |
-| **小艺助手** | 华为系统内置小艺助手，通过 Want 拉起 | ❌ |
-| **本地 GGUF** | 本地离线推理，隐私最佳 | ❌ |
-| **自定义接口** | 兼容 OpenAI 格式的任意 API | ✅ |
+### 🧠 本地 AI（纯离线）
+- 唯一后端：本地 GGUF 大模型推理（基于 llama.cpp）
+- 无云端 API、无 API Key、无账号登录
+- 模型文件自行导入（`.gguf`），完全离线运行
+- 支持自定义系统提示词
+- 推理参数可调：上下文长度、线程数、最大 token、温度
 
 ### 📱 多端适配
 - ✅ 手机（竖屏）
@@ -31,8 +29,26 @@
 ### 🎨 其他特性
 - 🌙 深色 / 浅色模式切换
 - 💾 纯本地存储，无服务器，无数据收集
-- 🔒 API Key 仅存储在设备本地
 - 📱 首次启动引导
+
+## 🚀 本地 GGUF 推理引擎
+
+推理链路：`ArkTS (AIService / GGUFService) → NAPI (libgguf.so) → llama_runner → llama.cpp`
+
+### 启用完整推理
+1. 克隆 llama.cpp 源码到原生目录：
+
+   ```bash
+   cd entry/src/main/cpp
+   git clone https://github.com/ggerganov/llama.cpp third_party/llama.cpp
+   ```
+
+2. 重新构建项目，CMake 会自动检测并编译 llama.cpp（CPU 推理）
+3. 在应用设置中「本地模型文件(GGUF)」选择 `.gguf` 模型文件
+
+### 无 llama.cpp 时
+- 项目仍可正常编译运行，`libgguf.so` 生成占位（桩）版本，AI 推理会返回提示
+- 仍可使用写作模板、手动编辑等功能
 
 ## 📸 截图
 
@@ -40,37 +56,11 @@
 
 ## 🚀 安装方式
 
-### 方式一：直接安装 HAP 包
-1. 前往 [Releases](../../releases) 页面下载最新 HAP 包
-2. 通过 hdc 工具安装：`hdc install xxx.hap`
-3. 或通过 HarmonyOS 设备的文件管理器安装
-
-### 方式二：源码编译
+### 源码编译
 1. 安装 [DevEco Studio](https://developer.huawei.com/consumer/cn/deveco-studio/) 5.0+
 2. Clone 本仓库
 3. 用 DevEco Studio 打开项目
 4. 连接 HarmonyOS 设备，点击运行
-
-## ⚙️ AI 模型配置
-
-### DeepSeek（推荐）
-1. 打开应用 → 设置 → 选择模型 → DeepSeek
-2. 前往 [DeepSeek 开放平台](https://platform.deepseek.com/) 获取 API Key
-3. 在设置中填入 API Key
-
-### 小艺助手（无需配置）
-1. 打开应用 → 设置 → 选择模型 → 小艺助手
-2. 或在编辑页直接点击「小艺」按钮
-3. 系统将自动拉起华为内置小艺助手
-
-### 本地 GGUF
-1. 选择模型 → 本地 GGUF
-2. 在设置中填入本地推理服务地址（如 `http://localhost:8080`）
-
-### 自定义接口
-1. 选择模型 → 自定义接口
-2. 填入 API Key 和接口地址
-3. 接口需兼容 OpenAI Chat Completions 格式
 
 ## 🛠️ 技术栈
 
@@ -79,7 +69,8 @@
 | **ArkTS** | HarmonyOS 应用开发语言 |
 | **ArkUI** | 声明式 UI 框架 |
 | **HarmonyOS API 12** | 目标 SDK 版本 |
-| **@ohos.net.http** | 网络请求 |
+| **llama.cpp** | 本地 GGUF 大模型推理 |
+| **NAPI** | ArkTS 与 C++ 原生桥接 |
 | **@ohos.data.preferences** | 本地数据存储 |
 | **@ohos.mediaquery** | 响应式断点检测 |
 
@@ -90,16 +81,22 @@ WritingApp/
 ├── AppScope/                 # 应用级配置
 ├── entry/                    # 主模块
 │   └── src/main/
+│       ├── cpp/              # 原生推理引擎（llama.cpp + NAPI）
+│       │   ├── gguf_napi.cpp        # NAPI 桥接
+│       │   ├── llama_runner.cpp/.h  # llama.cpp 封装
+│       │   └── llama_stub.h         # 无 llama.cpp 时的桩
 │       ├── ets/
 │       │   ├── entryability/ # 入口 Ability
 │       │   ├── model/        # 数据模型
-│       │   │   ├── AIService.ets       # AI 服务（多模型集成）
-│       │   │   ├── WorkManager.ets     # 作品管理
-│       │   │   ├── SettingsManager.ets # 设置管理
-│       │   │   ├── TemplateModel.ets   # 模板模型
+│       │   │   ├── AIService.ets        # AI 服务（本地推理）
+│       │   │   ├── GGUFService.ets      # GGUF 模型管理
+│       │   │   ├── WorkManager.ets      # 作品管理
+│       │   │   ├── SettingsManager.ets  # 设置管理
+│       │   │   ├── PermissionManager.ets # 权限管理
+│       │   │   ├── TemplateModel.ets    # 模板模型
 │       │   │   └── ResponsiveManager.ets # 响应式布局管理
 │       │   └── pages/        # 页面
-│       │       ├── Index.ets           # 首页（短剧/中长篇/设置）
+│       │       ├── Index.ets            # 首页（短剧/中长篇/设置）
 │       │       └── PromptEditorPage.ets # 创作编辑页
 │       └── resources/        # 资源文件
 └── build-profile.json5       # 构建配置
@@ -107,11 +104,11 @@ WritingApp/
 
 ## 🔒 隐私声明
 
-本应用 **不收集任何用户数据**：
+本应用 **完全离线，不收集任何用户数据**：
 - ✅ 所有创作内容存储在设备本地
-- ✅ API Key 仅存储在设备本地，不上传任何服务器
 - ✅ 无后端服务器，无数据上报
-- ✅ 本地 GGUF 模型可完全离线使用
+- ✅ 无账号登录，无用户信息收集
+- ✅ 本地 GGUF 模型完全离线推理
 
 ## 🤝 贡献指南
 
@@ -136,7 +133,7 @@ WritingApp/
 
 ## 🙏 致谢
 
-- [DeepSeek](https://www.deepseek.com/) - AI 大模型
+- [llama.cpp](https://github.com/ggerganov/llama.cpp) - 本地大模型推理引擎
 - [HarmonyOS](https://www.harmonyos.com/) - 操作系统
 - 所有贡献者和用户
 

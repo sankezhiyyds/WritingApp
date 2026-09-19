@@ -2,9 +2,6 @@ import preferences from '@ohos.data.preferences';
 import common from '@ohos.app.ability.common';
 
 export interface SettingsData {
-  apiKey: string;
-  selectedModel: string;
-  customUrl: string;
   customPrompt: string;
   isFirstLaunch: boolean;
   hasAgreedToTerms: boolean;
@@ -12,9 +9,6 @@ export interface SettingsData {
   isDarkMode: boolean;
   autoSaveInterval: number;
   fontSize: number;
-  aiTimeout: number;
-  isLoggedIn: boolean;
-  userName: string;
   grantedPermissions: string[];
   localFontPath: string;
   localModelPath: string;
@@ -28,9 +22,6 @@ export class SettingsManager {
   private prefs: preferences.Preferences | null = null;
   private storageKey: string = 'writing_app_settings';
   private defaultSettings: SettingsData = {
-    apiKey: '',
-    selectedModel: 'gguf',
-    customUrl: '',
     customPrompt: '',
     isFirstLaunch: true,
     hasAgreedToTerms: false,
@@ -38,9 +29,6 @@ export class SettingsManager {
     isDarkMode: false,
     autoSaveInterval: 5,
     fontSize: 14,
-    aiTimeout: 30,
-    isLoggedIn: false,
-    userName: '',
     grantedPermissions: [],
     localFontPath: '',
     localModelPath: '',
@@ -67,9 +55,6 @@ export class SettingsManager {
       if (stored) {
         const parsed = JSON.parse(stored) as SettingsData;
         this.settings = {
-          apiKey: parsed.apiKey || '',
-          selectedModel: parsed.selectedModel || 'gguf',
-          customUrl: parsed.customUrl || '',
           customPrompt: parsed.customPrompt || '',
           isFirstLaunch: parsed.isFirstLaunch !== undefined ? parsed.isFirstLaunch : true,
           hasAgreedToTerms: parsed.hasAgreedToTerms || false,
@@ -77,9 +62,6 @@ export class SettingsManager {
           isDarkMode: parsed.isDarkMode !== undefined ? parsed.isDarkMode : false,
           autoSaveInterval: parsed.autoSaveInterval || 5,
           fontSize: parsed.fontSize || 14,
-          aiTimeout: parsed.aiTimeout || 30,
-          isLoggedIn: parsed.isLoggedIn || false,
-          userName: parsed.userName || '',
           grantedPermissions: Array.isArray(parsed.grantedPermissions) ? parsed.grantedPermissions : [],
           localFontPath: parsed.localFontPath || '',
           localModelPath: parsed.localModelPath || '',
@@ -94,7 +76,21 @@ export class SettingsManager {
     }
   }
 
-  async save(): Promise<void> {
+  private saveTimer: number = -1;
+
+  /** 防抖保存：合并高频 save 调用，避免频繁 flush 磁盘阻塞主线程 */
+  save(): void {
+    if (!this.prefs) return;
+    if (this.saveTimer !== -1) {
+      clearTimeout(this.saveTimer);
+    }
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = -1;
+      this._doSave();
+    }, 200);
+  }
+
+  private async _doSave(): Promise<void> {
     if (!this.prefs) return;
     try {
       await this.prefs.put(this.storageKey, JSON.stringify(this.settings));

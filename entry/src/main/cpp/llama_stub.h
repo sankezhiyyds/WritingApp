@@ -68,6 +68,7 @@ static inline llama_sampler *llama_sampler_chain_init(llama_sampler_chain_params
 static inline void llama_sampler_chain_add(llama_sampler *, llama_sampler *) {}
 static inline llama_sampler *llama_sampler_init_min_p(float, int32_t) { return nullptr; }
 static inline llama_sampler *llama_sampler_init_temp(float) { return nullptr; }
+static inline llama_sampler *llama_sampler_init_top_p(float, int32_t) { return nullptr; }
 static inline void llama_sampler_reset(llama_sampler *) {}
 static inline void llama_sampler_free(llama_sampler *) {}
 static inline llama_token llama_sampler_sample(llama_sampler *, llama_context *, int32_t) { return -1; }

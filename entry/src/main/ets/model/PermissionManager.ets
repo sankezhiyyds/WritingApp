@@ -35,18 +35,6 @@ export class PermissionManager {
     const granted = settingsManager.settings.grantedPermissions;
     return [
       {
-        permission: 'ohos.permission.INTERNET',
-        name: '网络连接',
-        reason: '用于调用AI模型接口生成创作内容',
-        granted: granted.indexOf('ohos.permission.INTERNET') !== -1
-      },
-      {
-        permission: 'ohos.permission.GET_NETWORK_INFO',
-        name: '网络状态',
-        reason: '用于检测网络可用性，避免AI请求超时',
-        granted: granted.indexOf('ohos.permission.GET_NETWORK_INFO') !== -1
-      },
-      {
         permission: 'ohos.permission.READ_MEDIA',
         name: '文件读取',
         reason: '用于加载本地字体文件(.ttf/.otf)和AI模型文件(.gguf)',

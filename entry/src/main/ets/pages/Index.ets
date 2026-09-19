@@ -3,7 +3,6 @@ import { WorkItem, workManager } from '../model/WorkManager';
 import { OutlineManagementPanel } from '../components/OutlineManagementPanel';
 import { settingsManager } from '../model/SettingsManager';
 import { responsiveManager, BreakpointType } from '../model/ResponsiveManager';
-import { huaweiAuthService } from '../model/HuaweiAuthService';
 import { permissionManager, PermissionItem, PermissionResult } from '../model/PermissionManager';
 import router from '@ohos.router';
 import promptAction from '@ohos.promptAction';
@@ -30,7 +29,7 @@ interface MenuButton {
 @Component
 struct Index {
   @State currentIndex: number = 0;
-  @State isDarkMode: boolean = false;
+  @StorageLink('appDarkMode') isDarkMode: boolean = false;
   @State showOnboarding: boolean = false;
   @State onboardingPage: number = 0;
   @State currentBreakpoint: BreakpointType = 'sm';
@@ -103,20 +102,11 @@ struct Index {
       AppStorage.setOrCreate('appFontSize', settingsManager.settings.fontSize || 14);
       AppStorage.setOrCreate('appDarkMode', this.isDarkMode);
     });
-    // 初始化华为账号服务并尝试静默登录
-    huaweiAuthService.init(context);
-    if (huaweiAuthService.hasSavedLogin()) {
-      huaweiAuthService.silentLogin();
-    }
-    // 首次启动申请运行时权限
-    if (settingsManager.settings.isFirstLaunch) {
-      permissionManager.requestPermissions(['ohos.permission.INTERNET', 'ohos.permission.GET_NETWORK_INFO']);
-    }
     // fallback: 如果EntryAbility尚未设置sysDarkMode，从context读取
     if (AppStorage.get<boolean>('sysDarkMode') === undefined) {
       const cfg = (getContext(this) as common.UIAbilityContext).config;
       if (cfg && cfg.colorMode !== undefined) {
-        AppStorage.setOrCreate<boolean>('sysDarkMode', cfg.colorMode === 1);
+        AppStorage.setOrCreate<boolean>('sysDarkMode', cfg.colorMode === 0);
       }
     }
     // 订阅作品数据变更，刷新书架/旧档区
@@ -131,7 +121,7 @@ struct Index {
       const context = getContext(this) as common.UIAbilityContext;
       const config = context.config;
       if (config && config.colorMode !== undefined) {
-        this.isDarkMode = config.colorMode === 1;
+        this.isDarkMode = config.colorMode === 0;
       }
     } else {
       // 手动设置
@@ -413,19 +403,13 @@ struct Index {
             .margin({ bottom: 8 })
             .alignSelf(ItemAlign.Start)
 
-          Text('• 支持多种AI模型')
+          Text('• 本地AI推理')
             .fontSize(this.sf(14))
             .fontColor('#6B7280')
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
-          Text('  - DeepSeek、智谱GLM、百度文心')
-            .fontSize(this.sf(13))
-            .fontColor('#9CA3AF')
-            .margin({ bottom: 4 })
-            .alignSelf(ItemAlign.Start)
-
-          Text('  - 本地GGUF模型')
+          Text('  - 运行本地 GGUF 格式大模型，离线可用')
             .fontSize(this.sf(13))
             .fontColor('#9CA3AF')
             .margin({ bottom: 16 })
@@ -1600,18 +1584,15 @@ struct NovelTab {
 @Component
 struct SettingsTab {
   @Link isDarkMode: boolean;
-  @State selectedModel: string = 'gguf';
+  
   @State followSystemDark: boolean = false;
   @State prevFollowSystemDark: boolean = false;
   @State showPrivacyPanel: boolean = false;
   @State showAboutPanel: boolean = false;
-  @State showAccountPanel: boolean = false;
-  @State isLoggedIn: boolean = false;
-  @State userName: string = '';
   @State autoSaveInterval: number = 5;
   @StorageProp('appFontSize') fontSize: number = 14;
   @StorageProp('appBreakpoint') appBreakpoint: string = 'sm';
-  @State aiTimeout: number = 30;
+  
   @State showImportPanel: boolean = false;
   @State importText: string = '';
   @State showPermissionPanel: boolean = false;
@@ -1671,7 +1652,7 @@ struct SettingsTab {
     if (settingsManager.settings.followSystemDark) {
       const ctx = getContext(this) as common.UIAbilityContext;
       if (ctx.config && ctx.config.colorMode !== undefined) {
-        this.isDarkMode = ctx.config.colorMode === 1;
+        this.isDarkMode = ctx.config.colorMode === 0;
       }
     } else {
       this.isDarkMode = settingsManager.settings.isDarkMode;
@@ -1692,13 +1673,6 @@ struct SettingsTab {
         ListItem() {
           this.SectionTitle('AI 配置')
         }
-
-        ListItem() {
-          this.SettingRow('AI 超时时间', `${this.aiTimeout}秒`, true)
-        }
-        .onClick(() => {
-          this.editTimeout();
-        })
 
         ListItem() {
           this.SettingRow('本地模型文件(GGUF)', this.localModelPath ? this.getFileName(this.localModelPath) : '未选择', true)
@@ -1737,7 +1711,8 @@ struct SettingsTab {
                 })
             }
             .width('100%')
-            .padding({ left: 16, right: 16, bottom: 8 })
+            .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+            .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
           }
 
           ListItem() {
@@ -1770,7 +1745,8 @@ struct SettingsTab {
                 })
             }
             .width('100%')
-            .padding({ left: 16, right: 16, bottom: 8 })
+            .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+            .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
           }
 
           ListItem() {
@@ -1803,7 +1779,8 @@ struct SettingsTab {
                 })
             }
             .width('100%')
-            .padding({ left: 16, right: 16, bottom: 8 })
+            .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+            .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
           }
 
           ListItem() {
@@ -1836,7 +1813,8 @@ struct SettingsTab {
                 })
             }
             .width('100%')
-            .padding({ left: 16, right: 16, bottom: 8 })
+            .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+            .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
           }
 
         // ===== 写作设置 =====
@@ -1860,7 +1838,7 @@ struct SettingsTab {
 
         ListItem() {
           Row() {
-            Text('📝 字体大小')
+            Text('字体大小')
               .fontSize(this.sf(14))
               .fontWeight(FontWeight.Medium)
               .fontColor(this._textPrimary)
@@ -1893,6 +1871,7 @@ struct SettingsTab {
           .width('100%')
           .padding({ left: 16, right: 16 })
           .height(56)
+          .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
         }
 
         ListItem() {
@@ -1935,17 +1914,10 @@ struct SettingsTab {
           this.clearCache();
         })
 
-        // ===== 账号与隐私 =====
+        // ===== 隐私与权限 =====
         ListItem() {
-          this.SectionTitle('账号与隐私')
+          this.SectionTitle('隐私与权限')
         }
-
-        ListItem() {
-          this.SettingRow('华为账号登录', this.isLoggedIn ? this.userName : '未登录', true)
-        }
-        .onClick(() => {
-          this.showAccountPanel = true;
-        })
 
         ListItem() {
           this.SettingRow('用户协议', '', true)
@@ -2012,79 +1984,6 @@ struct SettingsTab {
       }
       .width('100%')
       .layoutWeight(1)
-
-      // 账号登录面板
-      if (this.showAccountPanel) {
-        Column() {
-          Column() {
-            Text('账号登录')
-              .fontSize(this.sf(16))
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this._textPrimary)
-              .margin({ bottom: 8 })
-
-            if (this.isLoggedIn) {
-              Text(`已登录: ${this.userName}`)
-                .fontSize(this.sf(14))
-                .fontColor(this._textSecondary)
-                .margin({ bottom: 16 })
-
-              Button('退出登录')
-                .fontSize(this.sf(14))
-                .fontColor('#FFFFFF')
-                .backgroundColor('#FF4D4D')
-                .borderRadius(20)
-                .height(40)
-                .width('100%')
-                .onClick(() => {
-                  this.logoutHuawei();
-                })
-            } else {
-              Text('登录后可同步华为账号数据')
-                .fontSize(this.sf(13))
-                .fontColor('#9CA3AF')
-                .margin({ bottom: 16 })
-                .textAlign(TextAlign.Center)
-
-              Button('华为账号一键登录')
-                .fontSize(this.sf(14))
-                .fontColor('#FFFFFF')
-                .backgroundColor('#FF2D55')
-                .borderRadius(20)
-                .height(44)
-                .width('100%')
-                .margin({ bottom: 12 })
-                .onClick(() => {
-                  this.loginHuawei();
-                })
-
-              Button('暂不登录')
-                .fontSize(this.sf(13))
-                .fontColor('#9CA3AF')
-                .backgroundColor('transparent')
-                .height(36)
-                .width('100%')
-                .onClick(() => {
-                  this.showAccountPanel = false;
-                })
-            }
-          }
-          .width('100%')
-          .padding(20)
-          .backgroundColor(this._cardBg)
-          .borderRadius(16)
-          .margin({ left: 24, right: 24 })
-          .hitTestBehavior(HitTestMode.Block)
-        }
-        .width('100%')
-        .height('100%')
-        .backgroundColor('rgba(0,0,0,0.5)')
-        .justifyContent(FlexAlign.Center)
-        .position({ x: 0, y: 0 })
-        .onClick(() => {
-          this.showAccountPanel = false;
-        })
-      }
 
       // 隐私政策/用户协议面板
       if (this.showPrivacyPanel) {
@@ -2711,28 +2610,6 @@ struct SettingsTab {
       .width('100%')
   }
 
-  loginHuawei() {
-    huaweiAuthService.loginWithHuaweiID().then((success: boolean) => {
-      if (success) {
-        this.isLoggedIn = settingsManager.settings.isLoggedIn;
-        this.userName = settingsManager.settings.userName;
-        this.showAccountPanel = false;
-        promptAction.showToast({ message: '登录成功！', duration: 2000 });
-      } else {
-        promptAction.showToast({ message: '登录失败或已取消', duration: 2000 });
-      }
-    });
-  }
-
-  logoutHuawei() {
-    huaweiAuthService.logout().then(() => {
-      this.isLoggedIn = false;
-      this.userName = '';
-      this.showAccountPanel = false;
-      promptAction.showToast({ message: '已退出登录', duration: 2000 });
-    });
-  }
-
   selectDarkMode() {
     this.getUIContext().getPromptAction().showActionMenu({
       title: '深色模式',
@@ -2768,26 +2645,6 @@ struct SettingsTab {
         this.applyDarkMode();
         settingsManager.save();
         promptAction.showToast({ message: '已跟随系统深色模式', duration: 2000 });
-      }
-    });
-  }
-
-  editTimeout() {
-    this.getUIContext().getPromptAction().showActionMenu({
-      title: '选择AI超时时间',
-      buttons: [
-        { text: '15秒', color: this._textPrimary } as MenuButton,
-        { text: '30秒', color: this._textPrimary } as MenuButton,
-        { text: '60秒', color: this._textPrimary } as MenuButton,
-        { text: '120秒', color: this._textPrimary } as MenuButton
-      ] as [MenuButton, MenuButton, MenuButton, MenuButton]
-    }).then((result: promptAction.ActionMenuSuccessResponse) => {
-      if (result.index < 4) {
-        const values: number[] = [15, 30, 60, 120];
-        this.aiTimeout = values[result.index];
-        this.saveSettings();
-        const toastOpts: ToastOptions = { message: `已设置为 ${this.aiTimeout}秒`, duration: 2000 };
-        promptAction.showToast(toastOpts);
       }
     });
   }
@@ -2880,15 +2737,11 @@ struct SettingsTab {
   }
 
   loadSettings() {
-    this.selectedModel = 'gguf';
     this.followSystemDark = settingsManager.settings.followSystemDark;
     this.prevFollowSystemDark = settingsManager.settings.followSystemDark;
     this.autoSaveInterval = settingsManager.settings.autoSaveInterval || 5;
     this.fontSize = settingsManager.settings.fontSize || 14;
     AppStorage.setOrCreate('appFontSize', this.fontSize);
-    this.aiTimeout = settingsManager.settings.aiTimeout || 30;
-    this.isLoggedIn = settingsManager.settings.isLoggedIn;
-    this.userName = settingsManager.settings.userName;
     this.localFontPath = settingsManager.settings.localFontPath || '';
     this.localModelPath = settingsManager.settings.localModelPath || '';
     this.ggufContextLength = settingsManager.settings.ggufContextLength ?? 2048;
@@ -2898,10 +2751,8 @@ struct SettingsTab {
   }
 
   saveSettings() {
-    settingsManager.settings.selectedModel = 'gguf';
     settingsManager.settings.autoSaveInterval = this.autoSaveInterval;
     settingsManager.settings.fontSize = this.fontSize;
-    settingsManager.settings.aiTimeout = this.aiTimeout;
     settingsManager.settings.isDarkMode = this.isDarkMode;
     settingsManager.settings.followSystemDark = this.followSystemDark;
     settingsManager.settings.localFontPath = this.localFontPath;

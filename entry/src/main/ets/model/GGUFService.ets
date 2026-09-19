@@ -75,8 +75,8 @@ class GGUFServiceClass {
     }
   }
 
-  /** Load a GGUF model from the device filesystem. */
-  loadModel(params: GGUFLoadParams): boolean {
+  /** Load a GGUF model from the device filesystem (async, runs on background thread). */
+  async loadModel(params: GGUFLoadParams): Promise<boolean> {
     if (!this.nativeAvailable) {
       console.warn('[GGUFService] Native module not available. Please compile llama.cpp.');
       return false;
@@ -91,7 +91,7 @@ class GGUFServiceClass {
     const threads = params.threads ?? 4;
 
     try {
-      const success = gguf.loadModel(params.modelPath, contextLength, threads);
+      const success = await gguf.loadModel(params.modelPath, contextLength, threads);
       if (success) {
         this.loaded = true;
         this.currentModelPath = params.modelPath;
@@ -157,11 +157,6 @@ class GGUFServiceClass {
     }
   }
 
-  /** Generate text asynchronously with Promise interface. */
-  async generateAsync(params: GGUFGenerateParams): Promise<GGUFGenerateResult> {
-    return await this.generate(params);
-  }
-
   /** Unload the current model and free resources. */
   unloadModel(): void {
     if (this.nativeAvailable && this.loaded) {
@@ -216,7 +211,7 @@ class GGUFServiceClass {
    * Ensure model is loaded from settings. Auto-loads if path is configured
    * but model isn't loaded yet.
    */
-  ensureModelLoaded(): boolean {
+  async ensureModelLoaded(): Promise<boolean> {
     if (this.isLoaded()) return true;
 
     const settings = settingsManager.settings;
@@ -226,7 +221,7 @@ class GGUFServiceClass {
 
     const contextLength = settings.ggufContextLength ?? 2048;
     const threads = settings.ggufThreads ?? 4;
-    return this.loadModel({
+    return await this.loadModel({
       modelPath: settings.localModelPath,
       contextLength: contextLength,
       threads: threads

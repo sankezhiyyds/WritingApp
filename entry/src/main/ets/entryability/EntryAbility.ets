@@ -1,5 +1,6 @@
 import UIAbility from '@ohos.app.ability.UIAbility';
 import window from '@ohos.window';
+import Configuration from '@ohos.app.ability.Configuration';
 import { workManager } from '../model/WorkManager';
 import { settingsManager } from '../model/SettingsManager';
 import { responsiveManager } from '../model/ResponsiveManager';
@@ -35,6 +36,13 @@ export default class EntryAbility extends UIAbility {
       }
       console.info('[EntryAbility] loadContent succeeded');
     });
+  }
+
+  onConfigurationUpdate(newConfig: Configuration): void {
+    // 系统深色模式切换时同步到 AppStorage，触发 Index 的 onSysDarkModeChange
+    if (newConfig.colorMode !== undefined) {
+      AppStorage.setOrCreate('sysDarkMode', newConfig.colorMode === 0);
+    }
   }
 
   onForeground(): void {

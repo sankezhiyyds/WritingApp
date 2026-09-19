@@ -45,7 +45,7 @@ struct PromptEditorPage {
   @State editingChapterContent: string = '';
   @State selectedCategory: string = '全部';
   @State autoSaveTimer: number = 0;
-  @State isDarkMode: boolean = false;
+  @StorageProp('appDarkMode') isDarkMode: boolean = false;
   @State bgTheme: string = 'default';
   @StorageProp('appFontSize') fontSize: number = 14;
 
@@ -101,7 +101,6 @@ struct PromptEditorPage {
   }
 
   aboutToAppear() {
-    this.isDarkMode = settingsManager.settings.isDarkMode;
     AppStorage.setOrCreate('appFontSize', settingsManager.settings.fontSize || 14);
     const params = router.getParams() as Record<string, string>;
     if (params) {
@@ -633,7 +632,7 @@ struct PromptEditorPage {
               .width('100%')
           } else {
             Column() {
-              Text('📝 填写上方模板字段后，点击底部的 AI 生成或小艺按钮')
+              Text('📝 填写上方模板字段后，点击底部的 AI 生成按钮')
                 .fontSize(this.sf(13))
                 .fontColor(this.subTextColor)
                 .margin({ bottom: 4 })

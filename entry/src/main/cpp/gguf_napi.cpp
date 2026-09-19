@@ -35,15 +35,30 @@ struct AsyncGenerateData {
     bool success;
 };
 
-// ─── loadModel(modelPath: string, contextLength: number, threads: number): boolean ───
+// ─── Async load data ───
+struct LoadModelData {
+    napi_async_work work;
+    napi_deferred deferred;
+    std::string modelPath;
+    int32_t contextLength;
+    int32_t threads;
+    bool success;
+};
+
+// ─── loadModel(modelPath: string, contextLength: number, threads: number): Promise<boolean> ───
+// Loading runs on a background thread to avoid blocking the UI thread (ANR).
 static napi_value LoadModel(napi_env env, napi_callback_info info) {
     size_t argc = 3;
     napi_value args[3];
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-    char modelPath[512] = {0};
+    // 动态长度读取模型路径，避免固定缓冲区溢出/截断
     size_t pathLen = 0;
-    napi_get_value_string_utf8(env, args[0], modelPath, sizeof(modelPath), &pathLen);
+    napi_get_value_string_utf8(env, args[0], nullptr, 0, &pathLen);
+    std::string modelPath(pathLen, '\0');
+    if (pathLen > 0) {
+        napi_get_value_string_utf8(env, args[0], &modelPath[0], pathLen + 1, &pathLen);
+    }
 
     int32_t contextLength = 2048;
     napi_get_value_int32(env, args[1], &contextLength);
@@ -51,16 +66,42 @@ static napi_value LoadModel(napi_env env, napi_callback_info info) {
     int32_t threads = 4;
     napi_get_value_int32(env, args[2], &threads);
 
-    if (!g_runner) {
-        g_runner = std::make_unique<LlamaRunner>();
-    }
+    auto* data = new LoadModelData();
+    data->modelPath = modelPath;
+    data->contextLength = contextLength;
+    data->threads = threads;
+    data->success = false;
 
-    bool success = g_runner->loadModel(modelPath, contextLength, threads);
-    LOGI("LoadModel result: %{public}d", success);
+    napi_value promise;
+    napi_create_promise(env, &data->deferred, &promise);
 
-    napi_value result;
-    napi_get_boolean(env, success, &result);
-    return result;
+    napi_value workName;
+    napi_create_string_utf8(env, "ggufLoadModel", NAPI_AUTO_LENGTH, &workName);
+
+    napi_create_async_work(env, nullptr, workName,
+        // Execute on background thread
+        [](napi_env env, void* rawData) {
+            auto* d = static_cast<LoadModelData*>(rawData);
+            if (!g_runner) {
+                g_runner = std::make_unique<LlamaRunner>();
+            }
+            d->success = g_runner->loadModel(d->modelPath, d->contextLength, d->threads);
+            LOGI("LoadModel result: %{public}d", d->success);
+        },
+        // Complete on main thread — resolve the Promise
+        [](napi_env env, napi_status status, void* rawData) {
+            auto* d = static_cast<LoadModelData*>(rawData);
+            napi_value result;
+            napi_get_boolean(env, d->success, &result);
+            napi_resolve_deferred(env, d->deferred, result);
+            napi_delete_async_work(env, d->work);
+            delete d;
+        },
+        data, &data->work
+    );
+
+    napi_queue_async_work(env, data->work);
+    return promise;
 }
 
 // ─── generate(prompt, maxTokens, temperature, topP, callback): Promise<string> ───
@@ -72,9 +113,13 @@ static napi_value Generate(napi_env env, napi_callback_info info) {
     napi_value args[5];
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-    char prompt[8192] = {0};
+    // 动态长度读取 prompt，避免固定 8192 字节缓冲区截断长提示词
     size_t promptLen = 0;
-    napi_get_value_string_utf8(env, args[0], prompt, sizeof(prompt), &promptLen);
+    napi_get_value_string_utf8(env, args[0], nullptr, 0, &promptLen);
+    std::string prompt(promptLen, '\0');
+    if (promptLen > 0) {
+        napi_get_value_string_utf8(env, args[0], &prompt[0], promptLen + 1, &promptLen);
+    }
 
     int32_t maxTokens = 512;
     napi_get_value_int32(env, args[1], &maxTokens);
@@ -88,9 +133,14 @@ static napi_value Generate(napi_env env, napi_callback_info info) {
     napi_value callback = args[4];
 
     if (!g_runner || !g_runner->isLoaded()) {
-        napi_value empty;
-        napi_create_string_utf8(env, "", 0, &empty);
-        return empty;
+        // 返回解析为空字符串的 Promise，保持契约一致
+        napi_value emptyStr;
+        napi_create_string_utf8(env, "", 0, &emptyStr);
+        napi_deferred emptyDeferred;
+        napi_value emptyPromise;
+        napi_create_promise(env, &emptyDeferred, &emptyPromise);
+        napi_resolve_deferred(env, emptyDeferred, emptyStr);
+        return emptyPromise;
     }
 
     // ── Create Promise ──

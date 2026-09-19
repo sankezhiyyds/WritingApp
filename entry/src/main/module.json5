@@ -14,18 +14,8 @@
     "pages": "$profile:main_pages",
     "requestPermissions": [
       {
-        "name": "ohos.permission.INTERNET",
-        "reason": "$string:permission_reason_internet",
-        "usedScene": {
-          "abilities": [
-            "EntryAbility"
-          ],
-          "when": "inuse"
-        }
-      },
-      {
-        "name": "ohos.permission.GET_NETWORK_INFO",
-        "reason": "$string:permission_reason_network_info",
+        "name": "ohos.permission.READ_MEDIA",
+        "reason": "$string:permission_reason_read_media",
         "usedScene": {
           "abilities": [
             "EntryAbility"
@@ -53,12 +43,6 @@
             "actions": [
               "action.system.home"
             ]
-          }
-        ],
-        "metadata": [
-          {
-            "name": "client_id",
-            "value": "YOUR_CLIENT_ID_HERE"
           }
         ]
       }

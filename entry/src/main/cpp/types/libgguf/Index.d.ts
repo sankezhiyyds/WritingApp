@@ -3,16 +3,16 @@
  * Exposes llama.cpp inference functions to ArkTS via NAPI
  */
 
-/** Load a GGUF model from file. Returns true on success. */
+/** Load a GGUF model from file (async, runs on background thread). Resolves true on success. */
 export const loadModel: (
   modelPath: string,
   contextLength?: number,
   threads?: number
-) => boolean;
+) => Promise<boolean>;
 
 /**
  * Run text generation with optional streaming callback.
- * Returns the full generated text.
+ * Resolves the full generated text.
  */
 export const generate: (
   prompt: string,
@@ -20,7 +20,7 @@ export const generate: (
   temperature?: number,
   topP?: number,
   onToken?: (token: string) => void
-) => string;
+) => Promise<string>;
 
 /** Unload model and free all resources. */
 export const unloadModel: () => void;
