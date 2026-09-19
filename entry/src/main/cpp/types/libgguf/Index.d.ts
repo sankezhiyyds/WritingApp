@@ -33,3 +33,6 @@ export const getModelInfo: () => string;
 
 /** Abort current generation. */
 export const abort: () => void;
+
+/** Returns true if using stub (llama.cpp not compiled). */
+export const isStubMode: () => boolean;

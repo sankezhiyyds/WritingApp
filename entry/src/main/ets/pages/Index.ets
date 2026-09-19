@@ -34,6 +34,7 @@ struct Index {
   @State showOnboarding: boolean = false;
   @State onboardingPage: number = 0;
   @State currentBreakpoint: BreakpointType = 'sm';
+  @State refreshKey: number = 0;
   @StorageProp('sysDarkMode') @Watch('onSysDarkModeChange') sysDarkMode: boolean = false;
   @StorageProp('appFontSize') fontSize: number = 14;
 
@@ -43,7 +44,9 @@ struct Index {
   private controller: TabsController = new TabsController();
   private breakpointCallback: (bp: BreakpointType) => void = (bp: BreakpointType) => {
     this.currentBreakpoint = bp;
+    AppStorage.setOrCreate('appBreakpoint', bp);
   };
+  private unsubscribeWorkChange: (() => void) | null = null;
 
   get isWide(): boolean {
     return this.currentBreakpoint === 'md' || this.currentBreakpoint === 'lg';
@@ -90,6 +93,7 @@ struct Index {
     }
     // 初始化断点
     this.currentBreakpoint = responsiveManager.getBreakpoint();
+    AppStorage.setOrCreate('appBreakpoint', this.currentBreakpoint);
     responsiveManager.onBreakpointChange(this.breakpointCallback);
     // 初始化深色模式
     const context = getContext(this) as common.UIAbilityContext;
@@ -97,6 +101,7 @@ struct Index {
     settingsManager.initPromise.then(() => {
       this.updateDarkMode();
       AppStorage.setOrCreate('appFontSize', settingsManager.settings.fontSize || 14);
+      AppStorage.setOrCreate('appDarkMode', this.isDarkMode);
     });
     // 初始化华为账号服务并尝试静默登录
     huaweiAuthService.init(context);
@@ -114,6 +119,10 @@ struct Index {
         AppStorage.setOrCreate<boolean>('sysDarkMode', cfg.colorMode === 1);
       }
     }
+    // 订阅作品数据变更，刷新书架/旧档区
+    this.unsubscribeWorkChange = workManager.onChange(() => {
+      this.refreshKey++;
+    });
   }
 
   updateDarkMode() {
@@ -128,6 +137,7 @@ struct Index {
       // 手动设置
       this.isDarkMode = settingsManager.settings.isDarkMode;
     }
+    AppStorage.setOrCreate('appDarkMode', this.isDarkMode);
   }
 
   /** 系统深色模式变化时自动同步（跟随系统模式） */
@@ -139,6 +149,10 @@ struct Index {
 
   aboutToDisappear() {
     responsiveManager.offBreakpointChange(this.breakpointCallback);
+    if (this.unsubscribeWorkChange) {
+      this.unsubscribeWorkChange();
+      this.unsubscribeWorkChange = null;
+    }
   }
 
   build() {
@@ -411,13 +425,13 @@ struct Index {
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
-          Text('  - 小艺助手、本地GGUF模型')
+          Text('  - 本地GGUF模型')
             .fontSize(this.sf(13))
             .fontColor('#9CA3AF')
             .margin({ bottom: 16 })
             .alignSelf(ItemAlign.Start)
 
-          Text('💡 提示：在设置中配置API Key即可使用')
+          Text('💡 提示：在设置中选择GGUF模型即可使用AI功能')
             .fontSize(this.sf(13))
             .fontColor('#FF2D55')
             .alignSelf(ItemAlign.Start)
@@ -492,7 +506,7 @@ struct Index {
             .fontColor('#1A1A2E')
             .margin({ bottom: 12 })
 
-          Text('• 您的API Key仅存储在本地')
+          Text('• 所有数据仅保存在本地')
             .fontSize(this.sf(14))
             .fontColor('#6B7280')
             .margin({ bottom: 4 })
@@ -661,6 +675,26 @@ struct Index {
                   promptAction.showToast({ message: '已移入旧档区', duration: 2000 });
                 })
 
+              Text('删除')
+                .fontSize(this.sf(12))
+                .fontColor('#EF4444')
+                .padding({ left: 8, right: 8 })
+                .onClick(() => {
+                  promptAction.showDialog({
+                    title: '确认删除',
+                    message: `确定要删除「${work.title || '未命名作品'}」吗？此操作不可恢复。`,
+                    buttons: [
+                      { text: '取消', color: '#9CA3AF' },
+                      { text: '删除', color: '#EF4444' }
+                    ]
+                  }).then((data) => {
+                    if (data.index === 1) {
+                      workManager.deleteWork(work.id);
+                      promptAction.showToast({ message: '已删除', duration: 2000 });
+                    }
+                  });
+                })
+
               Text('>')
                 .fontSize(this.sf(16))
                 .fontColor('#D1D5DB')
@@ -749,6 +783,26 @@ struct Index {
                   .onClick(() => {
                     workManager.unarchiveWork(work.id);
                     promptAction.showToast({ message: '已移回书架', duration: 2000 });
+                  })
+
+                Text('删除')
+                  .fontSize(this.sf(12))
+                  .fontColor('#EF4444')
+                  .padding({ left: 8, right: 8 })
+                  .onClick(() => {
+                    promptAction.showDialog({
+                      title: '确认删除',
+                      message: `确定要删除「${work.title || '未命名作品'}」吗？此操作不可恢复。`,
+                      buttons: [
+                        { text: '取消', color: '#9CA3AF' },
+                        { text: '删除', color: '#EF4444' }
+                      ]
+                    }).then((data) => {
+                      if (data.index === 1) {
+                        workManager.deleteWork(work.id);
+                        promptAction.showToast({ message: '已删除', duration: 2000 });
+                      }
+                    });
                   })
 
                 Text('>')
@@ -1546,16 +1600,9 @@ struct NovelTab {
 @Component
 struct SettingsTab {
   @Link isDarkMode: boolean;
-  @State apiKey: string = '';
-  @State selectedModel: string = 'deepseek';
-  @State showApiKeyInput: boolean = false;
-  @State apiKeyInput: string = '';
-  @State customUrl: string = '';
-  @State showCustomUrlInput: boolean = false;
-  @State customUrlInput: string = '';
+  @State selectedModel: string = 'gguf';
   @State followSystemDark: boolean = false;
   @State prevFollowSystemDark: boolean = false;
-  @State showModelPickerPanel: boolean = false;
   @State showPrivacyPanel: boolean = false;
   @State showAboutPanel: boolean = false;
   @State showAccountPanel: boolean = false;
@@ -1563,6 +1610,7 @@ struct SettingsTab {
   @State userName: string = '';
   @State autoSaveInterval: number = 5;
   @StorageProp('appFontSize') fontSize: number = 14;
+  @StorageProp('appBreakpoint') appBreakpoint: string = 'sm';
   @State aiTimeout: number = 30;
   @State showImportPanel: boolean = false;
   @State importText: string = '';
@@ -1595,6 +1643,19 @@ struct SettingsTab {
   get _cardBg(): string { return this.isDarkMode ? '#2D2D3A' : '#FFFFFF'; }
   get _textPrimary(): string { return this.isDarkMode ? '#FFFFFF' : '#1A1A2E'; }
   get _textSecondary(): string { return this.isDarkMode ? '#9CA3AF' : '#6B7280'; }
+
+  get _contentMaxWidth(): number {
+    if (this.appBreakpoint === 'lg') return 800;
+    if (this.appBreakpoint === 'md') return 600;
+    return 10000;
+  }
+
+  get _sidePadding(): number {
+    if (this.appBreakpoint === 'lg') return 24;
+    if (this.appBreakpoint === 'md') return 20;
+    return 16;
+  }
+
   get _inputBg(): string { return this.isDarkMode ? '#3A3A4A' : '#F9FAFB'; }
   get _cancelBg(): string { return this.isDarkMode ? '#3A3A4A' : '#F3F4F6'; }
   get _cancelText(): string { return this.isDarkMode ? '#9CA3AF' : '#6B7280'; }
@@ -1624,36 +1685,13 @@ struct SettingsTab {
         .fontWeight(FontWeight.Bold)
         .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
         .alignSelf(ItemAlign.Start)
-        .margin({ left: 16, top: 16, bottom: 12 })
+        .margin({ left: this._sidePadding, top: 16, bottom: 12 })
 
       List() {
         // ===== AI 配置 =====
         ListItem() {
           this.SectionTitle('AI 配置')
         }
-
-        ListItem() {
-          this.SettingRow('AI模型配置', this.getModelName(), true)
-        }
-        .onClick(() => {
-          this.showModelPickerPanel = true;
-        })
-
-        ListItem() {
-          this.SettingRow('API Key', this.apiKey ? '已配置' : '未配置', true)
-        }
-        .onClick(() => {
-          this.apiKeyInput = this.apiKey;
-          this.showApiKeyInput = true;
-        })
-
-        ListItem() {
-          this.SettingRow('自定义接口地址', this.customUrl ? '已配置' : '未配置', true)
-        }
-        .onClick(() => {
-          this.customUrlInput = this.customUrl;
-          this.showCustomUrlInput = true;
-        })
 
         ListItem() {
           this.SettingRow('AI 超时时间', `${this.aiTimeout}秒`, true)
@@ -1669,13 +1707,12 @@ struct SettingsTab {
           this.showModelPicker = true;
         })
 
-        if (this.selectedModel === 'gguf') {
-          ListItem() {
-            Column() {
-              Row() {
-                Text('上下文长度')
-                  .fontSize(this.sf(14))
-                  .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+        ListItem() {
+          Column() {
+            Row() {
+              Text('上下文长度')
+                .fontSize(this.sf(14))
+                .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
                 Blank()
                 Text(`${this.ggufContextLength}`)
                   .fontSize(this.sf(14))
@@ -1801,7 +1838,6 @@ struct SettingsTab {
             .width('100%')
             .padding({ left: 16, right: 16, bottom: 8 })
           }
-        }
 
         // ===== 写作设置 =====
         ListItem() {
@@ -1977,189 +2013,6 @@ struct SettingsTab {
       .width('100%')
       .layoutWeight(1)
 
-      // API Key输入弹层
-      if (this.showApiKeyInput) {
-        Column() {
-          Column() {
-            Text('设置 API Key')
-              .fontSize(this.sf(16))
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this._textPrimary)
-              .margin({ bottom: 8 })
-            Text('仅本地存储，不会上传到任何服务器')
-              .fontSize(this.sf(12))
-              .fontColor('#9CA3AF')
-              .margin({ bottom: 12 })
-            TextInput({ placeholder: '请输入 API Key', text: this.apiKeyInput })
-              .width('100%')
-              .height(44)
-              .fontSize(this.sf(14))
-              .backgroundColor(this._inputBg)
-              .borderRadius(8)
-              .padding({ left: 12, right: 12 })
-              .onChange((value: string) => {
-                this.apiKeyInput = value;
-              })
-            Row() {
-              Button('取消')
-                .fontSize(this.sf(14))
-                .fontColor(this._cancelText)
-                .backgroundColor(this._cancelBg)
-                .borderRadius(20)
-                .height(40)
-                .layoutWeight(1)
-                .margin({ right: 12 })
-                .onClick(() => {
-                  this.showApiKeyInput = false;
-                })
-              Button('保存')
-                .fontSize(this.sf(14))
-                .fontColor('#FFFFFF')
-                .backgroundColor('#FF2D55')
-                .borderRadius(20)
-                .height(40)
-                .layoutWeight(1)
-                .onClick(() => {
-                  this.apiKey = this.apiKeyInput.trim();
-                  this.saveSettings();
-                  this.showApiKeyInput = false;
-                  promptAction.showToast({ message: '已保存', duration: 2000 });
-                })
-            }
-            .width('100%')
-            .margin({ top: 16 })
-          }
-          .width('100%')
-          .padding(20)
-          .backgroundColor(this._cardBg)
-          .borderRadius(16)
-          .margin({ left: 24, right: 24 })
-          .hitTestBehavior(HitTestMode.Block)
-        }
-        .width('100%')
-        .height('100%')
-        .backgroundColor('rgba(0,0,0,0.5)')
-        .justifyContent(FlexAlign.Center)
-        .position({ x: 0, y: 0 })
-        .onClick(() => {
-          this.showApiKeyInput = false;
-        })
-      }
-
-      // 自定义URL输入弹层
-      if (this.showCustomUrlInput) {
-        Column() {
-          Column() {
-            Text('设置自定义接口地址')
-              .fontSize(this.sf(16))
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this._textPrimary)
-              .margin({ bottom: 8 })
-            Text('用于自定义AI模型API端点')
-              .fontSize(this.sf(12))
-              .fontColor('#9CA3AF')
-              .margin({ bottom: 12 })
-            TextInput({ placeholder: '请输入 API 地址', text: this.customUrlInput })
-              .width('100%')
-              .height(44)
-              .fontSize(this.sf(14))
-              .backgroundColor(this._inputBg)
-              .borderRadius(8)
-              .padding({ left: 12, right: 12 })
-              .onChange((value: string) => {
-                this.customUrlInput = value;
-              })
-            Row() {
-              Button('取消')
-                .fontSize(this.sf(14))
-                .fontColor(this._cancelText)
-                .backgroundColor(this._cancelBg)
-                .borderRadius(20)
-                .height(40)
-                .layoutWeight(1)
-                .margin({ right: 12 })
-                .onClick(() => {
-                  this.showCustomUrlInput = false;
-                })
-              Button('保存')
-                .fontSize(this.sf(14))
-                .fontColor('#FFFFFF')
-                .backgroundColor('#FF2D55')
-                .borderRadius(20)
-                .height(40)
-                .layoutWeight(1)
-                .onClick(() => {
-                  this.customUrl = this.customUrlInput.trim();
-                  this.saveSettings();
-                  this.showCustomUrlInput = false;
-                  promptAction.showToast({ message: '已保存', duration: 2000 });
-                })
-            }
-            .width('100%')
-            .margin({ top: 16 })
-          }
-          .width('100%')
-          .padding(20)
-          .backgroundColor(this._cardBg)
-          .borderRadius(16)
-          .margin({ left: 24, right: 24 })
-          .hitTestBehavior(HitTestMode.Block)
-        }
-        .width('100%')
-        .height('100%')
-        .backgroundColor('rgba(0,0,0,0.5)')
-        .justifyContent(FlexAlign.Center)
-        .position({ x: 0, y: 0 })
-        .onClick(() => {
-          this.showCustomUrlInput = false;
-        })
-      }
-
-      // 模型选择面板
-      if (this.showModelPickerPanel) {
-        Column() {
-          Column() {
-            Text('选择AI模型')
-              .fontSize(this.sf(16))
-              .fontColor(this._textPrimary)
-              .margin({ bottom: 16 })
-
-            this.ModelOption('DeepSeek', 'deepseek')
-            this.ModelOption('智谱 GLM', 'glm')
-            this.ModelOption('百度文心', 'baidu')
-            this.ModelOption('小艺助手', 'xiaoyi')
-            this.ModelOption('本地 GGUF', 'gguf')
-            this.ModelOption('自定义接口', 'custom')
-
-            Button('取消')
-              .fontSize(this.sf(14))
-              .fontColor(this._cancelText)
-              .backgroundColor(this._cancelBg)
-              .borderRadius(20)
-              .height(40)
-              .width('100%')
-              .margin({ top: 12 })
-              .onClick(() => {
-                this.showModelPickerPanel = false;
-              })
-          }
-          .width('100%')
-          .padding(20)
-          .backgroundColor(this._cardBg)
-          .borderRadius(16)
-          .margin({ left: 24, right: 24 })
-          .hitTestBehavior(HitTestMode.Block)
-        }
-        .width('100%')
-        .height('100%')
-        .backgroundColor('rgba(0,0,0,0.5)')
-        .justifyContent(FlexAlign.Center)
-        .position({ x: 0, y: 0 })
-        .onClick(() => {
-          this.showModelPickerPanel = false;
-        })
-      }
-
       // 账号登录面板
       if (this.showAccountPanel) {
         Column() {
@@ -2187,7 +2040,7 @@ struct SettingsTab {
                   this.logoutHuawei();
                 })
             } else {
-              Text('登录后即可使用AI功能和修改API设置')
+              Text('登录后可同步华为账号数据')
                 .fontSize(this.sf(13))
                 .fontColor('#9CA3AF')
                 .margin({ bottom: 16 })
@@ -2250,7 +2103,7 @@ struct SettingsTab {
               .margin({ bottom: 8 })
               .alignSelf(ItemAlign.Start)
 
-            Text('1. 本应用仅供个人学习和创作使用，不得用于商业侵权用途。\n2. 用户需遵守相关法律法规，不得利用本应用生成违法违规内容。\n3. AI生成的内容版权归用户所有，用户需自行承担使用风险。\n4. 用户应妥善保管API Key，不得将其分享给他人使用。\n5. 本应用不对AI生成内容的准确性和合法性负责。')
+            Text('1. 本应用仅供个人学习和创作使用，不得用于商业侵权用途。\n2. 用户需遵守相关法律法规，不得利用本应用生成违法违规内容。\n3. AI生成的内容版权归用户所有，用户需自行承担使用风险。\n4. 用户在使用AI功能时应遵守相关法律法规。\n5. 本应用不对AI生成内容的准确性和合法性负责。')
               .fontSize(this.sf(12))
               .fontColor(this._textSecondary)
               .margin({ bottom: 16 })
@@ -2263,7 +2116,7 @@ struct SettingsTab {
               .margin({ bottom: 8 })
               .alignSelf(ItemAlign.Start)
 
-            Text('1. 您的API Key仅存储在本地，不会上传到任何服务器。\n2. 作品数据完全保存在您的设备上，我们不会收集您的创作内容。\n3. 本应用不会收集您的个人信息、位置、通讯录等隐私数据。\n4. 当您使用华为账号登录时，我们仅会获取必要的用户标识用于登录验证。\n5. 我们不会将您的任何数据分享给第三方。')
+            Text('1. 所有作品数据仅保存在您的设备上，我们不会收集您的创作内容。\n2. 本应用不会收集您的个人信息、位置、通讯录等隐私数据。\n3. 当您使用华为账号登录时，我们仅会获取必要的用户标识用于登录验证。\n4. 我们不会将您的任何数据分享给第三方。')
               .fontSize(this.sf(12))
               .fontColor(this._textSecondary)
               .margin({ bottom: 16 })
@@ -2329,7 +2182,7 @@ struct SettingsTab {
               .margin({ bottom: 8 })
               .alignSelf(ItemAlign.Start)
 
-            Text('• 短幕剧/中长篇双工作台，独立管理\n• AI对话生成，一键保存思维链路\n• 自动版本归档，修改历史可追溯\n• 书架与旧档区，作品归档一目了然\n• 支持多种AI模型：DeepSeek、智谱GLM、百度文心、小艺助手、本地GGUF\n• 丰富的模板库，支持自定义提示词\n• 深色模式，保护您的视力')
+            Text('• 短幕剧/中长篇双工作台，独立管理\n• AI对话生成，一键保存思维链路\n• 自动版本归档，修改历史可追溯\n• 书架与旧档区，作品归档一目了然\n• 支持本地GGUF模型\n• 丰富的模板库，支持自定义提示词\n• 深色模式，保护您的视力')
               .fontSize(this.sf(12))
               .fontColor('#6B7280')
               .margin({ bottom: 16 })
@@ -2475,10 +2328,24 @@ struct SettingsTab {
                   const uris = await documentPicker.select();
                   const result: string[] = uris as string[];
                   if (result && result.length > 0) {
-                    this.localModelPath = result[0];
-                    settingsManager.settings.localModelPath = this.localModelPath;
-                    settingsManager.save();
-                    promptAction.showToast({ message: `已选择模型: ${this.getFileName(this.localModelPath)}`, duration: 2000 });
+                    const srcUri = result[0];
+                    try {
+                      // 将URI文件复制到应用沙箱，C++ fopen需要真实路径
+                      const srcFile = fileIo.openSync(srcUri, fileIo.OpenMode.READ_ONLY);
+                      const fileName = srcUri.split('/').pop() || 'model.gguf';
+                      const sandboxDir = getContext(this).filesDir;
+                      const destPath = `${sandboxDir}/${fileName}`;
+                      const destFile = fileIo.openSync(destPath, fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
+                      fileIo.copyFileSync(srcFile.fd, destFile.fd);
+                      fileIo.closeSync(srcFile);
+                      fileIo.closeSync(destFile);
+                      this.localModelPath = destPath;
+                      settingsManager.settings.localModelPath = this.localModelPath;
+                      settingsManager.save();
+                      promptAction.showToast({ message: `模型已复制: ${fileName}`, duration: 2000 });
+                    } catch (copyErr) {
+                      promptAction.showToast({ message: '模型文件复制失败: ' + copyErr, duration: 3000 });
+                    }
                     this.showModelPicker = false;
                   }
                 } catch (err) {
@@ -2681,7 +2548,7 @@ struct SettingsTab {
                   .fontColor(this._textPrimary)
                   .margin({ bottom: 8 })
                   .alignSelf(ItemAlign.Start)
-                Text('1. 在短幕剧/中长篇工作台选择模板，填写字段即可生成创作框架。\n2. 点击"AI生成"按钮，由AI补全完整内容（需在设置中配置API Key）。\n3. 保存后作品进入书架，可随时归档到旧档区。')
+                Text('1. 在短幕剧/中长篇工作台选择模板，填写字段即可生成创作框架。\n2. 点击"AI生成"按钮，由AI补全完整内容（需在设置中配置本地GGUF模型）。\n3. 保存后作品进入书架，可随时归档到旧档区。')
                   .fontSize(this.sf(12))
                   .fontColor(this._textSecondary)
                   .margin({ bottom: 16 })
@@ -2693,7 +2560,7 @@ struct SettingsTab {
                   .fontColor(this._textPrimary)
                   .margin({ bottom: 8 })
                   .alignSelf(ItemAlign.Start)
-                Text('Q: AI生成失败怎么办？\nA: 请检查设置中的API Key是否正确、网络是否可用，也可尝试调大AI超时时间。\n\nQ: 作品如何备份？\nA: 设置 → 导出数据，将备份JSON复制保存；换设备后用"导入数据"恢复。\n\nQ: 版本历史在哪里？\nA: 打开作品后点击底部"历史"按钮，可预览并恢复任意历史版本。')
+                Text('Q: AI生成失败怎么办？\nA: 请检查设置中的本地GGUF模型配置是否正确，也可尝试调大AI超时时间。\n\nQ: 作品如何备份？\nA: 设置 → 导出数据，将备份JSON复制保存；换设备后用"导入数据"恢复。\n\nQ: 版本历史在哪里？\nA: 打开作品后点击底部"历史"按钮，可预览并恢复任意历史版本。')
                   .fontSize(this.sf(12))
                   .fontColor('#6B7280')
                   .margin({ bottom: 16 })
@@ -2802,6 +2669,7 @@ struct SettingsTab {
     .width('100%')
     .height('100%')
     .backgroundColor(this.isDarkMode ? '#1A1A2E' : '#F5F6FA')
+    .constraintSize({ maxWidth: this._contentMaxWidth })
   }
 
   @Builder
@@ -2841,47 +2709,6 @@ struct SettingsTab {
       .margin({ top: 8, bottom: 4 })
       .padding({ left: 16 })
       .width('100%')
-  }
-
-  getModelName(): string {
-    switch (this.selectedModel) {
-      case 'deepseek': return 'DeepSeek';
-      case 'glm': return '智谱 GLM';
-      case 'baidu': return '百度文心';
-      case 'xiaoyi': return '小艺助手';
-      case 'gguf': return '本地 GGUF';
-      case 'custom': return '自定义接口';
-      default: return 'DeepSeek';
-    }
-  }
-
-  @Builder
-  ModelOption(label: string, modelKey: string) {
-    Row() {
-      Text(label)
-        .fontSize(this.sf(15))
-        .fontColor(this.selectedModel === modelKey ? '#FF2D55' : (this.isDarkMode ? '#FFFFFF' : '#1A1A2E'))
-        .fontWeight(this.selectedModel === modelKey ? FontWeight.Bold : FontWeight.Normal)
-        .layoutWeight(1)
-
-      if (this.selectedModel === modelKey) {
-        Text('✓')
-          .fontSize(this.sf(16))
-          .fontColor('#FF2D55')
-      }
-    }
-    .width('100%')
-    .height(44)
-    .padding({ left: 12, right: 12 })
-    .backgroundColor(this.selectedModel === modelKey ? '#FFF0F5' : 'transparent')
-    .borderRadius(8)
-    .margin({ bottom: 4 })
-    .onClick(() => {
-      this.selectedModel = modelKey;
-      this.saveSettings();
-      this.showModelPickerPanel = false;
-      promptAction.showToast({ message: `已切换到 ${label}`, duration: 2000 });
-    })
   }
 
   loginHuawei() {
@@ -3053,9 +2880,7 @@ struct SettingsTab {
   }
 
   loadSettings() {
-    this.apiKey = settingsManager.settings.apiKey;
-    this.selectedModel = settingsManager.settings.selectedModel;
-    this.customUrl = settingsManager.settings.customUrl;
+    this.selectedModel = 'gguf';
     this.followSystemDark = settingsManager.settings.followSystemDark;
     this.prevFollowSystemDark = settingsManager.settings.followSystemDark;
     this.autoSaveInterval = settingsManager.settings.autoSaveInterval || 5;
@@ -3073,9 +2898,7 @@ struct SettingsTab {
   }
 
   saveSettings() {
-    settingsManager.settings.apiKey = this.apiKey;
-    settingsManager.settings.selectedModel = this.selectedModel;
-    settingsManager.settings.customUrl = this.customUrl;
+    settingsManager.settings.selectedModel = 'gguf';
     settingsManager.settings.autoSaveInterval = this.autoSaveInterval;
     settingsManager.settings.fontSize = this.fontSize;
     settingsManager.settings.aiTimeout = this.aiTimeout;

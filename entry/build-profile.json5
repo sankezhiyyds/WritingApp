@@ -6,13 +6,7 @@
       "arguments": "",
       "cppFlags": ""
     },
-    "arkOptions": {
-      "runtimeOnly": {
-        "packages": [
-          "libgguf.so"
-        ]
-      }
-    }
+    "arkOptions": {}
   },
   "buildOptionSet": [
     {

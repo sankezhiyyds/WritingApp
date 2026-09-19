@@ -54,7 +54,8 @@ export struct OutlineManagementPanel {
     const result: OutlineNode[] = [];
     const addChildren = (parentId: string) => {
       const children = sorted.filter(n => n.parentId === parentId);
-      for (const child of children) {
+      for (let i = 0; i < children.length; i++) {
+        const child = children[i];
         result.push(child);
         if (!child.collapsed) {
           addChildren(child.id);

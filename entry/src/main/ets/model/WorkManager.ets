@@ -86,6 +86,7 @@ export class WorkManager {
   private prefs: preferences.Preferences | null = null;
   private context: common.UIAbilityContext | null = null;
   private changeListeners: Array<() => void> = [];
+  private saveQueue: Promise<void> = Promise.resolve();
 
   /** 订阅作品数据变化（增删改/归档），返回取消订阅函数 */
   onChange(callback: () => void): () => void {
@@ -126,15 +127,20 @@ export class WorkManager {
     }
   }
 
+  /** 保存并序列化，避免并发覆盖 */
   private async saveToStorage(): Promise<void> {
-    if (!this.prefs) return;
-    try {
-      await this.prefs.put(this.storageKey, JSON.stringify(this.works));
-      await this.prefs.flush();
-      this.notifyChange();
-    } catch (e) {
-      console.error('[WorkManager] 保存作品失败: ' + JSON.stringify(e));
-    }
+    // 立即通知UI刷新，不等异步存储完成
+    this.notifyChange();
+    this.saveQueue = this.saveQueue.then(async () => {
+      if (!this.prefs) return;
+      try {
+        await this.prefs.put(this.storageKey, JSON.stringify(this.works));
+        await this.prefs.flush();
+      } catch (e) {
+        console.error('[WorkManager] 保存作品失败: ' + JSON.stringify(e));
+      }
+    });
+    return this.saveQueue;
   }
 
   createWork(template: TemplateInfo, title: string, content: string): WorkItem {
@@ -321,9 +327,11 @@ export class WorkManager {
         const category = documentType === 'thought_chain' ? '思维链路' : '最终方案';
         const title = `${category}_${conversation.timestamp.replace(/[:\s]/g, '')}`;
         const content = `用户: ${conversation.userMessage}\n\nAI: ${conversation.aiResponse}`;
-        this.addChapter(workId, title, category, content);
-        this.saveToStorage();
-        return true;
+        const chapter = this.addChapter(workId, title, category, content);
+        if (chapter) {
+          return true;
+        }
+        return false;
       }
     }
     return false;
@@ -472,7 +480,8 @@ export class WorkManager {
       let changed = true;
       while (changed) {
         changed = false;
-        for (const node of work.outline) {
+        for (let i = 0; i < work.outline.length; i++) {
+          const node = work.outline[i];
           if (toDelete.includes(node.parentId) && !toDelete.includes(node.id)) {
             toDelete.push(node.id);
             changed = true;

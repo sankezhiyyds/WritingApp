@@ -21,5 +21,6 @@ declare module 'libgguf.so' {
   export const unloadModel: () => void;
   export const isModelLoaded: () => boolean;
   export const getModelInfo: () => string;
+  export const isStubMode: () => boolean;
   export const abort: () => void;
 }

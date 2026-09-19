@@ -56,48 +56,8 @@ export class AIService {
   }
 
   async callAI(prompt: string, context?: string): Promise<AIResponse> {
-    const settings = settingsManager.settings;
-
-    // 小艺助手和本地GGUF模型不需要API Key
-    if (settings.selectedModel === 'xiaoyi') {
-      return await this.callXiaoyi(prompt, context);
-    }
-
-    if (settings.selectedModel === 'gguf') {
-      return await this.callLocalGGUF(prompt, context);
-    }
-
-    if (!settings.apiKey) {
-      return {
-        content: '',
-        success: false,
-        error: '请先在设置中配置API Key'
-      };
-    }
-
-    try {
-      // 根据选择的模型调用不同的API
-      switch (settings.selectedModel) {
-        case 'deepseek':
-          return await this.callDeepSeek(prompt, context);
-        case 'glm':
-          return await this.callGLM(prompt, context);
-        case 'baidu':
-          return await this.callBaidu(prompt, context);
-        case 'xiaoyi':
-          return await this.callXiaoyi(prompt, context);
-        case 'custom':
-          return await this.callCustomAPI(prompt, context);
-        default:
-          return await this.callDeepSeek(prompt, context);
-      }
-    } catch (e) {
-      return {
-        content: '',
-        success: false,
-        error: 'AI调用失败: ' + JSON.stringify(e)
-      };
-    }
+    // 全面使用本地GGUF大模型，无需API Key
+    return await this.callLocalGGUF(prompt, context);
   }
 
   private async callDeepSeek(prompt: string, context?: string): Promise<AIResponse> {
@@ -258,78 +218,17 @@ export class AIService {
     }
   }
 
-  private async callXiaoyi(prompt: string, context?: string): Promise<AIResponse> {
-    if (!this.context) {
-      return {
-        content: '',
-        success: false,
-        error: '小艺助手未初始化，请重启应用'
-      };
-    }
-
-    try {
-      // 通过Want拉起系统小艺助手，传入提示词
-      const params: Record<string, string> = { 'query': prompt, 'type': 'text' };
-      const wantParam: Want = {
-        action: 'ohos.want.action.voiceAssistant',
-        parameters: params
-      };
-      await this.context.startAbility(wantParam);
-      return {
-        content: '已打开系统小艺助手，请在小艺中查看生成结果，\n完成后可复制内容回到本应用。',
-        success: true
-      };
-    } catch (e) {
-      // 部分设备可能不支持voiceAssistant action，尝试备用方案
-      try {
-        const fallbackParams: Record<string, string> = { 'query': prompt };
-        const fallbackWant: Want = {
-          action: 'ohos.want.action.home',
-          parameters: fallbackParams
-        };
-        await this.context.startAbility(fallbackWant);
-        return {
-          content: '已尝试打开系统助手，请手动输入提示词。',
-          success: true
-        };
-      } catch (e2) {
-        return {
-          content: '',
-          success: false,
-          error: '无法启动小艺助手，请确认设备支持该功能'
-        };
-      }
-    }
-  }
-
-  /**
-   * 直接打开系统小艺助手（公开方法，供UI调用）
-   */
-  async openXiaoyiAssistant(prompt?: string): Promise<boolean> {
-    if (!this.context) {
-      return false;
-    }
-    try {
-      const params: Record<string, string> = prompt ? { 'query': prompt, 'type': 'text' } : {};
-      const wantParam: Want = {
-        action: 'ohos.want.action.voiceAssistant',
-        parameters: params
-      };
-      await this.context.startAbility(wantParam);
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
   private async callLocalGGUF(prompt: string, context?: string): Promise<AIResponse> {
     const settings = settingsManager.settings;
+    console.info('[AIService] callLocalGGUF 开始, prompt长度=' + prompt.length);
 
     if (!settings.localModelPath) {
+      console.warn('[AIService] localModelPath 为空');
       return { content: '', success: false, error: '请先在设置中选择 GGUF 模型文件' };
     }
 
     if (!ggufService.isNativeAvailable()) {
+      console.warn('[AIService] 原生模块不可用');
       return {
         content: '',
         success: false,
@@ -337,27 +236,47 @@ export class AIService {
       };
     }
 
+    if (ggufService.isStubMode()) {
+      console.warn('[AIService] 占位模式，llama.cpp未编译');
+      return {
+        content: '',
+        success: false,
+        error: '本地推理引擎为占位模式（llama.cpp 未编译）。\n\n当前无法执行真正的AI推理。请编译 llama.cpp 后重新构建应用。\n\n您仍可使用写作模板、手动编辑等功能。'
+      };
+    }
+
     if (!ggufService.isLoaded()) {
+      console.info('[AIService] 模型未加载，尝试加载: ' + settings.localModelPath);
       const loaded = ggufService.loadModel({
         modelPath: settings.localModelPath,
         contextLength: settings.ggufContextLength ?? 2048,
         threads: settings.ggufThreads ?? 4
       });
       if (!loaded) {
-        return { content: '', success: false, error: '模型加载失败，请检查文件路径和格式' };
+        console.error('[AIService] 模型加载失败');
+        return { content: '', success: false, error: '模型加载失败，请检查文件路径和格式。\n\n路径: ' + settings.localModelPath };
       }
+      console.info('[AIService] 模型加载成功');
     }
 
     const fullPrompt = context ? `${context}\n\n${prompt}` : prompt;
     const maxTokens = settings.ggufMaxTokens ?? 512;
     const temperature = settings.ggufTemperature ?? 0.8;
+    console.info(`[AIService] 调用generate, fullPrompt长度=${fullPrompt.length}, maxTokens=${maxTokens}, temp=${temperature}`);
 
-    const result = ggufService.generate({
+    const result = await ggufService.generate({
       prompt: fullPrompt,
       maxTokens: maxTokens,
       temperature: temperature,
       topP: 0.9
     });
+
+    console.info(`[AIService] generate返回: success=${result.success}, text长度=${result.text.length}, error=${result.error || '无'}`);
+
+    if (result.success && result.text.length === 0) {
+      console.warn('[AIService] 推理成功但输出为空');
+      return { content: '', success: false, error: 'AI模型返回了空内容，请尝试更换提示词或增大maxTokens设置。' };
+    }
 
     return {
       content: result.text,
@@ -429,7 +348,8 @@ export class AIService {
   private extractThoughtChain(content: string): string | undefined {
     // 尝试从AI回复中提取思维链路
     const thoughtMarkers = ['思考过程', '分析', '思路', '推理', '让我思考'];
-    for (const marker of thoughtMarkers) {
+    for (let i = 0; i < thoughtMarkers.length; i++) {
+      const marker = thoughtMarkers[i];
       if (content.includes(marker)) {
         const index = content.indexOf(marker);
         const endIndex = content.indexOf('\n\n', index);

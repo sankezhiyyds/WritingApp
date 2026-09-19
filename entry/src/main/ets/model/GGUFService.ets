@@ -63,6 +63,18 @@ class GGUFServiceClass {
     return this.nativeAvailable;
   }
 
+  /** Check if the native module is a stub (llama.cpp not compiled). */
+  isStubMode(): boolean {
+    if (!this.nativeAvailable) {
+      return true;
+    }
+    try {
+      return gguf.isStubMode();
+    } catch (e) {
+      return true;
+    }
+  }
+
   /** Load a GGUF model from the device filesystem. */
   loadModel(params: GGUFLoadParams): boolean {
     if (!this.nativeAvailable) {
@@ -93,7 +105,7 @@ class GGUFServiceClass {
   }
 
   /** Generate text with optional streaming callback. */
-  generate(params: GGUFGenerateParams): GGUFGenerateResult {
+  async generate(params: GGUFGenerateParams): Promise<GGUFGenerateResult> {
     if (!this.nativeAvailable) {
       return {
         text: '',
@@ -116,33 +128,38 @@ class GGUFServiceClass {
     const onToken = params.onToken ?? null;
 
     try {
-      const text = gguf.generate(
+      // 让步事件循环，确保UI能先渲染isGenerating状态
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+
+      console.info(`[GGUFService] 开始推理, prompt长度=${params.prompt.length}, maxTokens=${maxTokens}`);
+      const text = await gguf.generate(
         params.prompt,
         maxTokens,
         temperature,
         topP,
         onToken
       );
+      const resultText = text as string;
+      console.info(`[GGUFService] 推理完成, 输出长度=${resultText.length}`);
       return {
-        text: text,
+        text: resultText,
         success: true,
-        tokensGenerated: text.length
+        tokensGenerated: resultText.length
       };
     } catch (e) {
+      const errMsg = `生成失败: ${e}`;
+      console.error(`[GGUFService] ${errMsg}`);
       return {
         text: '',
         success: false,
-        error: `生成失败: ${e}`
+        error: errMsg
       };
     }
   }
 
   /** Generate text asynchronously with Promise interface. */
   async generateAsync(params: GGUFGenerateParams): Promise<GGUFGenerateResult> {
-    return new Promise<GGUFGenerateResult>((resolve) => {
-      const result = this.generate(params);
-      resolve(result);
-    });
+    return await this.generate(params);
   }
 
   /** Unload the current model and free resources. */

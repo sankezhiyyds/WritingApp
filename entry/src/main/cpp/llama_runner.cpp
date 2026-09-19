@@ -83,12 +83,13 @@ bool LlamaRunner::tokenizePrompt(const std::string& prompt, int32_t*& tokens, in
 
     // Tokenize with BOS token
     std::vector<llama_token> buf(prompt.size() + 1);
+    const auto* vocab = llama_model_get_vocab(model);
     int n = llama_tokenize(
-        model, prompt.c_str(), prompt.size(), buf.data(), buf.size(), true, true);
+        vocab, prompt.c_str(), prompt.size(), buf.data(), buf.size(), true, true);
     if (n < 0) {
         buf.resize(-n);
         n = llama_tokenize(
-            model, prompt.c_str(), prompt.size(), buf.data(), buf.size(), true, true);
+            vocab, prompt.c_str(), prompt.size(), buf.data(), buf.size(), true, true);
     }
     if (n < 0) {
         LOGE("Tokenization failed");
@@ -103,8 +104,9 @@ bool LlamaRunner::tokenizePrompt(const std::string& prompt, int32_t*& tokens, in
 
 std::string LlamaRunner::tokenToText(int32_t tokenId) {
     auto* model = static_cast<llama_model*>(model_);
+    const auto* vocab = llama_model_get_vocab(model);
     char buf[256];
-    int len = llama_token_to_piece(model, tokenId, buf, sizeof(buf), 0, true);
+    int len = llama_token_to_piece(vocab, tokenId, buf, sizeof(buf), 0, true);
     if (len < 0) return "";
     return std::string(buf, len);
 }
@@ -134,8 +136,10 @@ std::string LlamaRunner::generate(
         return "";
     }
 
+    auto* model = static_cast<llama_model*>(model_);
     auto* ctx = static_cast<llama_context*>(context_);
     auto* sampler = static_cast<llama_sampler*>(sampler_);
+    const auto* vocab = llama_model_get_vocab(model);
 
     // Feed prompt tokens into context (batched)
     llama_batch batch = llama_batch_get_one(promptTokens, promptLen);
@@ -154,7 +158,7 @@ std::string LlamaRunner::generate(
         llama_token newToken = llama_sampler_sample(sampler, ctx, -1);
 
         // Check for EOS
-        if (llama_token_is_eog(static_cast<llama_model*>(model_), newToken)) {
+        if (llama_vocab_is_eog(vocab, newToken)) {
             break;
         }
 

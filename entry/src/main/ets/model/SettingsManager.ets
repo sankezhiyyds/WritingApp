@@ -29,7 +29,7 @@ export class SettingsManager {
   private storageKey: string = 'writing_app_settings';
   private defaultSettings: SettingsData = {
     apiKey: '',
-    selectedModel: 'deepseek',
+    selectedModel: 'gguf',
     customUrl: '',
     customPrompt: '',
     isFirstLaunch: true,
@@ -68,7 +68,7 @@ export class SettingsManager {
         const parsed = JSON.parse(stored) as SettingsData;
         this.settings = {
           apiKey: parsed.apiKey || '',
-          selectedModel: parsed.selectedModel || 'deepseek',
+          selectedModel: parsed.selectedModel || 'gguf',
           customUrl: parsed.customUrl || '',
           customPrompt: parsed.customPrompt || '',
           isFirstLaunch: parsed.isFirstLaunch !== undefined ? parsed.isFirstLaunch : true,

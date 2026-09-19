@@ -19,6 +19,7 @@ export class ResponsiveManager {
   private lgListener: mediaquery.MediaQueryListener | null = null;
   private currentBreakpoint: BreakpointType = 'sm';
   private listeners: Array<(bp: BreakpointType) => void> = [];
+  private windowObj: window.Window | null = null;
 
   /** 断点阈值（vp） */
   static readonly BREAKPOINT_SM = 320;
@@ -60,21 +61,37 @@ export class ResponsiveManager {
       });
 
       // 初始判断
-      if (this.lgListener.matches) {
-        this.currentBreakpoint = 'lg';
-      } else if (this.mdListener.matches) {
-        this.currentBreakpoint = 'md';
-      } else {
-        this.currentBreakpoint = 'sm';
-      }
+      this.detectAndUpdateBreakpoint();
+
+      // 窗口尺寸变化监听（支持旋转和分屏）
+      window.getLastWindow(context).then((win: window.Window) => {
+        this.windowObj = win;
+        win.on('windowSizeChange', (size: window.Size) => {
+          console.info('[ResponsiveManager] windowSizeChange: ' + size.width + 'x' + size.height);
+          this.detectAndUpdateBreakpoint();
+        });
+      }).catch(() => {
+        console.warn('[ResponsiveManager] window listener init failed');
+      });
     } catch (e) {
       console.error('[ResponsiveManager] init failed: ' + JSON.stringify(e));
+    }
+  }
+
+  private detectAndUpdateBreakpoint(): void {
+    if (this.lgListener && this.lgListener.matches) {
+      this.updateBreakpoint('lg');
+    } else if (this.mdListener && this.mdListener.matches) {
+      this.updateBreakpoint('md');
+    } else {
+      this.updateBreakpoint('sm');
     }
   }
 
   private updateBreakpoint(bp: BreakpointType): void {
     if (this.currentBreakpoint !== bp) {
       this.currentBreakpoint = bp;
+      AppStorage.setOrCreate('appBreakpoint', bp);
       this.listeners.forEach(fn => fn(bp));
     }
   }

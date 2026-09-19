@@ -15,6 +15,8 @@ export default class EntryAbility extends UIAbility {
     responsiveManager.init(this.context);
     aiService.setContext(this.context);
     permissionManager.init(this.context);
+    // 初始化全局深色模式到AppStorage
+    AppStorage.setOrCreate('appDarkMode', settingsManager.settings.isDarkMode);
   }
 
   onDestroy(): void {
@@ -23,6 +25,9 @@ export default class EntryAbility extends UIAbility {
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
     console.info('[EntryAbility] onWindowStageCreate');
+
+    // 配置窗口避免摄像头挖空遮挡（通过 ArkUI 组件属性 expandSafeArea 处理更安全）
+    // 键盘避让由 ArkUI 自动处理（RESIZE 模式）
     windowStage.loadContent('pages/Index', (err) => {
       if (err.code) {
         console.error('[EntryAbility] loadContent failed: ' + JSON.stringify(err));

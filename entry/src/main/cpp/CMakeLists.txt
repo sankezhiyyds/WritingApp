@@ -16,8 +16,11 @@ if(EXISTS ${LLAMA_CPP_DIR}/CMakeLists.txt)
     set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+    # 禁用 OpenMP — HarmonyOS 设备无 libomp.so，链接后加载失败
+    set(LLAMA_OPENMP OFF CACHE BOOL "" FORCE)
+    set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
     add_subdirectory(${LLAMA_CPP_DIR} llama_cpp_build EXCLUDE_FROM_ALL)
-    set(LLAMA_LIBS llama llama_common ggml)
+    set(LLAMA_LIBS llama ggml)
     message(STATUS "llama.cpp found — full inference enabled")
 else()
     message(WARNING "llama.cpp not found at ${LLAMA_CPP_DIR}. "
