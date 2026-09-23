@@ -1,12 +1,16 @@
 ﻿import { TemplateField, TemplateInfo, templateList } from '../model/TemplateModel';
-import { WorkItem, workManager, Chapter, Conversation, WorkVersion } from '../model/WorkManager';
+import { WorkItem, workManager, Chapter, WorkVersion } from '../model/WorkManager';
 import { settingsManager } from '../model/SettingsManager';
 import { aiService } from '../model/AIService';
-import { ggufService } from '../model/GGUFService';
 import { responsiveManager, BreakpointType } from '../model/ResponsiveManager';
+import { AiSidebar } from '../components/AiSidebar';
+import { FindReplaceDialog } from '../components/FindReplaceDialog';
+import { SaveDialog } from '../components/SaveDialog';
 import router from '@ohos.router';
 import promptAction from '@ohos.promptAction';
 import pasteboard from '@ohos.pasteboard';
+import preferences from '@ohos.data.preferences';
+import common from '@ohos.app.ability.common';
 
 interface TextRange {
   start: number;
@@ -21,15 +25,19 @@ struct PromptEditorPage {
   @State generatedContent: string = '';
   @State title: string = '';
   @State mode: string = 'short_drama';
-  @State isAiMode: boolean = false;
-  @State engineWarning: string = '';
-  @State currentPrompt: string = '';
+  @State showAiSidebar: boolean = false;  // AI侧栏是否可见
+  @State isGenerating: boolean = false;  // AI生成中状态
+  @State showFindReplace: boolean = false;  // 查找替换对话框
+  @State showSaveDialog: boolean = false;  // 保存对话框
+  @State saveDialogTitle: string = '';  // 保存对话框中的文件名
+  @State saveSelectedFolderId: string = '';  // 保存对话框中选择的文件夹ID
+  @State saveNewFolderName: string = '';  // 保存对话框中新建文件夹名
+  @State saveCreateNewFolder: boolean = false;  // 是否新建文件夹
+  @StorageLink('aiInsertContent') @Watch('onAiInsert') aiInsertContent: string = '';  // AI侧栏插入内容
   @State work: WorkItem | null = null;
   @State showChapterList: boolean = false;
   @State currentChapter: Chapter | null = null;
   @State promptText: string = '';
-  @State aiConversation: string = '';  // AI对话独立显示文本（不污染工作区内容）
-  @State isGenerating: boolean = false;
   @State currentBreakpoint: BreakpointType = 'sm';
   @State showVersionHistory: boolean = false;
   @State selectedVersion: number = -1;
@@ -51,6 +59,15 @@ struct PromptEditorPage {
 
   sf(base: number): number {
     return Math.round(base * this.fontSize / 14);
+  }
+
+  /** 统一 Toast 出口：捕获 promptAction 可能抛出的异常 */
+  safeToast(message: string): void {
+    try {
+      promptAction.showToast({ message: message, duration: 2000 });
+    } catch (e) {
+      console.warn('[PromptEditorPage] showToast失败: ' + e);
+    }
   }
 
   get isWide(): boolean {
@@ -129,7 +146,9 @@ struct PromptEditorPage {
           this.title = this.work.title;
           this.generatedContent = this.work.content;
           this.previousContent = this.work.content;
-          this.template = templateList.find(t => t.id === this.work!.templateId) || null;
+          // 编辑已有作品时不恢复模板表单（字段值未持久化，恢复空表单会覆盖内容）
+          // 直接展示已生成的内容供用户自由编辑
+          this.template = null;
           this.bgTheme = this.work.bgTheme || 'default';
         }
       }
@@ -143,6 +162,12 @@ struct PromptEditorPage {
 
     // 启动自动保存定时器
     this.startAutoSave();
+
+    // 恢复工作台缓存（仅在无workId时恢复）
+    const params0 = router.getParams() as Record<string, string>;
+    if (!params0 || !params0['workId']) {
+      this.restoreWorkbenchCache();
+    }
   }
 
   startAutoSave() {
@@ -153,8 +178,16 @@ struct PromptEditorPage {
     }, interval);
   }
 
+  /** 处理AI侧栏插入内容 */
+  onAiInsert() {
+    if (this.aiInsertContent.length > 0) {
+      this.generatedContent += (this.generatedContent.length > 0 ? '\n\n' : '') + this.aiInsertContent;
+      this.aiInsertContent = '';
+    }
+  }
+
   autoSave() {
-    if (this.generatedContent.trim().length === 0 && this.aiConversation.trim().length === 0) {
+    if (this.generatedContent.trim().length === 0) {
       return;
     }
     if (this.work) {
@@ -164,6 +197,8 @@ struct PromptEditorPage {
         workManager.updateTitle(this.work.id, this.title);
       }
     } else {
+      // 先保存工作台缓存（在创建草稿前保存，确保缓存可用）
+      this.saveWorkbenchCache();
       // 新作品自动创建草稿，防止闪退丢失
       const draftTitle = this.title.trim().length > 0 ? this.title : '未命名草稿';
       if (this.template) {
@@ -171,6 +206,47 @@ struct PromptEditorPage {
       } else {
         this.work = workManager.createFreeWork(draftTitle, this.generatedContent, this.mode);
       }
+    }
+    // 保存工作台缓存
+    this.saveWorkbenchCache();
+  }
+
+  /** 保存工作台缓存到preferences（跨会话恢复机制，始终保存） */
+  async saveWorkbenchCache() {
+    try {
+      const context = AppStorage.get<common.UIAbilityContext>('appContext');
+      if (context) {
+        const prefs = await preferences.getPreferences(context, 'writing_app_prefs');
+        await prefs.put('workbench_cache_content', this.generatedContent);
+        await prefs.put('workbench_cache_title', this.title);
+        await prefs.put('workbench_cache_mode', this.mode);
+        await prefs.flush();
+      }
+    } catch (e) {
+      console.warn('[PromptEditorPage] 保存工作台缓存失败: ' + e);
+    }
+  }
+
+  /** 从缓存恢复工作台内容 */
+  async restoreWorkbenchCache() {
+    try {
+      const context = AppStorage.get<common.UIAbilityContext>('appContext');
+      if (context) {
+        const prefs = await preferences.getPreferences(context, 'writing_app_prefs');
+        const cachedMode = await prefs.get('workbench_cache_mode', '');
+        const cachedContent = await prefs.get('workbench_cache_content', '');
+        const cachedTitle = await prefs.get('workbench_cache_title', '');
+        // 仅当缓存mode与当前mode匹配时恢复
+        if (cachedMode === this.mode && cachedContent && (cachedContent as string).length > 0) {
+          this.generatedContent = cachedContent as string;
+          this.previousContent = this.generatedContent;
+        }
+        if (cachedMode === this.mode && cachedTitle && (cachedTitle as string).length > 0) {
+          this.title = cachedTitle as string;
+        }
+      }
+    } catch (e) {
+      console.warn('[PromptEditorPage] 恢复工作台缓存失败: ' + e);
     }
   }
 
@@ -181,7 +257,25 @@ struct PromptEditorPage {
     }
   }
 
+  /** 清除工作台缓存（保存成功后调用，避免下次恢复旧数据） */
+  async clearWorkbenchCache() {
+    try {
+      const context = AppStorage.get<common.UIAbilityContext>('appContext');
+      if (context) {
+        const prefs = await preferences.getPreferences(context, 'writing_app_prefs');
+        await prefs.delete('workbench_cache_content');
+        await prefs.delete('workbench_cache_title');
+        await prefs.delete('workbench_cache_mode');
+        await prefs.flush();
+      }
+    } catch (e) {
+      console.warn('[PromptEditorPage] 清除工作台缓存失败: ' + e);
+    }
+  }
+
   aboutToDisappear() {
+    // 先保存工作台缓存（在创建草稿前）
+    this.saveWorkbenchCache();
     // 离开页面前自动保存，防止闪退丢失
     if (this.mode !== 'prompt_edit') {
       this.autoSave();
@@ -196,7 +290,10 @@ struct PromptEditorPage {
   }
 
   build() {
-    Column() {
+    Stack() {
+      Row() {
+        // 工作台主区域
+        Column() {
       // 顶部导航
       Row() {
         Text('←')
@@ -254,6 +351,7 @@ struct PromptEditorPage {
           Text(this.generatedContent.length + ' 字')
             .fontSize(this.sf(12))
             .fontColor(this.subTextColor)
+            .margin({ right: 8 })
 
           Blank()
 
@@ -302,6 +400,19 @@ struct PromptEditorPage {
               })
           }
 
+          Button('查找替换')
+            .fontSize(this.sf(14))
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#3B82F6')
+            .backgroundColor(this.cardBg)
+            .borderRadius(20)
+            .height(36)
+            .padding({ left: 16, right: 16 })
+            .margin({ right: 8 })
+            .onClick(() => {
+              this.showFindReplace = true;
+            })
+
           Button('保存')
             .fontSize(this.sf(14))
             .fontWeight(FontWeight.Medium)
@@ -312,20 +423,17 @@ struct PromptEditorPage {
             .padding({ left: 24, right: 24 })
             .onClick(() => this.saveWork())
 
-          Button(this.isAiMode ? '退出AI' : 'AI对话')
+          Button(this.showAiSidebar ? '收起AI' : 'AI助手')
             .fontSize(this.sf(14))
             .fontWeight(FontWeight.Medium)
             .fontColor('#FFFFFF')
-            .backgroundColor(this.isAiMode ? '#6B7280' : '#10B981')
+            .backgroundColor(this.showAiSidebar ? '#6B7280' : '#10B981')
             .borderRadius(20)
             .height(36)
             .padding({ left: 16, right: 16 })
-            .margin({ left: 12 })
+            .margin({ left: 8 })
             .onClick(() => {
-              this.isAiMode = !this.isAiMode;
-              if (this.isAiMode) {
-                this.updateEngineWarning();
-              }
+              this.showAiSidebar = !this.showAiSidebar;
             })
         }
         .width('100%')
@@ -337,7 +445,54 @@ struct PromptEditorPage {
     .width('100%')
     .height('100%')
     .backgroundColor(this.themeBgColor)
-    .constraintSize({ maxWidth: this.contentMaxWidth })
+        .layoutWeight(1)
+        .height('100%')
+        .backgroundColor(this.themeBgColor)
+        .constraintSize({ maxWidth: this.contentMaxWidth })
+
+        // AI侧栏（伴随式独立列模式 - 所有设备统一宽度）
+        if (this.showAiSidebar) {
+          AiSidebar({
+            workbenchContent: this.generatedContent,
+            workTitle: this.title,
+            workId: this.work ? this.work.id : '',
+            currentBreakpoint: this.currentBreakpoint,
+            isDarkMode: this.isDarkMode,
+            isVisible: $showAiSidebar
+          })
+            .width(this.currentBreakpoint === 'sm' ? '85%' : 360)
+            .height('100%')
+            .backgroundColor(this.isDarkMode ? '#1E1E2E' : '#F8F9FA')
+            .border({ width: { left: 0.5 }, color: { left: this.isDarkMode ? '#3A3A4E' : '#E0E0E0' } })
+        }
+      }
+      .width('100%')
+      .height('100%')
+
+      // 查找替换对话框
+      if (this.showFindReplace) {
+        FindReplaceDialog({
+          content: $generatedContent,
+          isVisible: $showFindReplace,
+          isDarkMode: this.isDarkMode
+        })
+      }
+
+      // 保存对话框
+      if (this.showSaveDialog) {
+        SaveDialog({
+          isVisible: $showSaveDialog,
+          defaultTitle: this.title.trim().length > 0 ? this.title :
+            (this.template ? this.template.name : '未命名作品'),
+          isDarkMode: this.isDarkMode,
+          onSave: (title: string, folderId: string) => {
+            this.executeSave(title, folderId);
+          }
+        })
+      }
+    }
+    .width('100%')
+    .height('100%')
   }
 
   @Builder
@@ -378,7 +533,7 @@ struct PromptEditorPage {
         .onClick(() => {
           settingsManager.settings.customPrompt = this.promptText;
           settingsManager.save();
-          promptAction.showToast({ message: '提示词已保存', duration: 2000 });
+          this.safeToast('提示词已保存');
           router.back();
         })
     }
@@ -439,7 +594,7 @@ struct PromptEditorPage {
               .margin({ left: 16, top: 12, bottom: 8 })
               .alignSelf(ItemAlign.Start)
 
-            ForEach(this.template.tips, (tip: string, index: number) => {
+            ForEach(this.template.tips, (tip: string) => {
               Row() {
                 Text('•')
                   .fontSize(this.sf(14))
@@ -452,7 +607,7 @@ struct PromptEditorPage {
               }
               .width('100%')
               .padding({ top: 4, bottom: 4 })
-            }, (tip: string, index: number) => index.toString())
+            }, (tip: string) => tip)
           }
           .width('100%')
           .padding(16)
@@ -537,160 +692,6 @@ struct PromptEditorPage {
             }, (field: TemplateField) => field.key)
           }
           .width('100%')
-          .backgroundColor(this.cardBg)
-          .margin({ top: 8 })
-        }
-
-        // AI模式：显示AI对话窗口；非AI模式：显示工作区输出窗口
-        if (this.isAiMode) {
-          // AI对话窗口（独立于工作区）
-          Column() {
-            Row() {
-              Text('AI对话')
-                .fontSize(this.sf(14))
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.textColor)
-
-              Blank()
-
-              if (this.aiConversation.length > 0) {
-                Button('清空')
-                  .fontSize(this.sf(12))
-                  .fontColor('#6B7280')
-                  .height(28)
-                  .padding({ left: 12, right: 12 })
-                  .backgroundColor('transparent')
-                  .borderRadius(14)
-                  .border({ width: 1, color: '#D1D5DB' })
-                  .onClick(() => {
-                    this.aiConversation = '';
-                  })
-              }
-            }
-            .width('100%')
-            .margin({ left: 16, right: 16, bottom: 8 })
-
-            if (this.aiConversation.length > 0) {
-              Text(this.aiConversation)
-                .fontSize(this.fontSize)
-                .fontColor('#374151')
-                .lineHeight(22)
-                .width('100%')
-                .padding(16)
-                .backgroundColor(this.bgColor)
-                .borderRadius(12)
-
-              // 插入到输出按钮
-              Button('插入到输出')
-                .fontSize(this.sf(12))
-                .fontColor('#10B981')
-                .height(32)
-                .padding({ left: 16, right: 16 })
-                .backgroundColor('transparent')
-                .borderRadius(16)
-                .border({ width: 1, color: '#10B981' })
-                .margin({ top: 8 })
-                .onClick(() => this.insertLastAiResponseToOutput())
-            } else {
-              Text('在下方输入框输入消息，AI将在此显示回复。\n\n提示：AI回复可通过"插入到输出"复制到工作区。')
-                .fontSize(this.sf(13))
-                .fontColor(this.subTextColor)
-                .lineHeight(20)
-                .width('100%')
-                .padding(16)
-                .backgroundColor(this.bgColor)
-                .borderRadius(12)
-            }
-          }
-          .width('100%')
-          .padding(16)
-          .backgroundColor(this.cardBg)
-          .margin({ top: 8 })
-        } else {
-          // 工作区输出窗口
-          Column() {
-            Row() {
-              Text('输出窗口')
-                .fontSize(this.sf(14))
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.textColor)
-
-              Blank()
-
-              Text(this.generatedContent.length + ' 字')
-                .fontSize(this.sf(12))
-                .fontColor(this.subTextColor)
-            }
-            .width('100%')
-            .margin({ left: 16, right: 16, bottom: 8 })
-
-            if (this.generatedContent.length > 0) {
-              Text(this.getHighlightedContent())
-              .fontSize(this.fontSize)
-              .fontColor('#374151')
-              .lineHeight(20)
-              .width('100%')
-          } else {
-            Column() {
-              Text('📝 填写上方模板字段后，点击底部的 AI 生成按钮')
-                .fontSize(this.sf(13))
-                .fontColor(this.subTextColor)
-                .margin({ bottom: 4 })
-              Text('生成的内容将自动显示在此处，支持直接编辑与复制')
-                .fontSize(this.sf(12))
-                .fontColor('#B0B7C3')
-            }
-            .width('100%')
-            .height(100)
-            .justifyContent(FlexAlign.Center)
-            .alignItems(HorizontalAlign.Center)
-          }
-        }
-        .width('100%')
-        .padding(16)
-        .backgroundColor(this.cardBg)
-        .margin({ top: 8 })
-        }
-
-        // AI对话输入栏（在AI模式下显示）
-        if (this.isAiMode) {
-          if (this.engineWarning.length > 0) {
-            Text(this.engineWarning)
-              .fontSize(this.sf(12))
-              .fontColor('#F59E0B')
-              .backgroundColor(this.isDarkMode ? 'rgba(245,158,11,0.1)' : 'rgba(245,158,11,0.08)')
-              .borderRadius(8)
-              .padding(10)
-              .width('100%')
-              .margin({ top: 8 })
-          }
-
-          Row() {
-            TextArea({ placeholder: '输入消息...', text: this.currentPrompt })
-              .layoutWeight(1)
-              .maxLines(this.isWide ? 6 : 4)
-              .constraintSize({ minHeight: 40, maxHeight: 120 })
-              .fontSize(this.fontSize)
-              .backgroundColor(this.bgColor)
-              .borderRadius(20)
-              .padding({ left: 16, right: 16, top: 10, bottom: 10 })
-              .onChange((value: string) => {
-                this.currentPrompt = value;
-              })
-
-            Button(this.isGenerating ? '...' : '发送')
-              .fontSize(this.sf(14))
-              .fontColor('#FFFFFF')
-              .backgroundColor(this.isGenerating ? '#9CA3AF' : '#10B981')
-              .borderRadius(20)
-              .height(40)
-              .padding({ left: 16, right: 16 })
-              .margin({ left: 8 })
-              .enabled(!this.isGenerating)
-              .onClick(() => this.sendAiMessage())
-          }
-          .width('100%')
-          .padding({ left: 16, right: 16, top: 10, bottom: 10 })
           .backgroundColor(this.cardBg)
           .margin({ top: 8 })
         }
@@ -790,11 +791,11 @@ struct PromptEditorPage {
 
   createChapter() {
     if (!this.work) {
-      promptAction.showToast({ message: '请先保存作品', duration: 2000 });
+      this.safeToast('请先保存作品');
       return;
     }
     if (!this.newChapterTitle.trim()) {
-      promptAction.showToast({ message: '请输入章节标题', duration: 2000 });
+      this.safeToast('请输入章节标题');
       return;
     }
     const chapter = workManager.addChapter(
@@ -804,7 +805,7 @@ struct PromptEditorPage {
       this.newChapterContent
     );
     if (chapter) {
-      promptAction.showToast({ message: '章节创建成功', duration: 2000 });
+      this.safeToast('章节创建成功');
       this.showCreateChapterDialog = false;
       this.newChapterTitle = '';
       this.newChapterCategory = '大纲';
@@ -819,7 +820,7 @@ struct PromptEditorPage {
       return;
     }
     workManager.updateChapter(this.work.id, this.editingChapter.id, this.editingChapterContent);
-    promptAction.showToast({ message: '章节已保存', duration: 2000 });
+    this.safeToast('章节已保存');
     this.showEditChapterDialog = false;
     this.editingChapter = null;
     this.editingChapterContent = '';
@@ -832,7 +833,7 @@ struct PromptEditorPage {
       return;
     }
     workManager.deleteChapter(this.work.id, chapter.id);
-    promptAction.showToast({ message: '章节已删除', duration: 2000 });
+    this.safeToast('章节已删除');
     // 刷新章节列表
     this.work = workManager.getWork(this.work.id);
   }
@@ -849,42 +850,63 @@ struct PromptEditorPage {
 
   async saveWork() {
     if (this.generatedContent.trim().length === 0) {
-      promptAction.showToast({ message: '内容不能为空', duration: 2000 });
+      this.safeToast('内容不能为空');
       return;
     }
+    // 弹出保存对话框，让用户选择文件夹和编辑文件名
+    this.showSaveDialog = true;
+  }
 
-    const finalTitle = this.title.trim().length > 0 ? this.title : (this.template ? this.template.name : '未命名作品');
+  /** 执行实际保存操作 */
+  executeSave(title: string, folderId: string) {
+    const finalTitle = title.trim().length > 0 ? title : '未命名作品';
 
     if (this.work) {
       // 更新现有作品（自动归档旧版本）
       workManager.updateWork(this.work.id, this.generatedContent, true);
+      // 更新标题
+      workManager.updateTitle(this.work.id, finalTitle);
+      // 移动到指定文件夹
+      if (folderId) {
+        workManager.moveWorkToFolder(this.work.id, folderId);
+      }
       // 更新previousContent为当前内容
       this.previousContent = this.generatedContent;
       this.modifiedRanges = [];
-      promptAction.showToast({ message: '作品已更新（旧版本已归档）', duration: 2000 });
+      this.safeToast('作品已更新（旧版本已归档）');
     } else if (this.template) {
       // 创建新作品
       this.work = workManager.createWork(this.template, finalTitle, this.generatedContent);
+      // 移动到指定文件夹
+      if (folderId && this.work) {
+        workManager.moveWorkToFolder(this.work.id, folderId);
+      }
       this.previousContent = this.generatedContent;
-      promptAction.showToast({ message: '作品已保存', duration: 2000 });
+      this.safeToast('作品已保存');
     } else {
       // 自由创作（无模板），归属当前工作台
       this.work = workManager.createFreeWork(finalTitle, this.generatedContent, this.mode);
+      // 移动到指定文件夹
+      if (folderId && this.work) {
+        workManager.moveWorkToFolder(this.work.id, folderId);
+      }
       this.previousContent = this.generatedContent;
-      promptAction.showToast({ message: '作品已保存', duration: 2000 });
+      this.safeToast('作品已保存');
     }
 
+    // 保存成功后清除工作台缓存，避免下次恢复旧数据
+    this.clearWorkbenchCache();
     router.back();
   }
 
   async generateWithAi() {
     if (!settingsManager.settings.localModelPath) {
-      promptAction.showToast({ message: '请先在设置中选择 GGUF 模型文件', duration: 2000 });
+      this.safeToast('请先在设置中选择 GGUF 模型文件');
       return;
     }
 
     this.isGenerating = true;
-    promptAction.showToast({ message: 'AI生成中...', duration: 2000 });
+    this.safeToast('AI生成中...');
 
     // 构建提示词
     let prompt = this.generatedContent;
@@ -897,96 +919,16 @@ struct PromptEditorPage {
 
       if (response.success) {
         this.generatedContent = response.content;
-        promptAction.showToast({ message: 'AI生成完成', duration: 2000 });
+        this.safeToast('AI生成完成');
       } else {
-        promptAction.showToast({ message: response.error || 'AI生成失败', duration: 2000 });
+        this.safeToast(response.error || 'AI生成失败');
       }
     } catch (e) {
       const errMsg = (e as Record<string, Object>).message as string || JSON.stringify(e);
       console.error('[generateWithAi] 异常: ' + errMsg);
-      promptAction.showToast({ message: 'AI生成异常: ' + errMsg.substring(0, 80), duration: 3000 });
+      this.safeToast('AI生成异常: ' + errMsg.substring(0, 80));
     } finally {
       this.isGenerating = false;
-    }
-  }
-
-  updateEngineWarning() {
-    const settings = settingsManager.settings;
-    if (!settings.localModelPath) {
-      this.engineWarning = '⚠️ 未选择GGUF模型文件，请在设置中选择模型文件后使用AI功能。';
-    } else if (ggufService.isStubMode()) {
-      this.engineWarning = '⚠️ 当前为占位模式（llama.cpp 未编译），无法执行AI推理。';
-    } else {
-      this.engineWarning = '';
-    }
-  }
-
-  async sendAiMessage() {
-    if (this.currentPrompt.trim().length === 0) return;
-    if (!settingsManager.settings.localModelPath) {
-      promptAction.showToast({ message: '请先在设置中选择 GGUF 模型文件', duration: 2000 });
-      return;
-    }
-
-    this.isGenerating = true;
-    const userMessage = this.currentPrompt;
-    this.currentPrompt = '';
-
-    // 追加用户消息到AI对话窗口（不污染工作区内容）
-    this.aiConversation += (this.aiConversation.length > 0 ? '\n\n' : '') + '【用户】' + userMessage + '\n';
-
-    // 构建上下文
-    let context = '';
-    if (this.work) {
-      context = `当前作品：${this.work.title}\n内容：${this.generatedContent.substring(0, 500)}`;
-    }
-
-    try {
-      const response = await aiService.callAI(userMessage, context);
-
-      if (response.success) {
-        if (response.content.length > 0) {
-          this.aiConversation += '\n【AI】' + response.content + '\n\n';
-
-          // 保存对话记录
-          if (this.work) {
-            const conversation = workManager.addConversation(this.work.id, userMessage, response.content);
-            if (!conversation) {
-              console.warn('[sendAiMessage] 保存对话记录失败');
-              promptAction.showToast({ message: '保存对话记录失败', duration: 2000 });
-            }
-          }
-        } else {
-          console.warn('[sendAiMessage] AI返回了空内容');
-          promptAction.showToast({ message: 'AI模型未响应，请检查模型文件是否正确加载', duration: 3000 });
-        }
-      } else {
-        promptAction.showToast({ message: response.error || 'AI回复失败', duration: 3000 });
-      }
-    } catch (e) {
-      const errMsg = (e as Record<string, Object>).message as string || JSON.stringify(e);
-      console.error('[sendAiMessage] 异常: ' + errMsg);
-      promptAction.showToast({ message: 'AI调用异常: ' + errMsg.substring(0, 80), duration: 3000 });
-    } finally {
-      this.isGenerating = false;
-    }
-  }
-
-  /** 将最后一条AI回复插入到工作区输出窗口 */
-  insertLastAiResponseToOutput() {
-    // 从aiConversation中提取最后一条【AI】回复
-    const aiMarker = '\n【AI】';
-    const lastIdx = this.aiConversation.lastIndexOf(aiMarker);
-    if (lastIdx < 0) return;
-
-    const afterMarker = this.aiConversation.substring(lastIdx + aiMarker.length);
-    // 提取到下一个【用户】或末尾
-    const nextUserMarker = afterMarker.indexOf('\n【用户】');
-    const aiResponse = nextUserMarker > 0 ? afterMarker.substring(0, nextUserMarker).trim() : afterMarker.trim();
-
-    if (aiResponse.length > 0) {
-      this.generatedContent += (this.generatedContent.length > 0 ? '\n\n' : '') + aiResponse;
-      promptAction.showToast({ message: '已插入到输出窗口', duration: 1500 });
     }
   }
 
@@ -1002,7 +944,7 @@ struct PromptEditorPage {
     const content = `用户提问：${lastUserMessage}\n\nAI思考过程：\n${lastAiResponse}`;
     workManager.addChapter(this.work.id, '思维链路_' + new Date().getTime(), '思维链路', content);
 
-    promptAction.showToast({ message: '思维链路已保存', duration: 2000 });
+    this.safeToast('思维链路已保存');
   }
 
   saveFinalPlan() {
@@ -1018,7 +960,7 @@ struct PromptEditorPage {
     }
 
     workManager.addChapter(this.work.id, '最终方案_' + new Date().getTime(), '最终方案', content);
-    promptAction.showToast({ message: '最终方案已保存', duration: 2000 });
+    this.safeToast('最终方案已保存');
   }
 
   exportWork() {
@@ -1049,7 +991,7 @@ struct PromptEditorPage {
       const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, exportText);
       const systemPasteboard = pasteboard.getSystemPasteboard();
       systemPasteboard.setData(pasteData);
-      promptAction.showToast({ message: `已导出 ${exportText.length} 字到剪贴板`, duration: 3000 });
+      this.safeToast(`已导出 ${exportText.length} 字到剪贴板`);
     } catch (e) {
       // 降级方案：显示内容供手动复制
       this.getUIContext().getPromptAction().showDialog({
@@ -1095,7 +1037,7 @@ struct PromptEditorPage {
             Button(category)
               .fontSize(this.sf(13))
               .fontColor(this.selectedCategory === category ? '#FFFFFF' : this.subTextColor)
-              .backgroundColor(this.selectedCategory === category ? '#FF2D55' : '#F3F4F6')
+              .backgroundColor(this.selectedCategory === category ? '#FF2D55' : (this.isDarkMode ? '#2D2D3A' : '#F3F4F6'))
               .borderRadius(16)
               .height(32)
               .padding({ left: 12, right: 12 })
@@ -1145,7 +1087,7 @@ struct PromptEditorPage {
                         this.currentChapter = chapter;
                         this.generatedContent = chapter.content;
                         this.showChapterList = false;
-                        promptAction.showToast({ message: '已加载章节内容', duration: 2000 });
+                        this.safeToast('已加载章节内容');
                       })
                     Text('编辑')
                       .fontSize(this.sf(13))
@@ -1174,7 +1116,9 @@ struct PromptEditorPage {
           }, (chapter: Chapter) => chapter.id)
         }
       }
+      .width('100%')
       .layoutWeight(1)
+      .height('100%')
       .backgroundColor(this.bgColor)
     }
     .width('100%')
@@ -1404,7 +1348,7 @@ struct PromptEditorPage {
                         this.originalContent = this.generatedContent;
                         this.generatedContent = version.content;
                         this.showVersionHistory = false;
-                        promptAction.showToast({ message: '已加载历史版本，可对比查看', duration: 2000 });
+                        this.safeToast('已加载历史版本，可对比查看');
                       })
                     if (this.selectedVersion === index) {
                       Text('恢复')
@@ -1423,9 +1367,9 @@ struct PromptEditorPage {
                               }
                               this.selectedVersion = -1;
                               this.showVersionHistory = false;
-                              promptAction.showToast({ message: '已恢复到此版本', duration: 2000 });
+                              this.safeToast('已恢复到此版本');
                             } else {
-                              promptAction.showToast({ message: '恢复失败，请重试', duration: 2000 });
+                              this.safeToast('恢复失败，请重试');
                             }
                           }
                         })
@@ -1438,10 +1382,12 @@ struct PromptEditorPage {
               .padding({ left: 16, right: 16, top: 12, bottom: 12 })
               .backgroundColor(this.selectedVersion === index ? '#FFF5F5' : this.cardBg)
             }
-          }, (version: WorkVersion, index: number) => version.id)
+          }, (version: WorkVersion) => version.id)
         }
       }
+      .width('100%')
       .layoutWeight(1)
+      .height('100%')
       .backgroundColor(this.bgColor)
 
       // 底部提示

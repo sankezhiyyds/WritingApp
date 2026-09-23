@@ -110,10 +110,10 @@ export struct OutlineManagementPanel {
             .fontColor(this.outlineTab === index ? '#FF6B35' : '#6B7280')
             .padding({ left: 16, right: 16, top: 8, bottom: 8 })
             .borderRadius(16)
-            .backgroundColor(this.outlineTab === index ? '#FFF7ED' : 'transparent')
+            .backgroundColor(this.outlineTab === index ? '#FFF7ED' : this.cardBg)
             .margin({ right: 8 })
             .onClick(() => { this.outlineTab = index; })
-        })
+        }, (tab: string) => tab)
       }
       .width('100%')
       .padding({ left: 16, right: 16 })
@@ -221,7 +221,7 @@ export struct OutlineManagementPanel {
           .width('100%')
           .padding({ top: 8, bottom: 8 })
           .border({ width: { bottom: 0.5 }, color: '#E5E7EB' })
-        })
+        }, (node: OutlineNode) => node.id)
 
         Button('＋ 添加卷')
           .fontSize(14).fontColor('#FF6B35').backgroundColor('#FFF7ED')
@@ -329,7 +329,7 @@ export struct OutlineManagementPanel {
             this.editingCharRole = char.role;
             this.showCharDialog = true;
           })
-        })
+        }, (char: CharacterInfo) => char.id)
 
         Button('＋ 添加角色')
           .fontSize(14).fontColor('#FF6B35').backgroundColor('#FFF7ED')
@@ -371,7 +371,7 @@ export struct OutlineManagementPanel {
               .borderRadius(12).padding({ left: 12, right: 12, top: 6, bottom: 6 })
               .margin({ right: 8 })
               .onClick(() => { this.editingCharRole = role; })
-          })
+          }, (role: string) => role)
         }
         .width('80%').margin({ top: 8 })
 
@@ -494,7 +494,7 @@ export struct OutlineManagementPanel {
             this.editingSceneSummary = scene.summary;
             this.showSceneDialog = true;
           })
-        })
+        }, (scene: SceneInfo) => scene.id)
 
         Button('＋ 添加场景')
           .fontSize(14).fontColor('#FF6B35').backgroundColor('#FFF7ED')

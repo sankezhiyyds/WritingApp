@@ -143,6 +143,18 @@
     {
       "name": "permission_reason_read_media",
       "value": "用于加载本地字体文件和本地AI模型文件"
+    },
+    {
+      "name": "permission_reason_distributed_sync",
+      "value": "用于多端协同和云空间数据同步"
+    },
+    {
+      "name": "permission_reason_device_state",
+      "value": "用于感知设备组网状态变化，实现多端协同"
+    },
+    {
+      "name": "permission_reason_device_discovery",
+      "value": "用于发现附近设备，实现跨设备内容传递"
     }
   ]
 }

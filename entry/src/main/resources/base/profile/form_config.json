@@ -1,0 +1,24 @@
+{
+  "forms": [
+    {
+      "name": "inspiration_card",
+      "displayName": "灵感速记",
+      "description": "快速记录灵感，存入素材库-灵感池",
+      "src": "./ets/pages/InspirationCard.ets",
+      "uiSyntax": "arkts",
+      "window": {
+        "designWidth": 720,
+        "autoDesignWidth": true
+      },
+      "colorMode": "auto",
+      "isDefault": true,
+      "supportDimensions": ["2*2"],
+      "defaultDimension": "2*2",
+      "updateEnabled": true,
+      "scheduledUpdateTime": "10:30",
+      "updateDuration": 1,
+      "formConfigAbility": "ability://EntryAbility",
+      "isDynamic": true
+    }
+  ]
+}

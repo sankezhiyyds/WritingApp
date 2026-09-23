@@ -1,6 +1,7 @@
 {
   "src": [
     "pages/Index",
-    "pages/PromptEditorPage"
+    "pages/PromptEditorPage",
+    "pages/InspirationCard"
   ]
 }

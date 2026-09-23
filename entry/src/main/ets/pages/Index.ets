@@ -1,7 +1,9 @@
 ﻿import { TemplateField, TemplateInfo, templateList } from '../model/TemplateModel';
-import { WorkItem, workManager } from '../model/WorkManager';
+import { WorkItem, workManager, BookshelfFolder, ArchiveFolder, RecycleBinItem, TransitItem, InspirationItem } from '../model/WorkManager';
 import { OutlineManagementPanel } from '../components/OutlineManagementPanel';
 import { settingsManager } from '../model/SettingsManager';
+import { huaweiAuthService, HuaweiUserInfo } from '../model/HuaweiAuthService';
+import { cloudSyncService, SyncStatus } from '../model/CloudSyncService';
 import { responsiveManager, BreakpointType } from '../model/ResponsiveManager';
 import { permissionManager, PermissionItem, PermissionResult } from '../model/PermissionManager';
 import router from '@ohos.router';
@@ -36,6 +38,29 @@ struct Index {
   @State refreshKey: number = 0;
   @StorageProp('sysDarkMode') @Watch('onSysDarkModeChange') sysDarkMode: boolean = false;
   @StorageProp('appFontSize') fontSize: number = 14;
+
+  // 文件夹导航状态
+  @State currentFolderId: string = '';  // 当前查看的书架文件夹ID（空表示根目录）
+  @State currentArchiveFolderId: string = '';  // 当前查看的旧档区文件夹ID
+  @State showFolderMenu: boolean = false;  // 文件夹长按菜单
+  @State selectedFolder: BookshelfFolder | null = null;  // 选中的书架文件夹
+  @State selectedArchiveFolder: ArchiveFolder | null = null;  // 选中的旧档区文件夹
+  @State folderMenuType: string = 'bookshelf';  // 菜单类型：bookshelf | archive
+  @State showWorkMenu: boolean = false;  // 作品长按菜单
+  @State selectedWorkForMenu: WorkItem | null = null;  // 选中的作品
+  @State showRenameDialog: boolean = false;  // 重命名对话框
+  @State renameText: string = '';  // 重命名文本
+  @State renameTargetType: string = 'folder';  // 重命名目标类型：folder | work
+  @State showCoverPicker: boolean = false;  // 封面颜色选择器
+  @State coverPickerTargetType: string = 'folder';  // 封面选择目标类型：folder | work
+  @State showArchiveFolderPicker: boolean = false;  // 归档文件夹选择器
+  @State workToArchive: string = '';  // 要归档的作品ID
+
+  // 素材库子页签：0=旧档, 1=回收站, 2=中转站, 3=灵感池
+  @State materialSubTab: number = 0;
+  @State recycleBinItems: RecycleBinItem[] = [];
+  @State transitItems: TransitItem[] = [];
+  @State inspirationItems: InspirationItem[] = [];
 
   sf(base: number): number {
     return Math.round(base * this.fontSize / 14);
@@ -78,11 +103,19 @@ struct Index {
   }
 
   get cardBg(): string {
-    return this.isDarkMode ? '#2D2D3A' : '#FFFFFF';
+    return this.isDarkMode ? '#24243A' : '#FFFFFF';
+  }
+
+  get panelBg(): string {
+    return this.isDarkMode ? '#212138' : '#FFFFFF';
   }
 
   get textColor(): string {
-    return this.isDarkMode ? '#FFFFFF' : '#1A1A2E';
+    return this.isDarkMode ? '#F5F5FA' : '#1A1A2E';
+  }
+
+  get subTextColor(): string {
+    return this.isDarkMode ? '#B7BACB' : '#6B7280';
   }
 
   aboutToAppear() {
@@ -109,19 +142,26 @@ struct Index {
         AppStorage.setOrCreate<boolean>('sysDarkMode', cfg.colorMode === 0);
       }
     }
-    // 订阅作品数据变更，刷新书架/旧档区
+    // 订阅作品数据变更，刷新书架/素材库
     this.unsubscribeWorkChange = workManager.onChange(() => {
       this.refreshKey++;
+      this.refreshMaterialLibrary();
     });
+    // 初始加载素材库数据
+    this.refreshMaterialLibrary();
   }
 
   updateDarkMode() {
     if (settingsManager.settings.followSystemDark) {
-      // 跟随系统：获取系统配置的colorMode
-      const context = getContext(this) as common.UIAbilityContext;
-      const config = context.config;
-      if (config && config.colorMode !== undefined) {
-        this.isDarkMode = config.colorMode === 0;
+      // 跟随系统：优先使用sysDarkMode（由onConfigurationUpdate实时推送），回退到context.config
+      if (this.sysDarkMode !== undefined) {
+        this.isDarkMode = this.sysDarkMode;
+      } else {
+        const context = getContext(this) as common.UIAbilityContext;
+        const config = context.config;
+        if (config && config.colorMode !== undefined) {
+          this.isDarkMode = config.colorMode === 0;
+        }
       }
     } else {
       // 手动设置
@@ -157,24 +197,14 @@ struct Index {
               .fontWeight(FontWeight.Bold)
               .fontColor(this.textColor)
               .margin({ top: 20, bottom: 24 })
-            Text('🤖')
-              .fontSize(this.sf(16))
-              .margin({ bottom: 20 })
 
             this.SideNavItem('短幕剧', '🎬', 0)
             this.SideNavItem('中长篇', '📚', 1)
             this.SideNavItem('书架', '📖', 2)
-            this.SideNavItem('旧档', '📦', 3)
+            this.SideNavItem('素材库', '📦', 3)
             this.SideNavItem('设置', '⚙️', 4)
 
             Blank()
-            Text('AI')
-              .fontSize(this.sf(10))
-              .fontColor('#FFFFFF')
-              .backgroundColor('#FF2D55')
-              .borderRadius(4)
-              .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-              .margin({ bottom: 16 })
           }
           .width(this.navWidth)
           .height('100%')
@@ -212,16 +242,6 @@ struct Index {
                 .fontWeight(FontWeight.Bold)
                 .fontColor(this.textColor)
               Blank()
-              // AI标识
-              Text('🤖')
-                .fontSize(this.sf(20))
-              Text('AI')
-                .fontSize(this.sf(10))
-                .fontColor('#FFFFFF')
-                .backgroundColor('#FF2D55')
-                .borderRadius(4)
-                .padding({ left: 4, right: 4 })
-                .margin({ left: 4 })
             }
             .width('100%')
             .padding({ left: 16, right: 16, top: 12, bottom: 12 })
@@ -261,6 +281,31 @@ struct Index {
       if (this.showOnboarding) {
         this.OnboardingDialog()
       }
+
+      // 重命名对话框
+      if (this.showRenameDialog) {
+        this.RenameDialog()
+      }
+
+      // 封面颜色选择器
+      if (this.showCoverPicker) {
+        this.CoverPickerDialog()
+      }
+
+      // 归档文件夹选择器
+      if (this.showArchiveFolderPicker) {
+        this.ArchiveFolderPickerDialog()
+      }
+
+      // 文件夹长按菜单
+      if (this.showFolderMenu) {
+        this.FolderMenuDialog()
+      }
+
+      // 作品长按菜单
+      if (this.showWorkMenu) {
+        this.WorkMenuDialog()
+      }
     }
     .width('100%')
     .height('100%')
@@ -280,7 +325,7 @@ struct Index {
     .width('100%')
     .height(48)
     .padding({ left: 20 })
-    .backgroundColor(this.currentIndex === index ? (this.isDarkMode ? '#3D3D4A' : '#FFF0E5') : 'transparent')
+    .backgroundColor(this.currentIndex === index ? (this.isDarkMode ? '#3D3D4A' : '#FFF0E5') : this.bgColor)
     .onClick(() => {
       this.currentIndex = index;
     })
@@ -296,7 +341,7 @@ struct Index {
             Circle()
               .width(8)
               .height(8)
-              .fill(this.onboardingPage === index ? '#FF2D55' : '#E5E7EB')
+              .fill(this.onboardingPage === index ? '#FF2D55' : (this.isDarkMode ? '#4B4B5B' : '#E5E7EB'))
               .margin({ left: 4, right: 4 })
           }, (index: number) => index.toString())
         }
@@ -313,7 +358,7 @@ struct Index {
           Text('欢迎使用创意写作')
             .fontSize(this.sf(24))
             .fontWeight(FontWeight.Bold)
-            .fontColor('#1A1A2E')
+            .fontColor(this.textColor)
             .margin({ bottom: 12 })
 
           Text('AI赋能，创意无限')
@@ -323,7 +368,7 @@ struct Index {
 
           Text('这是一款专为创作者打造的AI写作助手，帮助您从灵感迸发到完整作品的全流程创作。')
             .fontSize(this.sf(14))
-            .fontColor('#6B7280')
+            .fontColor(this.subTextColor)
             .textAlign(TextAlign.Center)
             .margin({ bottom: 24 })
         }
@@ -337,75 +382,75 @@ struct Index {
           Text('双工作台设计')
             .fontSize(this.sf(24))
             .fontWeight(FontWeight.Bold)
-            .fontColor('#1A1A2E')
+            .fontColor(this.textColor)
             .margin({ bottom: 12 })
 
           Text('短幕剧工作台')
             .fontSize(this.sf(16))
             .fontWeight(FontWeight.Medium)
-            .fontColor('#1A1A2E')
+            .fontColor(this.textColor)
             .margin({ bottom: 8 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 快速创作竖屏短幕剧、微电影')
             .fontSize(this.sf(14))
-            .fontColor('#6B7280')
+            .fontColor(this.subTextColor)
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 提供多种剧本模板和结构')
             .fontSize(this.sf(14))
-            .fontColor('#6B7280')
+            .fontColor(this.subTextColor)
             .margin({ bottom: 16 })
             .alignSelf(ItemAlign.Start)
 
           Text('中长篇工作台')
             .fontSize(this.sf(16))
             .fontWeight(FontWeight.Medium)
-            .fontColor('#1A1A2E')
+            .fontColor(this.textColor)
             .margin({ bottom: 8 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 系统规划长篇小说、剧本')
             .fontSize(this.sf(14))
-            .fontColor('#6B7280')
+            .fontColor(this.subTextColor)
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 章节管理、人物设定、世界观构建')
             .fontSize(this.sf(14))
-            .fontColor('#6B7280')
+            .fontColor(this.subTextColor)
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
         }
 
         // 第2页：AI对话
         if (this.onboardingPage === 2) {
-          Text('🤖')
+          Text('📓')
             .fontSize(this.sf(60))
             .margin({ bottom: 16 })
 
           Text('AI智能对话')
             .fontSize(this.sf(24))
             .fontWeight(FontWeight.Bold)
-            .fontColor('#1A1A2E')
+            .fontColor(this.textColor)
             .margin({ bottom: 12 })
 
           Text('• 与AI实时对话，碰撞灵感火花')
             .fontSize(this.sf(14))
-            .fontColor('#6B7280')
+            .fontColor(this.subTextColor)
             .margin({ bottom: 8 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 一键保存思维链路为文档')
             .fontSize(this.sf(14))
-            .fontColor('#6B7280')
+            .fontColor(this.subTextColor)
             .margin({ bottom: 8 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 本地AI推理')
             .fontSize(this.sf(14))
-            .fontColor('#6B7280')
+            .fontColor(this.subTextColor)
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
@@ -430,50 +475,50 @@ struct Index {
           Text('章节与版本管理')
             .fontSize(this.sf(24))
             .fontWeight(FontWeight.Bold)
-            .fontColor('#1A1A2E')
+            .fontColor(this.textColor)
             .margin({ bottom: 12 })
 
           Text('章节管理')
             .fontSize(this.sf(16))
             .fontWeight(FontWeight.Medium)
-            .fontColor('#1A1A2E')
+            .fontColor(this.textColor)
             .margin({ bottom: 8 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 创建、编辑、删除章节')
             .fontSize(this.sf(14))
-            .fontColor('#6B7280')
+            .fontColor(this.subTextColor)
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 分类管理：大纲、人设、正文等')
             .fontSize(this.sf(14))
-            .fontColor('#6B7280')
+            .fontColor(this.subTextColor)
             .margin({ bottom: 16 })
             .alignSelf(ItemAlign.Start)
 
           Text('版本历史')
             .fontSize(this.sf(16))
             .fontWeight(FontWeight.Medium)
-            .fontColor('#1A1A2E')
+            .fontColor(this.textColor)
             .margin({ bottom: 8 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 自动保存修改历史')
             .fontSize(this.sf(14))
-            .fontColor('#6B7280')
+            .fontColor(this.subTextColor)
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 随时回溯到任意版本')
             .fontSize(this.sf(14))
-            .fontColor('#6B7280')
+            .fontColor(this.subTextColor)
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 修改内容自动高亮显示')
             .fontSize(this.sf(14))
-            .fontColor('#6B7280')
+            .fontColor(this.subTextColor)
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
         }
@@ -487,43 +532,43 @@ struct Index {
           Text('隐私保护')
             .fontSize(this.sf(24))
             .fontWeight(FontWeight.Bold)
-            .fontColor('#1A1A2E')
+            .fontColor(this.textColor)
             .margin({ bottom: 12 })
 
           Text('• 所有数据仅保存在本地')
             .fontSize(this.sf(14))
-            .fontColor('#6B7280')
+            .fontColor(this.subTextColor)
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 作品数据完全保存在您的设备上')
             .fontSize(this.sf(14))
-            .fontColor('#6B7280')
+            .fontColor(this.subTextColor)
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 不会上传任何用户内容到服务器')
             .fontSize(this.sf(14))
-            .fontColor('#6B7280')
+            .fontColor(this.subTextColor)
             .margin({ bottom: 20 })
             .alignSelf(ItemAlign.Start)
 
           Text('华为账号登录（可选）')
             .fontSize(this.sf(16))
             .fontWeight(FontWeight.Medium)
-            .fontColor('#1A1A2E')
+            .fontColor(this.textColor)
             .margin({ bottom: 8 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 一键登录，快速开始创作')
             .fontSize(this.sf(14))
-            .fontColor('#6B7280')
+            .fontColor(this.subTextColor)
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
           Text('• 未来支持云同步功能')
             .fontSize(this.sf(14))
-            .fontColor('#6B7280')
+            .fontColor(this.subTextColor)
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
         }
@@ -533,8 +578,8 @@ struct Index {
           if (this.onboardingPage > 0) {
             Button('上一步')
               .fontSize(this.sf(14))
-              .fontColor('#6B7280')
-              .backgroundColor('#F3F4F6')
+              .fontColor(this.subTextColor)
+              .backgroundColor(this.isDarkMode ? '#353547' : '#F3F4F6')
               .borderRadius(20)
               .height(40)
               .layoutWeight(1)
@@ -579,12 +624,12 @@ struct Index {
       }
       .width('90%')
       .padding(24)
-      .backgroundColor('#FFFFFF')
+      .backgroundColor(this.cardBg)
       .borderRadius(16)
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('rgba(0,0,0,0.5)')
+    .backgroundColor('rgba(0,0,0,0.42)')
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
   }
@@ -593,11 +638,24 @@ struct Index {
   BookshelfView() {
     Column() {
       Row() {
-        Text('📖 书架')
-          .fontSize(this.sf(20))
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.textColor)
-        Blank()
+        if (this.currentFolderId.length > 0) {
+          Text('←')
+            .fontSize(this.sf(20))
+            .fontColor('#FF2D55')
+            .onClick(() => { this.currentFolderId = ''; })
+            .padding({ left: 16, right: 12 })
+          Text(this.getFolderName(this.currentFolderId))
+            .fontSize(this.sf(18))
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.textColor)
+            .layoutWeight(1)
+        } else {
+          Text('📖 书架')
+            .fontSize(this.sf(20))
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.textColor)
+            .layoutWeight(1)
+        }
         Button('新建')
           .fontSize(this.sf(14))
           .fontColor('#FFFFFF')
@@ -615,87 +673,11 @@ struct Index {
 
       Scroll() {
         Column() {
-          ForEach(workManager.getAllWorks().filter(w => !w.archived), (work: WorkItem) => {
-            Row() {
-              // 封面缩略图
-              Column() {
-                Text((work.title || '未命名').charAt(0))
-                  .fontSize(this.sf(18))
-                  .fontColor('#FFFFFF')
-                  .fontWeight(FontWeight.Bold)
-              }
-              .width(40)
-              .height(40)
-              .backgroundColor(work.coverColor || '#FF2D55')
-              .borderRadius(8)
-              .justifyContent(FlexAlign.Center)
-              .margin({ right: 10 })
-
-              Column() {
-                Text(work.title || '未命名作品')
-                  .fontSize(this.sf(14))
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor(this.textColor)
-                  .maxLines(1)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
-                Text(work.templateName)
-                  .fontSize(this.sf(11))
-                  .fontColor('#FF2D55')
-                  .margin({ top: 2 })
-                Text(work.updateTime)
-                  .fontSize(this.sf(10))
-                  .fontColor('#9CA3AF')
-                  .margin({ top: 2 })
-              }
-              .alignItems(HorizontalAlign.Start)
-              .layoutWeight(1)
-
-              Text('归档')
-                .fontSize(this.sf(12))
-                .fontColor('#3B82F6')
-                .padding({ left: 8, right: 8 })
-                .onClick(() => {
-                  workManager.archiveWork(work.id);
-                  promptAction.showToast({ message: '已移入旧档区', duration: 2000 });
-                })
-
-              Text('删除')
-                .fontSize(this.sf(12))
-                .fontColor('#EF4444')
-                .padding({ left: 8, right: 8 })
-                .onClick(() => {
-                  promptAction.showDialog({
-                    title: '确认删除',
-                    message: `确定要删除「${work.title || '未命名作品'}」吗？此操作不可恢复。`,
-                    buttons: [
-                      { text: '取消', color: '#9CA3AF' },
-                      { text: '删除', color: '#EF4444' }
-                    ]
-                  }).then((data) => {
-                    if (data.index === 1) {
-                      workManager.deleteWork(work.id);
-                      promptAction.showToast({ message: '已删除', duration: 2000 });
-                    }
-                  });
-                })
-
-              Text('>')
-                .fontSize(this.sf(16))
-                .fontColor('#D1D5DB')
-            }
-            .width('100%')
-            .height(60)
-            .backgroundColor(this.cardBg)
-            .borderRadius(10)
-            .padding({ left: 12, right: 12 })
-            .margin({ left: 16, right: 16, bottom: 8 })
-            .onClick(() => {
-              router.pushUrl({
-                url: 'pages/PromptEditorPage',
-                params: { workId: work.id, mode: 'short_drama' }
-              });
-            })
-          }, (work: WorkItem) => work.id)
+          if (this.currentFolderId.length === 0) {
+            this.BookshelfRootView()
+          } else {
+            this.BookshelfFolderView()
+          }
         }
         .width('100%')
         .padding({ top: 12 })
@@ -712,114 +694,68 @@ struct Index {
   ArchiveView() {
     Column() {
       Row() {
-        Text('📦 旧档区')
-          .fontSize(this.sf(20))
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.textColor)
-        Blank()
+        if (this.currentArchiveFolderId.length > 0) {
+          Text('←')
+            .fontSize(this.sf(20))
+            .fontColor('#FF2D55')
+            .onClick(() => { this.currentArchiveFolderId = ''; })
+            .padding({ left: 16, right: 12 })
+          Text(this.getArchiveFolderName(this.currentArchiveFolderId))
+            .fontSize(this.sf(18))
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.textColor)
+            .layoutWeight(1)
+        } else {
+          Text('📦 素材库')
+            .fontSize(this.sf(20))
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.textColor)
+            .layoutWeight(1)
+        }
       }
       .width('100%')
-      .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+      .padding({ left: 16, right: 16, top: 12, bottom: 8 })
+      .backgroundColor(this.cardBg)
+
+      // 素材库子页签
+      Row() {
+        ForEach(['旧档', '回收站', '中转站', '灵感池'], (tab: string, index: number) => {
+          Text(tab)
+            .fontSize(this.sf(13))
+            .fontWeight(this.materialSubTab === index ? FontWeight.Bold : FontWeight.Normal)
+            .fontColor(this.materialSubTab === index ? '#FF6B35' : '#9CA3AF')
+            .backgroundColor(this.materialSubTab === index ? '#FFF7ED' : this.cardBg)
+            .borderRadius(14)
+            .padding({ left: 14, right: 14, top: 6, bottom: 6 })
+            .margin({ right: 8 })
+            .onClick(() => {
+              this.materialSubTab = index;
+              this.refreshMaterialLibrary();
+            })
+        }, (tab: string) => tab)
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, bottom: 8 })
       .backgroundColor(this.cardBg)
 
       Scroll() {
         Column() {
-          if (workManager.getArchivedWorks().length > 0) {
-            ForEach(workManager.getArchivedWorks(), (work: WorkItem) => {
-              Row() {
-                // 封面缩略图
-                Column() {
-                  Text((work.title || '未命名').charAt(0))
-                    .fontSize(this.sf(18))
-                    .fontColor('#FFFFFF')
-                    .fontWeight(FontWeight.Bold)
-                }
-                .width(40)
-                .height(40)
-                .backgroundColor(work.coverColor || '#FF2D55')
-                .borderRadius(8)
-                .justifyContent(FlexAlign.Center)
-                .margin({ right: 10 })
-
-                Column() {
-                  Text(work.title || '未命名作品')
-                    .fontSize(this.sf(14))
-                    .fontWeight(FontWeight.Medium)
-                    .fontColor(this.textColor)
-                    .maxLines(1)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-                  Text(work.templateName)
-                    .fontSize(this.sf(11))
-                    .fontColor('#FF2D55')
-                    .margin({ top: 2 })
-                  Text(work.updateTime)
-                    .fontSize(this.sf(10))
-                    .fontColor('#9CA3AF')
-                    .margin({ top: 2 })
-                }
-                .alignItems(HorizontalAlign.Start)
-                .layoutWeight(1)
-
-                Text('移回书架')
-                  .fontSize(this.sf(12))
-                  .fontColor('#3B82F6')
-                  .padding({ left: 8, right: 8 })
-                  .onClick(() => {
-                    workManager.unarchiveWork(work.id);
-                    promptAction.showToast({ message: '已移回书架', duration: 2000 });
-                  })
-
-                Text('删除')
-                  .fontSize(this.sf(12))
-                  .fontColor('#EF4444')
-                  .padding({ left: 8, right: 8 })
-                  .onClick(() => {
-                    promptAction.showDialog({
-                      title: '确认删除',
-                      message: `确定要删除「${work.title || '未命名作品'}」吗？此操作不可恢复。`,
-                      buttons: [
-                        { text: '取消', color: '#9CA3AF' },
-                        { text: '删除', color: '#EF4444' }
-                      ]
-                    }).then((data) => {
-                      if (data.index === 1) {
-                        workManager.deleteWork(work.id);
-                        promptAction.showToast({ message: '已删除', duration: 2000 });
-                      }
-                    });
-                  })
-
-                Text('>')
-                  .fontSize(this.sf(16))
-                  .fontColor('#D1D5DB')
-              }
-              .width('100%')
-              .height(60)
-              .backgroundColor(this.cardBg)
-              .borderRadius(10)
-              .padding({ left: 12, right: 12 })
-              .margin({ left: 16, right: 16, bottom: 8 })
-              .onClick(() => {
-                router.pushUrl({
-                  url: 'pages/PromptEditorPage',
-                  params: { workId: work.id, mode: 'short_drama' }
-                });
-              })
-            }, (work: WorkItem) => work.id)
-          } else {
-            Column() {
-              Text('📦 暂无归档作品')
-                .fontSize(this.sf(16))
-                .fontColor('#9CA3AF')
-                .margin({ bottom: 8 })
-              Text('在书架中长按作品可移入旧档区')
-                .fontSize(this.sf(13))
-                .fontColor('#B0B7C3')
+          if (this.materialSubTab === 0) {
+            // 旧档
+            if (this.currentArchiveFolderId.length === 0) {
+              this.ArchiveRootView()
+            } else {
+              this.ArchiveFolderView()
             }
-            .width('100%')
-            .height(200)
-            .justifyContent(FlexAlign.Center)
-            .alignItems(HorizontalAlign.Center)
+          } else if (this.materialSubTab === 1) {
+            // 回收站
+            this.RecycleBinView()
+          } else if (this.materialSubTab === 2) {
+            // 中转站
+            this.TransitStationView()
+          } else {
+            // 灵感池
+            this.InspirationPoolView()
           }
         }
         .width('100%')
@@ -831,6 +767,1052 @@ struct Index {
     .width('100%')
     .height('100%')
     .backgroundColor(this.bgColor)
+  }
+
+  /** 获取书架文件夹名称 */
+  getFolderName(folderId: string): string {
+    const folder = workManager.getFolders().find(f => f.id === folderId);
+    return folder ? folder.name : '文件夹';
+  }
+
+  /** 获取旧档区文件夹名称 */
+  getArchiveFolderName(folderId: string): string {
+    const folder = workManager.getArchiveFolders().find(f => f.id === folderId);
+    return folder ? folder.name : '文件夹';
+  }
+
+  /** 书架根视图：显示文件夹和未分类作品 */
+  @Builder
+  BookshelfRootView() {
+    // 文件夹网格
+    if (workManager.getFolders().length > 0) {
+      Flex({ wrap: FlexWrap.Wrap }) {
+        ForEach(workManager.getFolders(), (folder: BookshelfFolder) => {
+          Column() {
+            Column() {
+              Text('📁')
+                .fontSize(this.sf(28))
+              Text(folder.name)
+                .fontSize(this.sf(12))
+                .fontColor('#FFFFFF')
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .margin({ top: 4 })
+            }
+            .width('100%')
+            .height(80)
+            .backgroundColor(folder.coverColor)
+            .borderRadius(12)
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
+
+            Text(`${workManager.getWorksByFolder(folder.id).length} 篇作品`)
+              .fontSize(this.sf(11))
+              .fontColor(this.subTextColor)
+              .margin({ top: 6 })
+          }
+          .width('46%')
+          .margin({ left: '2%', right: '2%', bottom: 12 })
+          .onClick(() => { this.currentFolderId = folder.id; })
+          .gesture(
+            LongPressGesture()
+              .onAction(() => {
+                this.selectedFolder = folder;
+                this.folderMenuType = 'bookshelf';
+                this.showFolderMenu = true;
+              })
+          )
+        }, (folder: BookshelfFolder) => folder.id)
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16 })
+    }
+
+    // 未分类作品
+    if (workManager.getFolders().length > 0 && workManager.getUnfiledBookshelfWorks().length > 0) {
+      Text('未分类作品')
+        .fontSize(this.sf(14))
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.subTextColor)
+        .width('100%')
+        .padding({ left: 16, top: 12, bottom: 8 })
+    }
+
+    ForEach(workManager.getUnfiledBookshelfWorks(), (work: WorkItem) => {
+      this.WorkItemRow(work, false)
+    }, (work: WorkItem) => work.id)
+
+    // 空状态
+    if (workManager.getFolders().length === 0 && workManager.getUnfiledBookshelfWorks().length === 0) {
+      Column() {
+        Text('📖 书架空空如也')
+          .fontSize(this.sf(16))
+          .fontColor('#9CA3AF')
+          .margin({ bottom: 8 })
+        Text('点击右上角「新建」开始创作')
+          .fontSize(this.sf(13))
+          .fontColor('#B0B7C3')
+      }
+      .width('100%')
+      .height(200)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+    }
+  }
+
+  /** 书架文件夹内视图：显示文件夹中的作品 */
+  @Builder
+  BookshelfFolderView() {
+    if (workManager.getWorksByFolder(this.currentFolderId).length > 0) {
+      ForEach(workManager.getWorksByFolder(this.currentFolderId), (work: WorkItem) => {
+        this.WorkItemRow(work, false)
+      }, (work: WorkItem) => work.id)
+    } else {
+      Column() {
+        Text('📁 文件夹为空')
+          .fontSize(this.sf(16))
+          .fontColor('#9CA3AF')
+      }
+      .width('100%')
+      .height(200)
+      .justifyContent(FlexAlign.Center)
+    }
+  }
+
+  /** 旧档区根视图：显示文件夹和未分类作品 */
+  @Builder
+  ArchiveRootView() {
+    if (workManager.getArchiveFolders().length > 0) {
+      Flex({ wrap: FlexWrap.Wrap }) {
+        ForEach(workManager.getArchiveFolders(), (folder: ArchiveFolder) => {
+          Column() {
+            Column() {
+              Text('📦')
+                .fontSize(this.sf(28))
+              Text(folder.name)
+                .fontSize(this.sf(12))
+                .fontColor('#FFFFFF')
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .margin({ top: 4 })
+            }
+            .width('100%')
+            .height(80)
+            .backgroundColor(folder.coverColor)
+            .borderRadius(12)
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
+
+            Text(`${workManager.getArchivedWorksByFolder(folder.id).length} 篇作品`)
+              .fontSize(this.sf(11))
+              .fontColor(this.subTextColor)
+              .margin({ top: 6 })
+          }
+          .width('46%')
+          .margin({ left: '2%', right: '2%', bottom: 12 })
+          .onClick(() => { this.currentArchiveFolderId = folder.id; })
+          .gesture(
+            LongPressGesture()
+              .onAction(() => {
+                this.selectedArchiveFolder = folder;
+                this.folderMenuType = 'archive';
+                this.showFolderMenu = true;
+              })
+          )
+        }, (folder: ArchiveFolder) => folder.id)
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16 })
+    }
+
+    if (workManager.getArchiveFolders().length > 0 && workManager.getUnfiledArchivedWorks().length > 0) {
+      Text('未分类作品')
+        .fontSize(this.sf(14))
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.subTextColor)
+        .width('100%')
+        .padding({ left: 16, top: 12, bottom: 8 })
+    }
+
+    ForEach(workManager.getUnfiledArchivedWorks(), (work: WorkItem) => {
+      this.WorkItemRow(work, true)
+    }, (work: WorkItem) => work.id)
+
+    if (workManager.getArchiveFolders().length === 0 && workManager.getUnfiledArchivedWorks().length === 0) {
+      Column() {
+        Text('📦 暂无归档作品')
+          .fontSize(this.sf(16))
+          .fontColor('#9CA3AF')
+          .margin({ bottom: 8 })
+        Text('在书架中归档作品后将显示在此')
+          .fontSize(this.sf(13))
+          .fontColor('#B0B7C3')
+      }
+      .width('100%')
+      .height(200)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+    }
+  }
+
+  /** 旧档区文件夹内视图 */
+  @Builder
+  ArchiveFolderView() {
+    if (workManager.getArchivedWorksByFolder(this.currentArchiveFolderId).length > 0) {
+      ForEach(workManager.getArchivedWorksByFolder(this.currentArchiveFolderId), (work: WorkItem) => {
+        this.WorkItemRow(work, true)
+      }, (work: WorkItem) => work.id)
+    } else {
+      Column() {
+        Text('📦 文件夹为空')
+          .fontSize(this.sf(16))
+          .fontColor('#9CA3AF')
+      }
+      .width('100%')
+      .height(200)
+      .justifyContent(FlexAlign.Center)
+    }
+  }
+
+  /** 刷新素材库数据 */
+  refreshMaterialLibrary(): void {
+    this.recycleBinItems = workManager.getRecycleBinItems();
+    this.transitItems = workManager.getTransitItems();
+    this.inspirationItems = workManager.getInspirations();
+  }
+
+  /** 回收站视图 */
+  @Builder
+  RecycleBinView() {
+    if (this.recycleBinItems.length > 0) {
+      ForEach(this.recycleBinItems, (item: RecycleBinItem) => {
+        Row() {
+          Column() {
+            Text('🗑')
+              .fontSize(this.sf(18))
+              .fontColor('#FFFFFF')
+          }
+          .width(40)
+          .height(40)
+          .borderRadius(8)
+          .backgroundColor('#EF4444')
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Center)
+
+          Column() {
+            Text(item.title)
+              .fontSize(this.sf(15))
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this.textColor)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+            Text('删除时间: ' + item.deleteTime)
+              .fontSize(this.sf(11))
+              .fontColor('#9CA3AF')
+              .margin({ top: 2 })
+          }
+          .layoutWeight(1)
+          .margin({ left: 12 })
+          .alignItems(HorizontalAlign.Start)
+
+          // 恢复按钮
+          Text('恢复')
+            .fontSize(this.sf(12))
+            .fontColor('#FF6B35')
+            .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+            .border({ width: 1, color: '#FF6B35' })
+            .borderRadius(12)
+            .margin({ right: 8 })
+            .onClick(() => {
+              if (workManager.restoreFromRecycleBin(item.id)) {
+                promptAction.showToast({ message: '已恢复到书架', duration: 2000 });
+                this.refreshMaterialLibrary();
+              }
+            })
+
+          // 彻底删除
+          Text('删除')
+            .fontSize(this.sf(12))
+            .fontColor('#EF4444')
+            .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+            .border({ width: 1, color: '#EF4444' })
+            .borderRadius(12)
+            .onClick(() => {
+              if (workManager.deleteFromRecycleBin(item.id)) {
+                promptAction.showToast({ message: '已彻底删除', duration: 2000 });
+                this.refreshMaterialLibrary();
+              }
+            })
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 10, bottom: 10 })
+        .backgroundColor(this.cardBg)
+        .borderRadius(8)
+        .margin({ bottom: 8 })
+      }, (item: RecycleBinItem) => item.id)
+
+      // 清空回收站按钮
+      Button('清空回收站')
+        .fontSize(this.sf(14))
+        .fontColor('#EF4444')
+        .backgroundColor('transparent')
+        .border({ width: 1, color: '#EF4444' })
+        .borderRadius(8)
+        .height(36)
+        .width('100%')
+        .margin({ top: 16 })
+        .onClick(() => {
+          workManager.clearRecycleBin();
+          this.refreshMaterialLibrary();
+          promptAction.showToast({ message: '回收站已清空', duration: 2000 });
+        })
+    } else {
+      Column() {
+        Text('🗑 回收站为空')
+          .fontSize(this.sf(16))
+          .fontColor('#9CA3AF')
+      }
+      .width('100%')
+      .height(200)
+      .justifyContent(FlexAlign.Center)
+    }
+  }
+
+  /** 中转站视图 */
+  @Builder
+  TransitStationView() {
+    if (this.transitItems.length > 0) {
+      ForEach(this.transitItems, (item: TransitItem) => {
+        Row() {
+          Column() {
+            Text('🔄')
+              .fontSize(this.sf(18))
+              .fontColor('#FFFFFF')
+          }
+          .width(40)
+          .height(40)
+          .borderRadius(8)
+          .backgroundColor('#3B82F6')
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Center)
+
+          Column() {
+            Text(item.title)
+              .fontSize(this.sf(15))
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this.textColor)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+            Text('来源: ' + item.source + ' | ' + item.createTime)
+              .fontSize(this.sf(11))
+              .fontColor('#9CA3AF')
+              .margin({ top: 2 })
+          }
+          .layoutWeight(1)
+          .margin({ left: 12 })
+          .alignItems(HorizontalAlign.Start)
+
+          // 接收按钮
+          Text('接收')
+            .fontSize(this.sf(12))
+            .fontColor('#3B82F6')
+            .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+            .border({ width: 1, color: '#3B82F6' })
+            .borderRadius(12)
+            .margin({ right: 8 })
+            .onClick(() => {
+              if (workManager.restoreFromRecycleBin(item.id)) {
+                promptAction.showToast({ message: '已接收', duration: 2000 });
+                this.refreshMaterialLibrary();
+              }
+            })
+
+          // 移除
+          Text('移除')
+            .fontSize(this.sf(12))
+            .fontColor('#9CA3AF')
+            .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+            .border({ width: 1, color: '#9CA3AF' })
+            .borderRadius(12)
+            .onClick(() => {
+              if (workManager.removeFromTransit(item.id)) {
+                this.refreshMaterialLibrary();
+              }
+            })
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 10, bottom: 10 })
+        .backgroundColor(this.cardBg)
+        .borderRadius(8)
+        .margin({ bottom: 8 })
+      }, (item: TransitItem) => item.id)
+    } else {
+      Column() {
+        Text('🔄 中转站为空')
+          .fontSize(this.sf(16))
+          .fontColor('#9CA3AF')
+        Text('跨设备传递的内容将显示在此')
+          .fontSize(this.sf(12))
+          .fontColor('#9CA3AF')
+          .margin({ top: 4 })
+      }
+      .width('100%')
+      .height(200)
+      .justifyContent(FlexAlign.Center)
+    }
+  }
+
+  /** 灵感池视图 */
+  @Builder
+  InspirationPoolView() {
+    if (this.inspirationItems.length > 0) {
+      ForEach(this.inspirationItems, (item: InspirationItem) => {
+        Row() {
+          Column() {
+            Text('💡')
+              .fontSize(this.sf(18))
+              .fontColor('#FFFFFF')
+          }
+          .width(40)
+          .height(40)
+          .borderRadius(8)
+          .backgroundColor('#F59E0B')
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Center)
+
+          Column() {
+            Text(item.content)
+              .fontSize(this.sf(14))
+              .fontColor(this.textColor)
+              .maxLines(2)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+            Row() {
+              Text(item.fromWidget ? '📱 卡片' : '✍️ 手动')
+                .fontSize(this.sf(10))
+                .fontColor(item.fromWidget ? '#F59E0B' : '#9CA3AF')
+              Text(' | ' + item.createTime)
+                .fontSize(this.sf(10))
+                .fontColor('#9CA3AF')
+            }
+            .margin({ top: 4 })
+          }
+          .layoutWeight(1)
+          .margin({ left: 12 })
+          .alignItems(HorizontalAlign.Start)
+
+          // 删除按钮
+          Text('删除')
+            .fontSize(this.sf(12))
+            .fontColor('#EF4444')
+            .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+            .border({ width: 1, color: '#EF4444' })
+            .borderRadius(12)
+            .onClick(() => {
+              if (workManager.deleteInspiration(item.id)) {
+                this.refreshMaterialLibrary();
+              }
+            })
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 10, bottom: 10 })
+        .backgroundColor(this.cardBg)
+        .borderRadius(8)
+        .margin({ bottom: 8 })
+      }, (item: InspirationItem) => item.id)
+
+      // 手动添加灵感
+      Button('＋ 添加灵感')
+        .fontSize(this.sf(14))
+        .fontColor('#FF6B35')
+        .backgroundColor('#FFF7ED')
+        .borderRadius(8)
+        .height(36)
+        .width('100%')
+        .margin({ top: 16 })
+        .onClick(() => {
+          workManager.addInspiration('新灵感 ' + new Date().toLocaleTimeString(), 'idea', false);
+          this.refreshMaterialLibrary();
+        })
+    } else {
+      Column() {
+        Text('💡 灵感池为空')
+          .fontSize(this.sf(16))
+          .fontColor('#9CA3AF')
+        Text('从桌面卡片快速记录灵感')
+          .fontSize(this.sf(12))
+          .fontColor('#9CA3AF')
+          .margin({ top: 4 })
+        Button('＋ 添加灵感')
+          .fontSize(this.sf(14))
+          .fontColor('#FF6B35')
+          .backgroundColor('#FFF7ED')
+          .borderRadius(8)
+          .height(36)
+          .width('auto')
+          .margin({ top: 12 })
+          .onClick(() => {
+            workManager.addInspiration('新灵感 ' + new Date().toLocaleTimeString(), 'idea', false);
+            this.refreshMaterialLibrary();
+          })
+      }
+      .width('100%')
+      .height(200)
+      .justifyContent(FlexAlign.Center)
+    }
+  }
+
+  /** 可复用的作品行 */
+  @Builder
+  WorkItemRow(work: WorkItem, isArchived: boolean) {
+    Row() {
+      Column() {
+        Text((work.title || '未命名').charAt(0))
+          .fontSize(this.sf(18))
+          .fontColor('#FFFFFF')
+          .fontWeight(FontWeight.Bold)
+      }
+      .width(40)
+      .height(40)
+      .backgroundColor(work.coverColor || '#FF2D55')
+      .borderRadius(8)
+      .justifyContent(FlexAlign.Center)
+      .margin({ right: 10 })
+
+      Column() {
+        Text(work.title || '未命名作品')
+          .fontSize(this.sf(14))
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.textColor)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(work.templateName)
+          .fontSize(this.sf(11))
+          .fontColor('#FF2D55')
+          .margin({ top: 2 })
+        Text(work.updateTime)
+          .fontSize(this.sf(10))
+          .fontColor('#9CA3AF')
+          .margin({ top: 2 })
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+
+      if (isArchived) {
+        Text('移回')
+          .fontSize(this.sf(12))
+          .fontColor('#3B82F6')
+          .padding({ left: 8, right: 8 })
+          .onClick(() => {
+            workManager.unarchiveWork(work.id);
+            promptAction.showToast({ message: '已移回书架', duration: 2000 });
+          })
+      } else {
+        Text('归档')
+          .fontSize(this.sf(12))
+          .fontColor('#6B7280')
+          .padding({ left: 8, right: 8 })
+          .onClick(() => {
+            this.workToArchive = work.id;
+            this.showArchiveFolderPicker = true;
+          })
+      }
+
+      Text('>')
+        .fontSize(this.sf(16))
+        .fontColor('#D1D5DB')
+    }
+    .width('100%')
+    .height(60)
+    .backgroundColor(this.cardBg)
+    .borderRadius(10)
+    .padding({ left: 12, right: 12 })
+    .margin({ left: 16, right: 16, bottom: 8 })
+    .onClick(() => {
+      router.pushUrl({
+        url: 'pages/PromptEditorPage',
+        params: { workId: work.id, mode: work.templateId || 'short_drama' }
+      });
+    })
+    .gesture(
+      LongPressGesture()
+        .onAction(() => {
+          this.selectedWorkForMenu = work;
+          this.showWorkMenu = true;
+        })
+    )
+  }
+
+  /** 重命名对话框 */
+  @Builder
+  RenameDialog() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column() {
+        Text('重命名')
+          .fontSize(this.sf(18))
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.textColor)
+          .margin({ bottom: 16 })
+
+        TextInput({ text: this.renameText, placeholder: '输入新名称' })
+          .fontSize(this.sf(14))
+          .height(44)
+          .backgroundColor(this.bgColor)
+          .borderRadius(8)
+          .padding({ left: 12, right: 12 })
+          .onChange((value: string) => {
+            this.renameText = value;
+          })
+
+        Row() {
+          Button('取消')
+            .fontSize(this.sf(14))
+            .fontColor(this.subTextColor)
+            .backgroundColor(this.bgColor)
+            .borderRadius(8)
+            .height(40)
+            .layoutWeight(1)
+            .margin({ right: 8 })
+            .onClick(() => {
+              this.showRenameDialog = false;
+              this.renameText = '';
+            })
+
+          Button('确定')
+            .fontSize(this.sf(14))
+            .fontColor('#FFFFFF')
+            .backgroundColor('#FF2D55')
+            .borderRadius(8)
+            .height(40)
+            .layoutWeight(1)
+            .onClick(() => {
+              if (this.renameText.trim().length > 0) {
+                if (this.renameTargetType === 'work' && this.selectedWorkForMenu) {
+                  workManager.renameWork(this.selectedWorkForMenu.id, this.renameText.trim());
+                  this.refreshKey++;
+                } else if (this.folderMenuType === 'bookshelf' && this.selectedFolder) {
+                  workManager.renameFolder(this.selectedFolder.id, this.renameText.trim());
+                } else if (this.folderMenuType === 'archive' && this.selectedArchiveFolder) {
+                  workManager.renameArchiveFolder(this.selectedArchiveFolder.id, this.renameText.trim());
+                }
+                promptAction.showToast({ message: '已重命名', duration: 2000 });
+              }
+              this.showRenameDialog = false;
+              this.renameText = '';
+              this.renameTargetType = 'folder';
+            })
+        }
+        .width('100%')
+        .margin({ top: 16 })
+      }
+      .width('80%')
+      .padding(24)
+      .backgroundColor(this.cardBg)
+      .borderRadius(16)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('rgba(0,0,0,0.42)')
+  }
+
+  /** 封面颜色选择器 */
+  @Builder
+  CoverPickerDialog() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column() {
+        Text('选择封面颜色')
+          .fontSize(this.sf(18))
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.textColor)
+          .margin({ bottom: 16 })
+
+        Flex({ wrap: FlexWrap.Wrap }) {
+          ForEach(['#FF2D55', '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#EF4444', '#6366F1', '#14B8A6'], (color: string) => {
+            Column()
+              .width(44)
+              .height(44)
+              .backgroundColor(color)
+              .borderRadius(22)
+              .margin({ left: 8, right: 8, bottom: 12 })
+              .onClick(() => {
+                if (this.coverPickerTargetType === 'work' && this.selectedWorkForMenu) {
+                  workManager.changeWorkCover(this.selectedWorkForMenu.id, color);
+                  this.refreshKey++;
+                } else if (this.folderMenuType === 'bookshelf' && this.selectedFolder) {
+                  workManager.changeFolderCover(this.selectedFolder.id, color);
+                } else if (this.folderMenuType === 'archive' && this.selectedArchiveFolder) {
+                  workManager.changeArchiveFolderCover(this.selectedArchiveFolder.id, color);
+                }
+                promptAction.showToast({ message: '封面已更新', duration: 2000 });
+                this.showCoverPicker = false;
+                this.coverPickerTargetType = 'folder';
+              })
+          }, (color: string) => color)
+        }
+        .width('100%')
+
+        Button('关闭')
+          .fontSize(this.sf(14))
+          .fontColor(this.subTextColor)
+          .backgroundColor(this.bgColor)
+          .borderRadius(8)
+          .height(40)
+          .width('100%')
+          .margin({ top: 8 })
+          .onClick(() => {
+            this.showCoverPicker = false;
+          })
+      }
+      .width('80%')
+      .padding(24)
+      .backgroundColor(this.cardBg)
+      .borderRadius(16)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('rgba(0,0,0,0.42)')
+  }
+
+  /** 归档文件夹选择器 */
+  @Builder
+  ArchiveFolderPickerDialog() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column() {
+        Text('选择归档位置')
+          .fontSize(this.sf(18))
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.textColor)
+          .margin({ bottom: 16 })
+
+        Scroll() {
+          Column() {
+            // 新建文件夹选项
+            Row() {
+              Text('📁 新建文件夹')
+                .fontSize(this.sf(14))
+                .fontColor('#FF2D55')
+                .layoutWeight(1)
+              Text('+')
+                .fontSize(this.sf(18))
+                .fontColor('#FF2D55')
+            }
+            .width('100%')
+            .height(48)
+            .backgroundColor(this.bgColor)
+            .borderRadius(8)
+            .padding({ left: 12, right: 12 })
+            .margin({ bottom: 8 })
+            .onClick(() => {
+              const folder = workManager.createArchiveFolder('归档文件夹');
+              workManager.archiveWork(this.workToArchive, folder.id);
+              promptAction.showToast({ message: '已归档到新文件夹', duration: 2000 });
+              this.showArchiveFolderPicker = false;
+            })
+
+            // 已有文件夹列表
+            ForEach(workManager.getArchiveFolders(), (folder: ArchiveFolder) => {
+              Row() {
+                Text('📦 ' + folder.name)
+                  .fontSize(this.sf(14))
+                  .fontColor(this.textColor)
+                  .layoutWeight(1)
+                Text(`${workManager.getArchivedWorksByFolder(folder.id).length} 篇`)
+                  .fontSize(this.sf(12))
+                  .fontColor(this.subTextColor)
+              }
+              .width('100%')
+              .height(48)
+              .backgroundColor(this.bgColor)
+              .borderRadius(8)
+              .padding({ left: 12, right: 12 })
+              .margin({ bottom: 8 })
+              .onClick(() => {
+                workManager.archiveWork(this.workToArchive, folder.id);
+                promptAction.showToast({ message: '已归档', duration: 2000 });
+                this.showArchiveFolderPicker = false;
+              })
+            }, (folder: ArchiveFolder) => folder.id)
+
+            // 不放入文件夹
+            Row() {
+              Text('直接归档（不放入文件夹）')
+                .fontSize(this.sf(14))
+                .fontColor(this.subTextColor)
+                .layoutWeight(1)
+            }
+            .width('100%')
+            .height(48)
+            .backgroundColor(this.bgColor)
+            .borderRadius(8)
+            .padding({ left: 12, right: 12 })
+            .margin({ bottom: 8 })
+            .onClick(() => {
+              workManager.archiveWork(this.workToArchive);
+              promptAction.showToast({ message: '已归档', duration: 2000 });
+              this.showArchiveFolderPicker = false;
+            })
+          }
+          .width('100%')
+        }
+        .layoutWeight(1)
+        .constraintSize({ maxHeight: 300 })
+
+        Button('取消')
+          .fontSize(this.sf(14))
+          .fontColor(this.subTextColor)
+          .backgroundColor(this.bgColor)
+          .borderRadius(8)
+          .height(40)
+          .width('100%')
+          .margin({ top: 8 })
+          .onClick(() => {
+            this.showArchiveFolderPicker = false;
+          })
+      }
+      .width('80%')
+      .padding(24)
+      .backgroundColor(this.cardBg)
+      .borderRadius(16)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('rgba(0,0,0,0.42)')
+  }
+
+  /** 文件夹长按菜单对话框 */
+  @Builder
+  FolderMenuDialog() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column() {
+        Text(this.folderMenuType === 'bookshelf' ? '📁 文件夹操作' : '📦 文件夹操作')
+          .fontSize(this.sf(18))
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.textColor)
+          .margin({ bottom: 16 })
+
+        // 更换封面
+        Row() {
+          Text('🎨 更换封面')
+            .fontSize(this.sf(15))
+            .fontColor(this.textColor)
+            .layoutWeight(1)
+        }
+        .width('100%')
+        .height(48)
+        .backgroundColor(this.bgColor)
+        .borderRadius(8)
+        .padding({ left: 16, right: 16 })
+        .margin({ bottom: 8 })
+        .onClick(() => {
+          this.showFolderMenu = false;
+          this.showCoverPicker = true;
+        })
+
+        // 重命名
+        Row() {
+          Text('✏️ 重命名')
+            .fontSize(this.sf(15))
+            .fontColor(this.textColor)
+            .layoutWeight(1)
+        }
+        .width('100%')
+        .height(48)
+        .backgroundColor(this.bgColor)
+        .borderRadius(8)
+        .padding({ left: 16, right: 16 })
+        .margin({ bottom: 8 })
+        .onClick(() => {
+          if (this.folderMenuType === 'bookshelf' && this.selectedFolder) {
+            this.renameText = this.selectedFolder.name;
+          } else if (this.folderMenuType === 'archive' && this.selectedArchiveFolder) {
+            this.renameText = this.selectedArchiveFolder.name;
+          }
+          this.showFolderMenu = false;
+          this.showRenameDialog = true;
+        })
+
+        // 删除文件夹
+        Row() {
+          Text('🗑️ 删除文件夹')
+            .fontSize(this.sf(15))
+            .fontColor('#EF4444')
+            .layoutWeight(1)
+        }
+        .width('100%')
+        .height(48)
+        .backgroundColor(this.bgColor)
+        .borderRadius(8)
+        .padding({ left: 16, right: 16 })
+        .margin({ bottom: 8 })
+        .onClick(() => {
+          const folderName = this.folderMenuType === 'bookshelf'
+            ? (this.selectedFolder ? this.selectedFolder.name : '')
+            : (this.selectedArchiveFolder ? this.selectedArchiveFolder.name : '');
+          promptAction.showDialog({
+            title: '确认删除',
+            message: `删除文件夹「${folderName}」？文件夹内作品将变为未分类。`,
+            buttons: [
+              { text: '取消', color: '#9CA3AF' },
+              { text: '删除', color: '#EF4444' }
+            ]
+          }).then((data) => {
+            if (data.index === 1) {
+              if (this.folderMenuType === 'bookshelf' && this.selectedFolder) {
+                workManager.deleteFolder(this.selectedFolder.id);
+                this.currentFolderId = '';
+              } else if (this.folderMenuType === 'archive' && this.selectedArchiveFolder) {
+                workManager.deleteArchiveFolder(this.selectedArchiveFolder.id);
+                this.currentArchiveFolderId = '';
+              }
+              this.refreshKey++;
+              this.refreshMaterialLibrary();
+              promptAction.showToast({ message: '文件夹已删除', duration: 2000 });
+            }
+            this.showFolderMenu = false;
+          });
+        })
+
+        // 取消
+        Button('取消')
+          .fontSize(this.sf(14))
+          .fontColor(this.subTextColor)
+          .backgroundColor(this.bgColor)
+          .borderRadius(8)
+          .height(40)
+          .width('100%')
+          .margin({ top: 4 })
+          .onClick(() => {
+            this.showFolderMenu = false;
+          })
+      }
+      .width('75%')
+      .padding(24)
+      .backgroundColor(this.cardBg)
+      .borderRadius(16)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('rgba(0,0,0,0.42)')
+  }
+
+  /** 作品长按菜单 */
+  @Builder
+  WorkMenuDialog() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column() {
+        Text('📄 作品操作')
+          .fontSize(this.sf(18))
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.textColor)
+          .margin({ bottom: 16 })
+
+        // 重命名
+        Row() {
+          Text('✏️ 重命名')
+            .fontSize(this.sf(15))
+            .fontColor(this.textColor)
+            .layoutWeight(1)
+        }
+        .width('100%')
+        .height(48)
+        .backgroundColor(this.cardBg)
+        .borderRadius(8)
+        .padding({ left: 16, right: 16 })
+        .margin({ bottom: 8 })
+        .onClick(() => {
+          if (this.selectedWorkForMenu) {
+            this.renameText = this.selectedWorkForMenu.title || '';
+            this.renameTargetType = 'work';
+            this.showRenameDialog = true;
+          }
+          this.showWorkMenu = false;
+        })
+
+        // 更换封面
+        Row() {
+          Text('🎨 更换封面')
+            .fontSize(this.sf(15))
+            .fontColor(this.textColor)
+            .layoutWeight(1)
+        }
+        .width('100%')
+        .height(48)
+        .backgroundColor(this.cardBg)
+        .borderRadius(8)
+        .padding({ left: 16, right: 16 })
+        .margin({ bottom: 8 })
+        .onClick(() => {
+          this.coverPickerTargetType = 'work';
+          this.showCoverPicker = true;
+          this.showWorkMenu = false;
+        })
+
+        // 归档
+        Row() {
+          Text('📦 归档到旧档区')
+            .fontSize(this.sf(15))
+            .fontColor(this.textColor)
+            .layoutWeight(1)
+        }
+        .width('100%')
+        .height(48)
+        .backgroundColor(this.cardBg)
+        .borderRadius(8)
+        .padding({ left: 16, right: 16 })
+        .margin({ bottom: 8 })
+        .onClick(() => {
+          if (this.selectedWorkForMenu) {
+            this.workToArchive = this.selectedWorkForMenu.id;
+            this.showArchiveFolderPicker = true;
+          }
+          this.showWorkMenu = false;
+        })
+
+        // 删除
+        Row() {
+          Text('🗑️ 删除')
+            .fontSize(this.sf(15))
+            .fontColor('#FF2D55')
+            .layoutWeight(1)
+        }
+        .width('100%')
+        .height(48)
+        .backgroundColor(this.cardBg)
+        .borderRadius(8)
+        .padding({ left: 16, right: 16 })
+        .onClick(() => {
+          if (this.selectedWorkForMenu) {
+            workManager.deleteWork(this.selectedWorkForMenu.id);
+            this.refreshKey++;
+          }
+          this.showWorkMenu = false;
+        })
+
+        // 取消
+        Row() {
+          Text('取消')
+            .fontSize(this.sf(15))
+            .fontColor(this.textColor)
+            .layoutWeight(1)
+            .textAlign(TextAlign.Center)
+        }
+        .width('100%')
+        .height(48)
+        .backgroundColor(this.cardBg)
+        .borderRadius(8)
+        .padding({ left: 16, right: 16 })
+        .margin({ top: 8 })
+        .onClick(() => {
+          this.showWorkMenu = false;
+        })
+      }
+      .width('70%')
+      .padding(20)
+      .backgroundColor(this.isDarkMode ? '#1E1E28' : '#FFFFFF')
+      .borderRadius(16)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('rgba(0,0,0,0.42)')
   }
 
   @Builder
@@ -882,11 +1864,11 @@ struct Index {
         this.currentIndex = 2;
       })
 
-      // 旧档
+      // 素材库
       Column() {
         Text('📦')
           .fontSize(this.sf(26))
-        Text('旧档')
+        Text('素材库')
           .fontSize(this.sf(12))
           .fontColor(this.currentIndex === 3 ? '#FF2D55' : (this.isDarkMode ? '#E5E7EB' : '#374151'))
           .margin({ top: 3 })
@@ -939,7 +1921,7 @@ struct Index {
         .fontSize(this.sf(20))
       Text(title)
         .fontSize(this.sf(10))
-        .fontColor(this.currentIndex === index ? '#FF2D55' : '#9CA3AF')
+        .fontColor(this.currentIndex === index ? '#FF2D55' : (this.isDarkMode ? '#B7BACB' : '#9CA3AF'))
         .margin({ top: 2 })
     }
     .width('100%')
@@ -1600,6 +2582,9 @@ struct SettingsTab {
   @State showHelpPanel: boolean = false;
   @State showFeedbackPanel: boolean = false;
   @State feedbackText: string = '';
+  @State isHuaweiLoggedIn: boolean = false;
+  @State huaweiUserInfo: HuaweiUserInfo | null = null;
+  @State syncStatusText: string = '';
   @State localFontPath: string = '';
   @State showFontPicker: boolean = false;
   @State localModelPath: string = '';
@@ -1618,6 +2603,12 @@ struct SettingsTab {
       this.loadSettings();
     }
     this.permissionItems = permissionManager.getPermissionItems();
+
+    // 恢复华为账号登录状态
+    this.isHuaweiLoggedIn = huaweiAuthService.isLoggedIn();
+    if (this.isHuaweiLoggedIn) {
+      this.huaweiUserInfo = huaweiAuthService.getCurrentUser();
+    }
   }
 
   // 暗色模式辅助颜色属性
@@ -1888,6 +2879,70 @@ struct SettingsTab {
           this.selectDarkMode();
         })
 
+        // ===== 华为账号与云同步 =====
+        ListItem() {
+          this.SectionTitle('华为账号与云同步')
+        }
+
+        ListItem() {
+          this.SettingRow(
+            this.isHuaweiLoggedIn ? '已登录华为账号' : '登录华为账号',
+            this.isHuaweiLoggedIn ? `已登录（${this.huaweiUserInfo?.openID.substring(0, 8) ?? ''}...）` : '登录后可同步作品到云端',
+            true
+          )
+        }
+        .onClick(async () => {
+          if (this.isHuaweiLoggedIn) {
+            // 已登录 → 退出登录
+            try {
+              await huaweiAuthService.logout();
+              this.isHuaweiLoggedIn = false;
+              this.huaweiUserInfo = null;
+              this.syncStatusText = '';
+              promptAction.showToast({ message: '已退出登录', duration: 2000 });
+            } catch (e) {
+              promptAction.showToast({ message: `退出失败: ${e}`, duration: 2000 });
+            }
+          } else {
+            // 未登录 → 执行登录
+            try {
+              const userInfo = await huaweiAuthService.login();
+              if (userInfo) {
+                this.isHuaweiLoggedIn = true;
+                this.huaweiUserInfo = userInfo;
+                promptAction.showToast({ message: '登录成功', duration: 2000 });
+              } else {
+                promptAction.showToast({ message: '登录失败', duration: 2000 });
+              }
+            } catch (e) {
+              promptAction.showToast({ message: `登录失败: ${e}`, duration: 2000 });
+            }
+          }
+        })
+
+        ListItem() {
+          this.SettingRow(
+            '云端同步',
+            this.isHuaweiLoggedIn ? (this.syncStatusText || '点击同步作品到云端') : '请先登录华为账号',
+            this.isHuaweiLoggedIn
+          )
+        }
+        .onClick(async () => {
+          if (!this.isHuaweiLoggedIn) {
+            promptAction.showToast({ message: '请先登录华为账号', duration: 2000 });
+            return;
+          }
+          try {
+            this.syncStatusText = '同步中...';
+            const success = await cloudSyncService.sync();
+            this.syncStatusText = success ? '同步成功' : '同步失败';
+            promptAction.showToast({ message: this.syncStatusText, duration: 2000 });
+          } catch (e) {
+            this.syncStatusText = `同步失败: ${e}`;
+            promptAction.showToast({ message: this.syncStatusText, duration: 2000 });
+          }
+        })
+
         // ===== 数据管理 =====
         ListItem() {
           this.SectionTitle('数据管理')
@@ -2041,7 +3096,7 @@ struct SettingsTab {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0,0,0,0.5)')
+        .backgroundColor('rgba(0,0,0,0.42)')
         .justifyContent(FlexAlign.Center)
         .position({ x: 0, y: 0 })
         .onClick(() => {
@@ -2058,10 +3113,6 @@ struct SettingsTab {
               .fontWeight(FontWeight.Bold)
               .fontColor(this._textPrimary)
               .margin({ bottom: 12 })
-
-            Text('🤖 AI')
-              .fontSize(this.sf(24))
-              .margin({ bottom: 8 })
 
             Text('创意写作 v1.2.0')
               .fontSize(this.sf(16))
@@ -2083,7 +3134,7 @@ struct SettingsTab {
 
             Text('• 短幕剧/中长篇双工作台，独立管理\n• AI对话生成，一键保存思维链路\n• 自动版本归档，修改历史可追溯\n• 书架与旧档区，作品归档一目了然\n• 支持本地GGUF模型\n• 丰富的模板库，支持自定义提示词\n• 深色模式，保护您的视力')
               .fontSize(this.sf(12))
-              .fontColor('#6B7280')
+              .fontColor(this._textSecondary)
               .margin({ bottom: 16 })
               .alignSelf(ItemAlign.Start)
 
@@ -2107,7 +3158,7 @@ struct SettingsTab {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0,0,0,0.5)')
+        .backgroundColor('rgba(0,0,0,0.42)')
         .justifyContent(FlexAlign.Center)
         .position({ x: 0, y: 0 })
         .onClick(() => {
@@ -2341,7 +3392,7 @@ struct SettingsTab {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0,0,0,0.5)')
+        .backgroundColor('rgba(0,0,0,0.42)')
         .justifyContent(FlexAlign.Center)
         .position({ x: 0, y: 0 })
         .onClick(() => {
@@ -2421,7 +3472,7 @@ struct SettingsTab {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0,0,0,0.5)')
+        .backgroundColor('rgba(0,0,0,0.42)')
         .justifyContent(FlexAlign.Center)
         .position({ x: 0, y: 0 })
         .onClick(() => {
@@ -2461,7 +3512,7 @@ struct SettingsTab {
                   .alignSelf(ItemAlign.Start)
                 Text('Q: AI生成失败怎么办？\nA: 请检查设置中的本地GGUF模型配置是否正确，也可尝试调大AI超时时间。\n\nQ: 作品如何备份？\nA: 设置 → 导出数据，将备份JSON复制保存；换设备后用"导入数据"恢复。\n\nQ: 版本历史在哪里？\nA: 打开作品后点击底部"历史"按钮，可预览并恢复任意历史版本。')
                   .fontSize(this.sf(12))
-                  .fontColor('#6B7280')
+                  .fontColor(this._textSecondary)
                   .margin({ bottom: 16 })
                   .alignSelf(ItemAlign.Start)
               }
@@ -2491,7 +3542,7 @@ struct SettingsTab {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0,0,0,0.5)')
+        .backgroundColor('rgba(0,0,0,0.42)')
         .justifyContent(FlexAlign.Center)
         .position({ x: 0, y: 0 })
         .onClick(() => {
@@ -2557,7 +3608,7 @@ struct SettingsTab {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0,0,0,0.5)')
+        .backgroundColor('rgba(0,0,0,0.42)')
         .justifyContent(FlexAlign.Center)
         .position({ x: 0, y: 0 })
         .onClick(() => {

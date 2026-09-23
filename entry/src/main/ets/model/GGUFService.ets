@@ -1,5 +1,5 @@
 import { settingsManager } from './SettingsManager';
-import * as gguf from 'libgguf.so';
+import { loadModel, generate, unloadModel, isModelLoaded, getModelInfo, isStubMode, abort } from 'libgguf.so';
 
 /**
  * GGUFService - ArkTS service layer for local GGUF model inference.
@@ -51,11 +51,22 @@ class GGUFServiceClass {
 
   constructor() {
     try {
-      const loaded = gguf.isModelLoaded();
+      const loaded = isModelLoaded();
       this.nativeAvailable = (loaded === true || loaded === false);
     } catch (e) {
       this.nativeAvailable = false;
     }
+  }
+
+  /** NAPI wrapper: loadModel → Promise<boolean> */
+  private loadModelAsync(modelPath: string, contextLength: number, threads: number): Promise<boolean> {
+    return loadModel(modelPath, contextLength, threads);
+  }
+
+  /** NAPI wrapper: generate → Promise<string> */
+  private generateAsync(prompt: string, maxTokens: number, temperature: number, topP: number,
+    onToken?: (token: string) => void): Promise<string> {
+    return generate(prompt, maxTokens, temperature, topP, onToken ?? undefined);
   }
 
   /** Check if the native GGUF inference module is available. */
@@ -69,7 +80,7 @@ class GGUFServiceClass {
       return true;
     }
     try {
-      return gguf.isStubMode();
+      return isStubMode();
     } catch (e) {
       return true;
     }
@@ -87,11 +98,11 @@ class GGUFServiceClass {
       return false;
     }
 
-    const contextLength = params.contextLength ?? 2048;
-    const threads = params.threads ?? 4;
+    const contextLength = params.contextLength ?? 1024;
+    const threads = params.threads ?? 2;
 
     try {
-      const success = await gguf.loadModel(params.modelPath, contextLength, threads);
+      const success = await this.loadModelAsync(params.modelPath, contextLength, threads);
       if (success) {
         this.loaded = true;
         this.currentModelPath = params.modelPath;
@@ -122,25 +133,38 @@ class GGUFServiceClass {
       };
     }
 
-    const maxTokens = params.maxTokens ?? 512;
+    const maxTokens = params.maxTokens ?? 256;
     const temperature = params.temperature ?? 0.8;
     const topP = params.topP ?? 0.9;
-    const onToken = params.onToken ?? null;
+    const onToken = params.onToken ?? undefined;
 
     try {
       // 让步事件循环，确保UI能先渲染isGenerating状态
       await new Promise<void>(resolve => setTimeout(resolve, 0));
 
       console.info(`[GGUFService] 开始推理, prompt长度=${params.prompt.length}, maxTokens=${maxTokens}`);
-      const text = await gguf.generate(
-        params.prompt,
-        maxTokens,
-        temperature,
-        topP,
-        onToken
-      );
-      const resultText = text as string;
+
+      // 超时保护：按maxTokens估算超时时间，防止NAPI调用卡死
+      const timeoutMs = Math.min(Math.max(maxTokens * 500, 30000), 120000);
+      const timeoutPromise = new Promise<string>((_, reject) => {
+        setTimeout(() => reject(new Error(`推理超时(${timeoutMs / 1000}s)，请减小maxTokens或更换更小的模型`)), timeoutMs);
+      });
+
+      const text = await Promise.race([
+        this.generateAsync(
+          params.prompt,
+          maxTokens,
+          temperature,
+          topP,
+          onToken
+        ),
+        timeoutPromise
+      ]);
+      const resultText = (text != null && text != undefined) ? String(text) : '';
       console.info(`[GGUFService] 推理完成, 输出长度=${resultText.length}`);
+      if (resultText.length === 0) {
+        console.warn('[GGUFService] 推理完成但输出为空，可能是maxTokens太小或模型无法生成');
+      }
       return {
         text: resultText,
         success: true,
@@ -161,7 +185,7 @@ class GGUFServiceClass {
   unloadModel(): void {
     if (this.nativeAvailable && this.loaded) {
       try {
-        gguf.unloadModel();
+        unloadModel();
       } catch (e) {
         console.error(`[GGUFService] Unload failed: ${e}`);
       }
@@ -174,7 +198,7 @@ class GGUFServiceClass {
   isLoaded(): boolean {
     if (!this.nativeAvailable) return false;
     try {
-      return gguf.isModelLoaded();
+      return isModelLoaded();
     } catch (e) {
       return false;
     }
@@ -184,7 +208,7 @@ class GGUFServiceClass {
   getModelInfo(): GGUFModelInfo | null {
     if (!this.nativeAvailable || !this.loaded) return null;
     try {
-      const jsonStr = gguf.getModelInfo();
+      const jsonStr = getModelInfo();
       return JSON.parse(jsonStr) as GGUFModelInfo;
     } catch (e) {
       return null;
@@ -195,7 +219,7 @@ class GGUFServiceClass {
   abort(): void {
     if (this.nativeAvailable) {
       try {
-        gguf.abort();
+        abort();
       } catch (e) {
         // ignore
       }
@@ -219,8 +243,8 @@ class GGUFServiceClass {
       return false;
     }
 
-    const contextLength = settings.ggufContextLength ?? 2048;
-    const threads = settings.ggufThreads ?? 4;
+    const contextLength = settings.ggufContextLength ?? 1024;
+    const threads = settings.ggufThreads ?? 2;
     return await this.loadModel({
       modelPath: settings.localModelPath,
       contextLength: contextLength,

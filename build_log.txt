@@ -1,0 +1,467 @@
+> hvigor [32mUP-TO-DATE :entry:default@PreBuild...  [39m
+> hvigor [32mFinished :entry:default@CreateModuleInfo... after 1 ms [39m
+> hvigor [32mFinished :entry:default@GenerateMetadata... after 4 ms [39m
+> hvigor [32mFinished :entry:default@ConfigureCmake... after 22 ms [39m
+> hvigor [32mFinished :entry:default@MergeProfile... after 40 ms [39m
+> hvigor [32mFinished :entry:default@CreateBuildProfile... after 8 ms [39m
+> hvigor [32mFinished :entry:default@PreCheckSyscap... after 1 ms [39m
+> hvigor [32mFinished :entry:default@GeneratePkgContextInfo... after 10 ms [39m
+> hvigor [32mFinished :entry:default@GeneratePkgSdkInfo... after 4 ms [39m
+> hvigor [32mFinished :entry:default@ProcessIntegratedHsp... after 1 ms [39m
+> hvigor [32mFinished :entry:default@MakePackInfo... after 8 ms [39m
+> hvigor [32mFinished :entry:default@SyscapTransform... after 19 ms [39m
+> hvigor [32mFinished :entry:default@ProcessProfile... after 304 ms [39m
+> hvigor [32mFinished :entry:default@ProcessRouterMap... after 9 ms [39m
+> hvigor [32mFinished :entry:default@ProcessShareConfig... after 66 ms [39m
+> hvigor [32mFinished :entry:default@ProcessStartupConfig... after 3 ms [39m
+> hvigor [32mFinished :entry:default@ProcessResource... after 6 ms [39m
+> hvigor [32mFinished :entry:default@GenerateLoaderJson... after 17 ms [39m
+> hvigor [33mWARN: Warning: 'app_name' conflict, first declared.
+at D:\Huawei\WritingApp\AppScope\resources\base\element\string.json
+but declared again.
+at D:\Huawei\WritingApp\entry\src\main\resources\base\element\string.json
+[39m
+> hvigor [32mFinished :entry:default@CompileResource... after 277 ms [39m
+> hvigor [32mFinished :entry:default@BuildJS... after 5 ms [39m
+> hvigor [33mWARN: CMAKE_BUILD_TYPE=Debug
+[39m
+> hvigor [32mFinished :entry:default@BuildNativeWithCmake... after 11 s 861 ms [39m
+> hvigor [33mWARN: [33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/model/ResponsiveManager.ets:40:36
+ 'matchMediaSync' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/model/ResponsiveManager.ets:48:36
+ 'matchMediaSync' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/model/ResponsiveManager.ets:56:36
+ 'matchMediaSync' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/model/HuaweiAuthService.ets:170:24
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/model/HuaweiAuthService.ets:171:24
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/model/HuaweiAuthService.ets:180:24
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/model/HuaweiAuthService.ets:181:24
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/model/CloudSyncService.ets:86:39
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/model/CloudSyncService.ets:87:19
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/model/CloudSyncService.ets:88:19
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/model/DistributedSyncService.ets:68:45
+ To use this API, you need to apply for the permissions: ohos.permission.DISTRIBUTED_DATASYNC
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/model/DistributedSyncService.ets:121:33
+ To use this API, you need to apply for the permissions: ohos.permission.DISTRIBUTED_DATASYNC
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/model/DistributedSyncService.ets:131:33
+ To use this API, you need to apply for the permissions: ohos.permission.DISTRIBUTED_DATASYNC
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/components/OutlineManagementPanel.ets:206:30
+ 'showDialog' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:131:21
+ 'getContext' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:140:20
+ 'getContext' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:160:25
+ 'getContext' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:344:16
+ The 'fill' API is supported since SDK version 26.0.0. However, the current compatible SDK version is 5.0.0(12).
+ It is recommended to use apiAvailable to safeguard API compatibility.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:618:30
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:667:20
+ 'pushUrl' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:1028:30
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:1042:30
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:1067:24
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:1125:30
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:1307:26
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:1331:14
+ 'pushUrl' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:1397:30
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:1445:30
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:1507:28
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:1530:30
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:1550:28
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:1650:24
+ 'showDialog' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:1668:28
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2035:20
+ 'pushUrl' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2099:12
+ The 'fill' API is supported since SDK version 26.0.0. However, the current compatible SDK version is 5.0.0(12).
+ It is recommended to use apiAvailable to safeguard API compatibility.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2134:14
+ 'pushUrl' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2184:26
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2187:26
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2210:14
+ 'pushUrl' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2218:43
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2228:22
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2345:20
+ 'pushUrl' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2423:12
+ The 'fill' API is supported since SDK version 26.0.0. However, the current compatible SDK version is 5.0.0(12).
+ It is recommended to use apiAvailable to safeguard API compatibility.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2458:14
+ 'pushUrl' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2515:26
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2518:26
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2541:14
+ 'pushUrl' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2549:43
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2559:22
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2644:19
+ 'getContext' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2820:18
+ 'pushUrl' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2902:28
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2904:28
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2913:30
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2915:30
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2918:28
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2932:26
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2939:26
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:2942:26
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3008:24
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3015:24
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3207:34
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3211:32
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3227:30
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3286:42
+ 'getContext' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3295:36
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3297:36
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3302:32
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3318:30
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3665:43
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3681:22
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3690:22
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3698:22
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3704:43
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3718:22
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3728:20
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3730:20
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3742:20
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3742:20
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3748:20
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3748:20
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3750:20
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3750:20
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3758:22
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3760:22
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3768:20
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3768:20
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3775:20
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3778:20
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3783:18
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/Index.ets:3783:18
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/components/AiSidebar.ets:166:20
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/components/AiSidebar.ets:166:20
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/components/AiSidebar.ets:222:20
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/components/AiSidebar.ets:222:20
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/components/AiSidebar.ets:239:20
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/components/AiSidebar.ets:239:20
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/components/AiSidebar.ets:244:18
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/components/AiSidebar.ets:244:18
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/PromptEditorPage.ets:67:20
+ 'showToast' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/PromptEditorPage.ets:122:27
+ 'getParams' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/PromptEditorPage.ets:167:28
+ 'getParams' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/PromptEditorPage.ets:303:20
+ 'back' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/PromptEditorPage.ets:537:18
+ 'back' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/PromptEditorPage.ets:899:12
+ 'back' has been deprecated.
+[39m[39m
+[33mWARN: [33m[33mArkTS:WARN File: D:/Huawei/WritingApp/entry/src/main/ets/pages/PromptEditorPage.ets:997:45
+ Function may throw exceptions. Special handling is required.
+[39m[39m
+[39m
+> hvigor [32mFinished :entry:default@CompileArkTS... after 29 s 763 ms [39m
+> hvigor [33mWARN: When performing compilation for the arm64-v8a architecture:
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mD:/Huawei/WritingApp/entry/src/main/cpp/llama_runner.cpp:9:9: warning: 'LOG_TAG' macro redefined [-Wmacro-redefined][33m[39m
+[33m#define LOG_TAG "GGUF_NAPI"[33m[39m
+[33m        ^[33m[39m
+[33mC:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/sysroot/usr/include/hilog/log.h:92:9: note: previous definition is here[33m[39m
+[33m#define LOG_TAG NULL[33m[39m
+[33m        ^[33m[39m
+[33mD:/Huawei/WritingApp/entry/src/main/cpp/llama_runner.cpp:62:16: warning: 'llama_new_context_with_model' is deprecated: use llama_init_from_model instead [-Wdeprecated-declarations][33m[39m
+[33m    context_ = llama_new_context_with_model([33m[39m
+[33m               ^[33m[39m
+[33mD:/Huawei/WritingApp/entry/src/main/cpp/third_party/llama.cpp/include/llama.h:548:5: note: 'llama_new_context_with_model' has been explicitly marked deprecated here[33m[39m
+[33m    DEPRECATED(LLAMA_API struct llama_context * llama_new_context_with_model([33m[39m
+[33m    ^[33m[39m
+[33mD:/Huawei/WritingApp/entry/src/main/cpp/third_party/llama.cpp/include/llama.h:30:56: note: expanded from macro 'DEPRECATED'[33m[39m
+[33m#    define DEPRECATED(func, hint) func __attribute__((deprecated(hint)))[33m[39m
+[33m                                                       ^[33m[39m
+[33m2 warnings generated.[33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mD:/Huawei/WritingApp/entry/src/main/cpp/gguf_napi.cpp:17:9: warning: 'LOG_TAG' macro redefined [-Wmacro-redefined][33m[39m
+[33m#define LOG_TAG "GGUF_NAPI"[33m[39m
+[33m        ^[33m[39m
+[33mC:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/sysroot/usr/include/hilog/log.h:92:9: note: previous definition is here[33m[39m
+[33m#define LOG_TAG NULL[33m[39m
+[33m        ^[33m[39m
+[33mD:/Huawei/WritingApp/entry/src/main/cpp/gguf_napi.cpp:291:5: warning: mixture of designated and non-designated initializers in the same initializer list is a C99 extension [-Wc99-designator][33m[39m
+[33m    .nm_version = 1,[33m[39m
+[33m    ^~~~~~~~~~~~~~~[33m[39m
+[33mD:/Huawei/WritingApp/entry/src/main/cpp/gguf_napi.cpp:297:5: note: first non-designated initializer is here[33m[39m
+[33m    {0},[33m[39m
+[33m    ^~~[33m[39m
+[33m2 warnings generated.[33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[33mclang++: warning: argument unused during compilation: '--gcc-toolchain=C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony/native/llvm' [-Wunused-command-line-argument][33m[39m
+[39m
+> hvigor [32mFinished :entry:default@BuildNativeWithNinja... after 46 s 438 ms [39m
+> hvigor [32mFinished :entry:default@ProcessLibs... after 1 s 184 ms [39m
+> hvigor [32mFinished :entry:default@DoNativeStrip... after 164 ms [39m
+> hvigor [32mFinished :entry:default@CacheNativeLibs... after 11 ms [39m
+> hvigor [32mFinished :entry:default@GeneratePkgModuleJson... after 9 ms [39m
+> hvigor [32mFinished :entry:default@ProcessCompiledResources... after 1 ms [39m
+> hvigor [32mFinished :entry:default@PackageHap... after 916 ms [39m
+> hvigor [32mFinished :entry:default@PackingCheck... after 5 ms [39m
+> hvigor [32mFinished :entry:default@SignHap... after 2 s 941 ms [39m
+> hvigor [32mFinished :entry:default@CollectDebugSymbol... after 2 ms [39m
+> hvigor [32mFinished :entry:assembleHap... after 1 ms [39m
+> hvigor [32mBUILD SUCCESSFUL in 1 min 7 s 776 ms [39m
+
+33 tasks in total: 32 executed, 1 up-to-date

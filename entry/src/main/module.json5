@@ -10,7 +10,7 @@
       "2in1"
     ],
     "deliveryWithInstall": true,
-    "installationFree": false,
+    "installationFree": true,
     "pages": "$profile:main_pages",
     "requestPermissions": [
       {
@@ -29,11 +29,10 @@
         "name": "EntryAbility",
         "srcEntry": "./ets/entryability/EntryAbility.ets",
         "description": "$string:EntryAbility_desc",
-        "icon": "$media:icon",
         "label": "$string:EntryAbility_label",
         "startWindowIcon": "$media:icon",
         "startWindowBackground": "$color:start_window_background",
-        "orientation": "auto_rotation",
+        "orientation": "auto_rotation_restricted",
         "exported": true,
         "skills": [
           {
@@ -43,6 +42,20 @@
             "actions": [
               "action.system.home"
             ]
+          }
+        ]
+      }
+    ],
+    "extensionAbilities": [
+      {
+        "name": "EntryFormAbility",
+        "srcEntry": "./ets/entryformability/EntryFormAbility.ets",
+        "type": "form",
+        "description": "灵感速记服务卡片",
+        "metadata": [
+          {
+            "name": "ohos.extension.form",
+            "resource": "$profile:form_config"
           }
         ]
       }

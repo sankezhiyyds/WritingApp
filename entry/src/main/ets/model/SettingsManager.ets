@@ -32,8 +32,8 @@ export class SettingsManager {
     grantedPermissions: [],
     localFontPath: '',
     localModelPath: '',
-    ggufContextLength: 2048,
-    ggufThreads: 4,
+    ggufContextLength: 1024,
+    ggufThreads: 2,
     ggufMaxTokens: 512,
     ggufTemperature: 0.8
   };
@@ -65,9 +65,9 @@ export class SettingsManager {
           grantedPermissions: Array.isArray(parsed.grantedPermissions) ? parsed.grantedPermissions : [],
           localFontPath: parsed.localFontPath || '',
           localModelPath: parsed.localModelPath || '',
-          ggufContextLength: parsed.ggufContextLength ?? 2048,
-          ggufThreads: parsed.ggufThreads ?? 4,
-          ggufMaxTokens: parsed.ggufMaxTokens ?? 512,
+          ggufContextLength: parsed.ggufContextLength ?? 1024,
+          ggufThreads: parsed.ggufThreads ?? 2,
+          ggufMaxTokens: parsed.ggufMaxTokens ?? 256,
           ggufTemperature: parsed.ggufTemperature ?? 0.8
         };
       }

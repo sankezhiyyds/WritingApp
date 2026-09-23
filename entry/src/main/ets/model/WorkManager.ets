@@ -20,6 +20,59 @@ export interface WorkItem {
   scenes?: SceneInfo[];
   coverColor?: string; // 封面颜色
   bgTheme?: string; // 背景主题：default | warm | cool | parchment
+  folderId?: string; // 所属书架文件夹ID
+  archiveFolderId?: string; // 所属旧档区文件夹ID
+  aiContent?: string; // AI侧栏内容（与工作台内容分开保存）
+}
+
+/** 书架文件夹 */
+export interface BookshelfFolder {
+  id: string;
+  name: string;
+  coverColor: string;
+  createTime: string;
+  updateTime: string;
+}
+
+/** 旧档区文件夹 */
+export interface ArchiveFolder {
+  id: string;
+  name: string;
+  coverColor: string;
+  createTime: string;
+  updateTime: string;
+}
+
+/** 回收站条目（从书架/旧档删除的作品） */
+export interface RecycleBinItem {
+  id: string;
+  originalWorkId: string;
+  title: string;
+  content: string;
+  templateName: string;
+  deleteTime: string;
+  source: string; // bookshelf | archive
+  originalFolderId?: string;
+}
+
+/** 中转站条目（跨设备/跨场景临时内容） */
+export interface TransitItem {
+  id: string;
+  title: string;
+  content: string;
+  source: string; // 来源设备或场景标识
+  createTime: string;
+  expireDays: number; // 过期天数（默认7天）
+}
+
+/** 灵感池条目（原子化服务卡片快速记录） */
+export interface InspirationItem {
+  id: string;
+  content: string;
+  category: string; // idea | snippet | note
+  createTime: string;
+  fromWidget: boolean; // 是否来自桌面卡片
+  deviceId?: string; // 来源设备
 }
 
 export interface WorkVersion {
@@ -82,7 +135,17 @@ export interface Conversation {
 
 export class WorkManager {
   private works: WorkItem[] = [];
+  private folders: BookshelfFolder[] = [];
+  private archiveFolders: ArchiveFolder[] = [];
+  private recycleBinItems: RecycleBinItem[] = [];
+  private transitItems: TransitItem[] = [];
+  private inspirationItems: InspirationItem[] = [];
   private storageKey: string = 'writing_app_works';
+  private folderKey: string = 'writing_app_folders';
+  private archiveFolderKey: string = 'writing_app_archive_folders';
+  private recycleBinKey: string = 'writing_app_recycle_bin';
+  private transitKey: string = 'writing_app_transit';
+  private inspirationKey: string = 'writing_app_inspirations';
   private prefs: preferences.Preferences | null = null;
   private context: common.UIAbilityContext | null = null;
   private changeListeners: Array<() => void> = [];
@@ -122,8 +185,48 @@ export class WorkManager {
           this.works = parsed;
         }
       }
+      // 加载书架文件夹
+      const folderStored = await this.prefs.get(this.folderKey, '') as string;
+      if (folderStored) {
+        const folderParsed = JSON.parse(folderStored) as BookshelfFolder[];
+        if (Array.isArray(folderParsed)) {
+          this.folders = folderParsed;
+        }
+      }
+      // 加载旧档区文件夹
+      const archiveFolderStored = await this.prefs.get(this.archiveFolderKey, '') as string;
+      if (archiveFolderStored) {
+        const archiveFolderParsed = JSON.parse(archiveFolderStored) as ArchiveFolder[];
+        if (Array.isArray(archiveFolderParsed)) {
+          this.archiveFolders = archiveFolderParsed;
+        }
+      }
+      // 加载回收站
+      const recycleStored = await this.prefs.get(this.recycleBinKey, '') as string;
+      if (recycleStored) {
+        const recycleParsed = JSON.parse(recycleStored) as RecycleBinItem[];
+        if (Array.isArray(recycleParsed)) {
+          this.recycleBinItems = recycleParsed;
+        }
+      }
+      // 加载中转站
+      const transitStored = await this.prefs.get(this.transitKey, '') as string;
+      if (transitStored) {
+        const transitParsed = JSON.parse(transitStored) as TransitItem[];
+        if (Array.isArray(transitParsed)) {
+          this.transitItems = transitParsed;
+        }
+      }
+      // 加载灵感池
+      const inspirationStored = await this.prefs.get(this.inspirationKey, '') as string;
+      if (inspirationStored) {
+        const inspirationParsed = JSON.parse(inspirationStored) as InspirationItem[];
+        if (Array.isArray(inspirationParsed)) {
+          this.inspirationItems = inspirationParsed;
+        }
+      }
     } catch (e) {
-      console.error('[WorkManager] 读取作品失败: ' + JSON.stringify(e));
+      console.error('[WorkManager] 读取数据失败: ' + JSON.stringify(e));
     }
   }
 
@@ -135,9 +238,14 @@ export class WorkManager {
       if (!this.prefs) return;
       try {
         await this.prefs.put(this.storageKey, JSON.stringify(this.works));
+        await this.prefs.put(this.folderKey, JSON.stringify(this.folders));
+        await this.prefs.put(this.archiveFolderKey, JSON.stringify(this.archiveFolders));
+        await this.prefs.put(this.recycleBinKey, JSON.stringify(this.recycleBinItems));
+        await this.prefs.put(this.transitKey, JSON.stringify(this.transitItems));
+        await this.prefs.put(this.inspirationKey, JSON.stringify(this.inspirationItems));
         await this.prefs.flush();
       } catch (e) {
-        console.error('[WorkManager] 保存作品失败: ' + JSON.stringify(e));
+        console.error('[WorkManager] 保存数据失败: ' + JSON.stringify(e));
       }
     });
     return this.saveQueue;
@@ -347,6 +455,30 @@ export class WorkManager {
     return false;
   }
 
+  /** 重命名作品 */
+  renameWork(workId: string, newTitle: string): boolean {
+    const work = this.works.find(w => w.id === workId);
+    if (work) {
+      work.title = newTitle;
+      work.updateTime = new Date().toISOString();
+      this.saveToStorage();
+      return true;
+    }
+    return false;
+  }
+
+  /** 更换作品封面颜色 */
+  changeWorkCover(workId: string, coverColor: string): boolean {
+    const work = this.works.find(w => w.id === workId);
+    if (work) {
+      work.coverColor = coverColor;
+      work.updateTime = new Date().toISOString();
+      this.saveToStorage();
+      return true;
+    }
+    return false;
+  }
+
   getWork(workId: string): WorkItem | null {
     return this.works.find(w => w.id === workId) || null;
   }
@@ -364,16 +496,37 @@ export class WorkManager {
     return this.works.filter(w => !w.archived);
   }
 
+  /** 获取书架文件夹中的作品 */
+  getWorksByFolder(folderId: string): WorkItem[] {
+    return this.works.filter(w => !w.archived && w.folderId === folderId);
+  }
+
+  /** 获取未分类的书架作品 */
+  getUnfiledBookshelfWorks(): WorkItem[] {
+    return this.works.filter(w => !w.archived && !w.folderId);
+  }
+
   /** 旧档区：已归档的作品 */
   getArchivedWorks(): WorkItem[] {
     return this.works.filter(w => w.archived);
   }
 
-  /** 归档作品（移入旧档区） */
-  archiveWork(workId: string): boolean {
+  /** 获取旧档区文件夹中的作品 */
+  getArchivedWorksByFolder(folderId: string): WorkItem[] {
+    return this.works.filter(w => w.archived && w.archiveFolderId === folderId);
+  }
+
+  /** 获取未分类的旧档区作品 */
+  getUnfiledArchivedWorks(): WorkItem[] {
+    return this.works.filter(w => w.archived && !w.archiveFolderId);
+  }
+
+  /** 归档作品（移入旧档区，可选择文件夹） */
+  archiveWork(workId: string, archiveFolderId?: string): boolean {
     const work = this.works.find(w => w.id === workId);
     if (work) {
       work.archived = true;
+      work.archiveFolderId = archiveFolderId;
       work.updateTime = this.formatDate(new Date());
       this.saveToStorage();
       return true;
@@ -386,6 +539,154 @@ export class WorkManager {
     const work = this.works.find(w => w.id === workId);
     if (work) {
       work.archived = false;
+      work.archiveFolderId = undefined;
+      work.updateTime = this.formatDate(new Date());
+      this.saveToStorage();
+      return true;
+    }
+    return false;
+  }
+
+  // ===== 书架文件夹管理 =====
+
+  /** 获取所有书架文件夹 */
+  getFolders(): BookshelfFolder[] {
+    return this.folders;
+  }
+
+  /** 创建书架文件夹 */
+  createFolder(name: string, coverColor: string = '#FF2D55'): BookshelfFolder {
+    const folder: BookshelfFolder = {
+      id: this.generateId(),
+      name: name,
+      coverColor: coverColor,
+      createTime: this.formatDate(new Date()),
+      updateTime: this.formatDate(new Date())
+    };
+    this.folders.push(folder);
+    this.saveToStorage();
+    return folder;
+  }
+
+  /** 重命名书架文件夹 */
+  renameFolder(folderId: string, name: string): boolean {
+    const folder = this.folders.find(f => f.id === folderId);
+    if (folder) {
+      folder.name = name;
+      folder.updateTime = this.formatDate(new Date());
+      this.saveToStorage();
+      return true;
+    }
+    return false;
+  }
+
+  /** 更改文件夹封面颜色 */
+  changeFolderCover(folderId: string, coverColor: string): boolean {
+    const folder = this.folders.find(f => f.id === folderId);
+    if (folder) {
+      folder.coverColor = coverColor;
+      folder.updateTime = this.formatDate(new Date());
+      this.saveToStorage();
+      return true;
+    }
+    return false;
+  }
+
+  /** 删除书架文件夹（作品变为未分类） */
+  deleteFolder(folderId: string): boolean {
+    const index = this.folders.findIndex(f => f.id === folderId);
+    if (index !== -1) {
+      // 将文件夹内的作品设为未分类
+      for (const work of this.works) {
+        if (work.folderId === folderId) {
+          work.folderId = undefined;
+        }
+      }
+      this.folders.splice(index, 1);
+      this.saveToStorage();
+      return true;
+    }
+    return false;
+  }
+
+  /** 将作品移入书架文件夹 */
+  moveWorkToFolder(workId: string, folderId: string): boolean {
+    const work = this.works.find(w => w.id === workId);
+    if (work) {
+      work.folderId = folderId;
+      work.updateTime = this.formatDate(new Date());
+      this.saveToStorage();
+      return true;
+    }
+    return false;
+  }
+
+  // ===== 旧档区文件夹管理 =====
+
+  /** 获取所有旧档区文件夹 */
+  getArchiveFolders(): ArchiveFolder[] {
+    return this.archiveFolders;
+  }
+
+  /** 创建旧档区文件夹 */
+  createArchiveFolder(name: string, coverColor: string = '#6B7280'): ArchiveFolder {
+    const folder: ArchiveFolder = {
+      id: this.generateId(),
+      name: name,
+      coverColor: coverColor,
+      createTime: this.formatDate(new Date()),
+      updateTime: this.formatDate(new Date())
+    };
+    this.archiveFolders.push(folder);
+    this.saveToStorage();
+    return folder;
+  }
+
+  /** 重命名旧档区文件夹 */
+  renameArchiveFolder(folderId: string, name: string): boolean {
+    const folder = this.archiveFolders.find(f => f.id === folderId);
+    if (folder) {
+      folder.name = name;
+      folder.updateTime = this.formatDate(new Date());
+      this.saveToStorage();
+      return true;
+    }
+    return false;
+  }
+
+  /** 更改旧档区文件夹封面颜色 */
+  changeArchiveFolderCover(folderId: string, coverColor: string): boolean {
+    const folder = this.archiveFolders.find(f => f.id === folderId);
+    if (folder) {
+      folder.coverColor = coverColor;
+      folder.updateTime = this.formatDate(new Date());
+      this.saveToStorage();
+      return true;
+    }
+    return false;
+  }
+
+  /** 删除旧档区文件夹（作品变为未分类） */
+  deleteArchiveFolder(folderId: string): boolean {
+    const index = this.archiveFolders.findIndex(f => f.id === folderId);
+    if (index !== -1) {
+      for (const work of this.works) {
+        if (work.archiveFolderId === folderId) {
+          work.archiveFolderId = undefined;
+        }
+      }
+      this.archiveFolders.splice(index, 1);
+      this.saveToStorage();
+      return true;
+    }
+    return false;
+  }
+
+  /** 更新作品的AI侧栏内容 */
+  updateAiContent(workId: string, aiContent: string): boolean {
+    const work = this.works.find(w => w.id === workId);
+    if (work) {
+      work.aiContent = aiContent;
       work.updateTime = this.formatDate(new Date());
       this.saveToStorage();
       return true;
@@ -632,6 +933,161 @@ export class WorkManager {
         this.saveToStorage();
         return true;
       }
+    }
+    return false;
+  }
+
+  // ==================== 素材库：回收站 ====================
+
+  /** 移入回收站 */
+  moveToRecycleBin(workId: string, source: string = 'bookshelf'): boolean {
+    const work = this.works.find(w => w.id === workId);
+    if (!work) return false;
+    const item: RecycleBinItem = {
+      id: this.generateId(),
+      originalWorkId: work.id,
+      title: work.title,
+      content: work.content,
+      templateName: work.templateName,
+      deleteTime: this.formatDate(new Date()),
+      source: source,
+      originalFolderId: work.folderId
+    };
+    this.recycleBinItems.push(item);
+    // 从works中移除
+    this.works = this.works.filter(w => w.id !== workId);
+    this.saveToStorage();
+    return true;
+  }
+
+  /** 从回收站恢复 */
+  restoreFromRecycleBin(recycleId: string): boolean {
+    const item = this.recycleBinItems.find(r => r.id === recycleId);
+    if (!item) return false;
+    // 恢复为works
+    const restoredWork: WorkItem = {
+      id: item.originalWorkId,
+      title: item.title,
+      templateId: '',
+      templateName: item.templateName,
+      content: item.content,
+      createTime: this.formatDate(new Date()),
+      updateTime: this.formatDate(new Date()),
+      folderId: item.originalFolderId || ''
+    };
+    this.works.push(restoredWork);
+    this.recycleBinItems = this.recycleBinItems.filter(r => r.id !== recycleId);
+    this.saveToStorage();
+    return true;
+  }
+
+  /** 彻底删除回收站条目 */
+  deleteFromRecycleBin(recycleId: string): boolean {
+    const before = this.recycleBinItems.length;
+    this.recycleBinItems = this.recycleBinItems.filter(r => r.id !== recycleId);
+    if (this.recycleBinItems.length !== before) {
+      this.saveToStorage();
+      return true;
+    }
+    return false;
+  }
+
+  /** 清空回收站 */
+  clearRecycleBin(): void {
+    this.recycleBinItems = [];
+    this.saveToStorage();
+  }
+
+  /** 获取回收站列表 */
+  getRecycleBinItems(): RecycleBinItem[] {
+    return this.recycleBinItems;
+  }
+
+  // ==================== 素材库：中转站 ====================
+
+  /** 添加中转站条目 */
+  addToTransit(title: string, content: string, source: string = 'local', expireDays: number = 7): TransitItem {
+    const item: TransitItem = {
+      id: this.generateId(),
+      title: title,
+      content: content,
+      source: source,
+      createTime: this.formatDate(new Date()),
+      expireDays: expireDays
+    };
+    this.transitItems.push(item);
+    this.saveToStorage();
+    return item;
+  }
+
+  /** 获取中转站列表（自动过滤过期） */
+  getTransitItems(): TransitItem[] {
+    const now = new Date();
+    this.transitItems = this.transitItems.filter(item => {
+      const created = new Date(item.createTime);
+      const diffDays = (now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24);
+      return diffDays <= item.expireDays;
+    });
+    return this.transitItems;
+  }
+
+  /** 从中转站移除 */
+  removeFromTransit(transitId: string): boolean {
+    const before = this.transitItems.length;
+    this.transitItems = this.transitItems.filter(t => t.id !== transitId);
+    if (this.transitItems.length !== before) {
+      this.saveToStorage();
+      return true;
+    }
+    return false;
+  }
+
+  /** 清空中转站 */
+  clearTransit(): void {
+    this.transitItems = [];
+    this.saveToStorage();
+  }
+
+  // ==================== 素材库：灵感池 ====================
+
+  /** 添加灵感 */
+  addInspiration(content: string, category: string = 'idea', fromWidget: boolean = false, deviceId?: string): InspirationItem {
+    const item: InspirationItem = {
+      id: this.generateId(),
+      content: content,
+      category: category,
+      createTime: this.formatDate(new Date()),
+      fromWidget: fromWidget,
+      deviceId: deviceId
+    };
+    this.inspirationItems.push(item);
+    this.saveToStorage();
+    return item;
+  }
+
+  /** 获取灵感池列表 */
+  getInspirations(): InspirationItem[] {
+    return this.inspirationItems;
+  }
+
+  /** 删除灵感 */
+  deleteInspiration(inspirationId: string): boolean {
+    const before = this.inspirationItems.length;
+    this.inspirationItems = this.inspirationItems.filter(i => i.id !== inspirationId);
+    if (this.inspirationItems.length !== before) {
+      this.saveToStorage();
+      return true;
+    }
+    return false;
+  }
+
+  /** 更新灵感内容 */
+  updateInspiration(inspirationId: string, content: string): boolean {
+    const item = this.inspirationItems.find(i => i.id === inspirationId);
+    if (item) {
+      item.content = content;
+      this.saveToStorage();
+      return true;
     }
     return false;
   }
