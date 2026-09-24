@@ -27,3 +27,6 @@ oh_modules/
 
 # Local config
 local.properties
+
+# llama.cpp third-party source (large, rebuildable)
+entry/src/main/cpp/third_party/
