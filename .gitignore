@@ -30,3 +30,14 @@ local.properties
 
 # llama.cpp third-party source (large, rebuildable)
 entry/src/main/cpp/third_party/
+
+# Dev cleanup/utility scripts
+*.ps1
+*.bat
+*.vbs
+*.cmd
+
+# Temp/test files
+test_marker.txt
+*.tmp
+*_lock*
