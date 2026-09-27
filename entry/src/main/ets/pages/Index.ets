@@ -192,12 +192,6 @@ struct Index {
         Row() {
           // 侧边导航栏
           Column() {
-            Text('创意写作')
-              .fontSize(this.sf(18))
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this.textColor)
-              .margin({ top: 20, bottom: 24 })
-
             this.SideNavItem('短幕剧', '🎬', 0)
             this.SideNavItem('中长篇', '📚', 1)
             this.SideNavItem('书架', '📖', 2)
@@ -231,22 +225,11 @@ struct Index {
         }
         .width('100%')
         .height('100%')
+        .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
       } else {
         // 窄屏布局：底部悬浮玻璃Tab导航（手机/折叠屏折叠态）
         Stack() {
           Column() {
-            // 顶部栏
-            Row() {
-              Text('创意写作')
-                .fontSize(this.sf(20))
-                .fontWeight(FontWeight.Bold)
-                .fontColor(this.textColor)
-              Blank()
-            }
-            .width('100%')
-            .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-            .backgroundColor(this.cardBg)
-
             // Tab内容区域
             Column() {
               if (this.currentIndex === 0) {
@@ -274,6 +257,7 @@ struct Index {
         }
         .width('100%')
         .height('100%')
+        .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
         .alignContent(Alignment.Bottom)
       }
 
