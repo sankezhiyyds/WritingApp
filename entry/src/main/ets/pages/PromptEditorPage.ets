@@ -1,4 +1,5 @@
-﻿import { TemplateField, TemplateInfo, templateList } from '../model/TemplateModel';
+﻿import { RectShape } from '@kit.ArkUI';
+import { TemplateField, TemplateInfo, templateList } from '../model/TemplateModel';
 import { WorkItem, workManager, Chapter, WorkVersion } from '../model/WorkManager';
 import { settingsManager } from '../model/SettingsManager';
 import { aiService } from '../model/AIService';
@@ -6,8 +7,6 @@ import { responsiveManager, BreakpointType } from '../model/ResponsiveManager';
 import { AiSidebar } from '../components/AiSidebar';
 import { FindReplaceDialog } from '../components/FindReplaceDialog';
 import { SaveDialog } from '../components/SaveDialog';
-import router from '@ohos.router';
-import promptAction from '@ohos.promptAction';
 import pasteboard from '@ohos.pasteboard';
 import preferences from '@ohos.data.preferences';
 import common from '@ohos.app.ability.common';
@@ -64,7 +63,7 @@ struct PromptEditorPage {
   /** 统一 Toast 出口：捕获 promptAction 可能抛出的异常 */
   safeToast(message: string): void {
     try {
-      promptAction.showToast({ message: message, duration: 2000 });
+      this.getUIContext().getPromptAction().showToast({ message: message, duration: 2000 });
     } catch (e) {
       console.warn('[PromptEditorPage] showToast失败: ' + e);
     }
@@ -90,6 +89,11 @@ struct PromptEditorPage {
 
   get cardBg(): string {
     return this.isDarkMode ? '#2D2D44' : '#FFFFFF';
+  }
+
+  /** 弹窗卡片结构边框：深色中灰 / 浅色浅灰，与 cardBg 协调 */
+  get cardBorder(): string {
+    return this.isDarkMode ? '#44455E' : '#E5E7EB';
   }
 
   get textColor(): string {
@@ -119,7 +123,7 @@ struct PromptEditorPage {
 
   aboutToAppear() {
     AppStorage.setOrCreate('appFontSize', settingsManager.settings.fontSize || 14);
-    const params = router.getParams() as Record<string, string>;
+    const params = this.getUIContext().getRouter().getParams() as Record<string, string>;
     if (params) {
       this.mode = params['mode'] || 'short_drama';
 
@@ -164,7 +168,7 @@ struct PromptEditorPage {
     this.startAutoSave();
 
     // 恢复工作台缓存（仅在无workId时恢复）
-    const params0 = router.getParams() as Record<string, string>;
+    const params0 = this.getUIContext().getRouter().getParams() as Record<string, string>;
     if (!params0 || !params0['workId']) {
       this.restoreWorkbenchCache();
     }
@@ -300,7 +304,7 @@ struct PromptEditorPage {
           .fontSize(this.sf(20))
           .fontColor('#FF2D55')
           .onClick(() => {
-            router.back();
+            this.getUIContext().getRouter().back();
           })
           .padding({ left: 16, right: 12 })
 
@@ -534,7 +538,7 @@ struct PromptEditorPage {
           settingsManager.settings.customPrompt = this.promptText;
           settingsManager.save();
           this.safeToast('提示词已保存');
-          router.back();
+          this.getUIContext().getRouter().back();
         })
     }
     .width('100%')
@@ -545,8 +549,8 @@ struct PromptEditorPage {
   FormView() {
     Scroll() {
       Column() {
-        // 标题输入
-        if (!this.template && !this.work) {
+        // 标题输入（无模板时显示自由创作编辑区）
+        if (!this.template) {
           TextInput({ placeholder: '请输入作品标题', text: this.title })
             .width('90%')
             .height(48)
@@ -896,7 +900,7 @@ struct PromptEditorPage {
 
     // 保存成功后清除工作台缓存，避免下次恢复旧数据
     this.clearWorkbenchCache();
-    router.back();
+    this.getUIContext().getRouter().back();
   }
 
   async generateWithAi() {
@@ -1129,7 +1133,7 @@ struct PromptEditorPage {
 
   @Builder
   CreateChapterDialog() {
-    Column() {
+    Stack({ alignContent: Alignment.Center }) {
       Column() {
         Text('创建章节')
           .fontSize(this.sf(18))
@@ -1215,19 +1219,21 @@ struct PromptEditorPage {
       }
       .width('90%')
       .padding(20)
-      .backgroundColor(this.cardBg)
+      .backgroundColor('#FFFFFF')
+      .border({ width: 1, color: this.cardBorder })
       .borderRadius(16)
+      .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
+      .margin({ top: 40, bottom: 40 })
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('rgba(0,0,0,0.5)')
-    .justifyContent(FlexAlign.Center)
+    .backgroundColor('rgba(0,0,0,0.9)')
     .position({ x: 0, y: 0 })
   }
 
   @Builder
   EditChapterDialog() {
-    Column() {
+    Stack({ alignContent: Alignment.Center }) {
       Column() {
         Text('编辑章节')
           .fontSize(this.sf(18))
@@ -1282,13 +1288,15 @@ struct PromptEditorPage {
       }
       .width('90%')
       .padding(20)
-      .backgroundColor(this.cardBg)
+      .backgroundColor('#FFFFFF')
+      .border({ width: 1, color: this.cardBorder })
       .borderRadius(16)
+      .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
+      .margin({ top: 40, bottom: 40 })
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('rgba(0,0,0,0.5)')
-    .justifyContent(FlexAlign.Center)
+    .backgroundColor('rgba(0,0,0,0.9)')
     .position({ x: 0, y: 0 })
   }
 

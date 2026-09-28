@@ -1,3 +1,4 @@
+import { RectShape } from '@kit.ArkUI';
 /**
  * 查找替换文本处理组件
  * 类似MT管理器的查找替换功能
@@ -42,6 +43,10 @@ export struct FindReplaceDialog {
   }
   get dividerColor(): string {
     return this.isDarkMode ? '#3A3A4E' : '#E5E7EB';
+  }
+  /** 弹窗卡片结构边框：深色中灰 / 浅色浅灰，与 cardBg 协调 */
+  get cardBorder(): string {
+    return this.isDarkMode ? '#44455E' : '#E5E7EB';
   }
 
   /** 执行查找 */
@@ -313,11 +318,15 @@ export struct FindReplaceDialog {
       }
       .width('85%')
       .padding(20)
-      .backgroundColor(this.cardBg)
+      .backgroundColor('#FFFFFF')
+      .border({ width: 1, color: this.cardBorder })
       .borderRadius(16)
+      .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
+      .margin({ top: 40, bottom: 40 })
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('rgba(0,0,0,0.5)')
+    .backgroundColor('rgba(0,0,0,0.9)')
+    .position({ x: 0, y: 0 })
   }
 }

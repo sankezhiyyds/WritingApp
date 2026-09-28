@@ -2,6 +2,7 @@
  * 保存对话框组件
  * 支持编辑文件名、新建文件夹或选择已有文件夹保存
  */
+import { RectShape } from '@kit.ArkUI';
 import { workManager, BookshelfFolder } from '../model/WorkManager';
 
 @Component
@@ -42,6 +43,10 @@ export struct SaveDialog {
   get dividerColor(): string {
     return this.isDarkMode ? '#3D3D3D' : '#E0E0E0';
   }
+  /** 弹窗卡片结构边框：深色中灰 / 浅色浅灰，与 bgColor 协调 */
+  get cardBorder(): string {
+    return this.isDarkMode ? '#4A4A4A' : '#D1D5DB';
+  }
   get accentColor(): string {
     return '#3B82F6';
   }
@@ -54,15 +59,6 @@ export struct SaveDialog {
   build() {
     if (this.isVisible) {
       Stack() {
-        // 遮罩层
-        Column()
-          .width('100%')
-          .height('100%')
-          .backgroundColor('rgba(0,0,0,0.5)')
-          .onClick(() => {
-            this.isVisible = false;
-          })
-
         // 对话框主体
         Column() {
           // 标题栏
@@ -215,14 +211,18 @@ export struct SaveDialog {
           .padding({ left: 20, right: 20, bottom: 20 })
         }
         .width('85%')
-        .height('70%')
-        .backgroundColor(this.bgColor)
+        .padding(24)
+        .backgroundColor('#FFFFFF')
+        .border({ width: 1, color: this.cardBorder })
         .borderRadius(16)
+        .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
+        .margin({ top: 40, bottom: 40 })
         .shadow({ radius: 20, color: 'rgba(0,0,0,0.3)', offsetX: 0, offsetY: 4 })
       }
       .width('100%')
       .height('100%')
-      .alignContent(Alignment.Center)
+      .backgroundColor('rgba(0,0,0,0.9)')
+      .position({ x: 0, y: 0 })
     }
   }
 

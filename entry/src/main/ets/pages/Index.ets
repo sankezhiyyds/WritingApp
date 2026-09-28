@@ -1,21 +1,30 @@
-﻿import { TemplateField, TemplateInfo, templateList } from '../model/TemplateModel';
-import { WorkItem, workManager, BookshelfFolder, ArchiveFolder, RecycleBinItem, TransitItem, InspirationItem } from '../model/WorkManager';
+import { TemplateInfo, templateList } from '../model/TemplateModel';
+import { WorkItem, workManager, BookshelfFolder, ArchiveFolder, RecycleBinItem, InspirationItem } from '../model/WorkManager';
 import { OutlineManagementPanel } from '../components/OutlineManagementPanel';
+import { RectShape } from '@kit.ArkUI';
 import { settingsManager } from '../model/SettingsManager';
+import { speechRecognizer } from '@kit.CoreSpeechKit';
+import { audio } from '@kit.AudioKit';
+import abilityAccessCtrl from '@ohos.abilityAccessCtrl';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { huaweiAuthService, HuaweiUserInfo } from '../model/HuaweiAuthService';
 import { cloudSyncService, SyncStatus } from '../model/CloudSyncService';
 import { responsiveManager, BreakpointType } from '../model/ResponsiveManager';
 import { permissionManager, PermissionItem, PermissionResult } from '../model/PermissionManager';
-import router from '@ohos.router';
 import promptAction from '@ohos.promptAction';
-import { BusinessError } from '@ohos.base';
 import picker from '@ohos.file.picker';
 import fileIo from '@ohos.file.fs';
 import pasteboard from '@ohos.pasteboard';
-import Configuration from '@ohos.app.ability.Configuration';
 import common from '@ohos.app.ability.common';
-import AbilityConstant from '@ohos.app.ability.AbilityConstant';
-import display from '@ohos.display';
+import formProvider from '@ohos.app.form.formProvider';
+import formBindingData from '@ohos.app.form.formBindingData';
+import preferences from '@ohos.data.preferences';
+
+/** 卡片所需的灵感统计数据 */
+interface InspirationStats {
+  count: string;
+  lastContent: string;
+}
 
 interface ToastOptions {
   message: string | Resource;
@@ -56,11 +65,29 @@ struct Index {
   @State showArchiveFolderPicker: boolean = false;  // 归档文件夹选择器
   @State workToArchive: string = '';  // 要归档的作品ID
 
-  // 素材库子页签：0=旧档, 1=回收站, 2=中转站, 3=灵感池
+  // 素材库子页签：0=旧档, 1=回收站, 2=灵感池
   @State materialSubTab: number = 0;
   @State recycleBinItems: RecycleBinItem[] = [];
-  @State transitItems: TransitItem[] = [];
   @State inspirationItems: InspirationItem[] = [];
+  @State editingInspirationId: string = '';
+  @State editingInspirationContent: string = '';
+  @State showInspirationEditor: boolean = false;
+  @State isNewInspiration: boolean = false;
+  // 灵感草稿缓存：误触关闭弹窗后恢复，避免丢失已输入内容
+  @StorageLink('inspirationDraftCache') inspirationDraftCache: string = '';
+  // 卡片导航目标：App 在前台时点卡片，onNewWant 写入该键，@Watch 实时响应跳转（不依赖 onPageShow）
+  @StorageLink('appNavTarget') @Watch('onAppNavTargetChange') appNavTarget: string = '';
+  // 语音输入状态（引擎与会话字段在方法区声明）
+  @State isVoiceRecognizing: boolean = false;
+  // 长按录音中标志：手指未松开时，静默超时不得停止识别（仅短按开关模式才自动停止）
+  private isVoiceHolding: boolean = false;
+  // 长按录音模式：按住开始、松开停止；静默超时自动停止
+  private voiceSilenceTimer: number = 0;
+  private readonly VOICE_SILENCETIMEOUT_MS: number = 8000;
+  // 语音按钮按下时间戳（区分长按/短按）
+  private voiceTouchDownTime: number = 0;
+  @State showRecyclePreview: boolean = false;
+  @State previewRecycleItem: RecycleBinItem | null = null;
 
   sf(base: number): number {
     return Math.round(base * this.fontSize / 14);
@@ -110,6 +137,11 @@ struct Index {
     return this.isDarkMode ? '#212138' : '#FFFFFF';
   }
 
+  /** 弹窗卡片结构边框：浅色浅灰 / 深色中灰，与 cardBg 协调 */
+  get cardBorder(): string {
+    return this.isDarkMode ? '#3A3A55' : '#E5E7EB';
+  }
+
   get textColor(): string {
     return this.isDarkMode ? '#F5F5FA' : '#1A1A2E';
   }
@@ -128,7 +160,7 @@ struct Index {
     AppStorage.setOrCreate('appBreakpoint', this.currentBreakpoint);
     responsiveManager.onBreakpointChange(this.breakpointCallback);
     // 初始化深色模式
-    const context = getContext(this) as common.UIAbilityContext;
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
     settingsManager.initPromise = settingsManager.init(context);
     settingsManager.initPromise.then(() => {
       this.updateDarkMode();
@@ -137,7 +169,7 @@ struct Index {
     });
     // fallback: 如果EntryAbility尚未设置sysDarkMode，从context读取
     if (AppStorage.get<boolean>('sysDarkMode') === undefined) {
-      const cfg = (getContext(this) as common.UIAbilityContext).config;
+      const cfg = (this.getUIContext().getHostContext() as common.UIAbilityContext).config;
       if (cfg && cfg.colorMode !== undefined) {
         AppStorage.setOrCreate<boolean>('sysDarkMode', cfg.colorMode === 0);
       }
@@ -151,13 +183,69 @@ struct Index {
     this.refreshMaterialLibrary();
   }
 
+  /** 跳转到灵感池并弹出新建灵感对话框（卡片直达复用逻辑） */
+  private handleNavigateToInspiration(): void {
+    // 切换到素材库选项卡（索引3）
+    this.currentIndex = 3;
+    // 切换到灵感池子页签（索引2，0=旧档,1=回收站,2=灵感池）
+    this.materialSubTab = 2;
+    // 清除目标，避免重复导航
+    AppStorage.setOrCreate('appNavTarget', '');
+    // 卡片直达：恢复缓存（若上次误关丢失）→ 弹出新建灵感输入框
+    const cached = AppStorage.get<string>('inspirationDraftCache');
+    if (cached) {
+      this.editingInspirationContent = cached;
+      AppStorage.setOrCreate('inspirationDraftCache', '');
+      this.inspirationDraftCache = '';
+    } else {
+      this.editingInspirationContent = '';
+      this.inspirationDraftCache = '';
+    }
+    this.editingInspirationId = '';
+    this.isNewInspiration = true;
+    this.showInspirationEditor = true;
+    this.isVoiceRecognizing = false;
+  }
+
+  /** 页面每次显示时检查导航目标（如从桌面卡片跳转到灵感池） */
+  onPageShow(): void {
+    // 1. 内存 flag 通道（onNewWant 高频点击时的实时响应）
+    const target = AppStorage.get<string>('appNavTarget');
+    if (target === 'inspiration') {
+      this.handleNavigateToInspiration();
+      return;
+    }
+    // 2. 持久化兜底通道（onNewWant 写入 preferences，防止内存 flag 被合并/丢失）
+    this.consumePersistedCardNavTarget();
+  }
+
+  /** 消费持久化的卡片跳转目标（preferences.card_nav_target），消费后清除 */
+  private async consumePersistedCardNavTarget(): Promise<void> {
+    try {
+      const ctx = this.getUIContext().getHostContext();
+      if (!ctx) {
+        return;
+      }
+      const prefs = await preferences.getPreferences(ctx, 'writing_app');
+      const persisted = await prefs.get('card_nav_target', '') as string;
+      if (persisted === 'inspiration') {
+        // 清除持久化目标，避免重复跳转
+        await prefs.put('card_nav_target', '');
+        await prefs.flush();
+        this.handleNavigateToInspiration();
+      }
+    } catch (err) {
+      console.warn('[Index] 读取持久化卡片目标失败: ' + JSON.stringify(err));
+    }
+  }
+
   updateDarkMode() {
     if (settingsManager.settings.followSystemDark) {
       // 跟随系统：优先使用sysDarkMode（由onConfigurationUpdate实时推送），回退到context.config
       if (this.sysDarkMode !== undefined) {
         this.isDarkMode = this.sysDarkMode;
       } else {
-        const context = getContext(this) as common.UIAbilityContext;
+        const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
         const config = context.config;
         if (config && config.colorMode !== undefined) {
           this.isDarkMode = config.colorMode === 0;
@@ -183,6 +271,26 @@ struct Index {
       this.unsubscribeWorkChange();
       this.unsubscribeWorkChange = null;
     }
+  }
+
+  /** @Watch：卡片直达导航目标变化时，App 在前台实时响应跳转 */
+  private onAppNavTargetChange(): void {
+    if (this.appNavTarget === 'inspiration') {
+      this.handleNavigateToInspiration();
+    }
+  }
+
+  /** 系统返回键/侧滑返回处理 - 支持文件夹级返回 */
+  onBackPress(): boolean {
+    if (this.currentFolderId.length > 0) {
+      this.currentFolderId = '';
+      return true;
+    }
+    if (this.currentArchiveFolderId.length > 0) {
+      this.currentArchiveFolderId = '';
+      return true;
+    }
+    return false;
   }
 
   build() {
@@ -216,7 +324,7 @@ struct Index {
             } else if (this.currentIndex === 3) {
               this.ArchiveView()
             } else {
-              SettingsTab({ isDarkMode: $isDarkMode })
+              SettingsTab({ isDarkMode: this.isDarkMode })
             }
           }
           .layoutWeight(1)
@@ -241,7 +349,7 @@ struct Index {
               } else if (this.currentIndex === 3) {
                 this.ArchiveView()
               } else {
-                SettingsTab({ isDarkMode: $isDarkMode })
+                SettingsTab({ isDarkMode: this.isDarkMode })
               }
             }
             .width('100%')
@@ -290,6 +398,16 @@ struct Index {
       if (this.showWorkMenu) {
         this.WorkMenuDialog()
       }
+
+      // 灵感编辑/新建对话框
+      if (this.showInspirationEditor) {
+        this.InspirationEditorDialog()
+      }
+
+      // 回收站内容预览
+      if (this.showRecyclePreview) {
+        this.RecyclePreviewDialog()
+      }
     }
     .width('100%')
     .height('100%')
@@ -317,15 +435,16 @@ struct Index {
 
   @Builder
   OnboardingDialog() {
-    Column() {
+    Stack({ alignContent: Alignment.Center }) {
       Column() {
         // 页面指示器
         Row() {
           ForEach([0, 1, 2, 3, 4], (index: number) => {
-            Circle()
+            Column()
               .width(8)
               .height(8)
-              .fill(this.onboardingPage === index ? '#FF2D55' : (this.isDarkMode ? '#4B4B5B' : '#E5E7EB'))
+              .borderRadius(4)
+              .backgroundColor(this.onboardingPage === index ? '#FF2D55' : (this.isDarkMode ? '#4B4B5B' : '#E5E7EB'))
               .margin({ left: 4, right: 4 })
           }, (index: number) => index.toString())
         }
@@ -599,7 +718,7 @@ struct Index {
                 settingsManager.settings.hasAgreedToTerms = true;
                 settingsManager.save();
                 this.showOnboarding = false;
-                promptAction.showToast({ message: '欢迎开始创作！', duration: 2000 });
+                this.getUIContext().getPromptAction().showToast({ message: '欢迎开始创作！', duration: 2000 });
               })
           }
         }
@@ -608,14 +727,16 @@ struct Index {
       }
       .width('90%')
       .padding(24)
-      .backgroundColor(this.cardBg)
+      .backgroundColor('#FFFFFF')
+      .border({ width: 1, color: this.cardBorder })
       .borderRadius(16)
+      .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
+      .margin({ top: 40, bottom: 40 })
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('rgba(0,0,0,0.42)')
-    .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Center)
+    .backgroundColor('rgba(0,0,0,0.9)')
+    .position({ x: 0, y: 0 })
   }
 
   @Builder
@@ -648,7 +769,7 @@ struct Index {
           .height(36)
           .padding({ left: 16, right: 16 })
           .onClick(() => {
-            router.pushUrl({ url: 'pages/PromptEditorPage', params: { mode: 'short_drama' } });
+            this.getUIContext().getRouter().pushUrl({ url: 'pages/PromptEditorPage', params: { mode: 'short_drama' } });
           })
       }
       .width('100%')
@@ -703,7 +824,7 @@ struct Index {
 
       // 素材库子页签
       Row() {
-        ForEach(['旧档', '回收站', '中转站', '灵感池'], (tab: string, index: number) => {
+        ForEach(['旧档', '回收站', '灵感池'], (tab: string, index: number) => {
           Text(tab)
             .fontSize(this.sf(13))
             .fontWeight(this.materialSubTab === index ? FontWeight.Bold : FontWeight.Normal)
@@ -734,9 +855,6 @@ struct Index {
           } else if (this.materialSubTab === 1) {
             // 回收站
             this.RecycleBinView()
-          } else if (this.materialSubTab === 2) {
-            // 中转站
-            this.TransitStationView()
           } else {
             // 灵感池
             this.InspirationPoolView()
@@ -961,8 +1079,86 @@ struct Index {
   /** 刷新素材库数据 */
   refreshMaterialLibrary(): void {
     this.recycleBinItems = workManager.getRecycleBinItems();
-    this.transitItems = workManager.getTransitItems();
     this.inspirationItems = workManager.getInspirations();
+  }
+
+  /** 主动同步桌面原子卡片的灵感数据（保存/删除灵感后调用）：
+   *  1. 将 App 内最新灵感回写卡片数据源 writing_app_inspirations
+   *  2. 遍历所有已建卡片 formId，推送 updateForm 刷新显示 */
+  private async syncDesktopCardInspirationCount(): Promise<void> {
+    try {
+      const ctx = this.getUIContext().getHostContext();
+      if (!ctx) {
+        return;
+      }
+      const prefs = await preferences.getPreferences(ctx, 'writing_app');
+
+      // 1. 回写卡片数据源（workManager 最新数据 → writing_app_inspirations）
+      const appItems: InspirationItem[] = workManager.getInspirations();
+      const normalizedItems: InspirationItem[] = appItems.map((item: InspirationItem): InspirationItem => {
+        const cardItem: InspirationItem = {
+          id: item.id,
+          content: item.content,
+          category: item.category,
+          createTime: item.createTime,
+          fromWidget: item.fromWidget,
+          deviceId: item.deviceId
+        };
+        return cardItem;
+      });
+      await prefs.put('writing_app_inspirations', JSON.stringify(normalizedItems));
+      await prefs.flush();
+
+      // 2. 读取所有已建卡片 formId
+      const idsRaw = await prefs.get('writing_app_form_ids', '') as string;
+      if (!idsRaw) {
+        return;
+      }
+      const formIds: string[] = JSON.parse(idsRaw) as string[];
+
+      // 3. 构建统计数据并推送
+      const stats: InspirationStats = await this.buildInspirationStats();
+      for (let i = 0; i < formIds.length; i++) {
+        const formData: Record<string, Object> = {
+          'title': '灵感速记',
+          'placeholder': '随手记下灵感...',
+          'lastContent': stats.lastContent,
+          'inspirationCount': stats.count
+        };
+        await formProvider.updateForm(formIds[i], formBindingData.createFormBindingData(formData));
+      }
+      console.info('[Index] 桌面卡片灵感数据已同步: ' + stats.count);
+    } catch (err) {
+      const e = err as BusinessError;
+      console.warn('[Index] 同步桌面卡片失败: ' + e.code + ' ' + e.message);
+    }
+  }
+
+  /** 构建卡片所需的灵感统计数据（总数 + 最新一条内容，直接读卡片数据源 preferences） */
+  private async buildInspirationStats(): Promise<InspirationStats> {
+    let count: string = '0';
+    let lastContent: string = '';
+    try {
+      const ctx = this.getUIContext().getHostContext();
+      if (ctx) {
+        const prefs = await preferences.getPreferences(ctx, 'writing_app');
+        const stored = await prefs.get('writing_app_inspirations', '') as string;
+        if (stored) {
+          const items: InspirationItem[] = JSON.parse(stored) as InspirationItem[];
+          count = items.length.toString();
+          if (items.length > 0) {
+            lastContent = items[items.length - 1].content || '';
+            if (lastContent.length > 40) {
+              lastContent = lastContent.substring(0, 40) + '...';
+            }
+          }
+        }
+      }
+    } catch (err) {
+      const e = err as BusinessError;
+      console.warn('[Index] 读取卡片灵感数据失败: ' + e.code + ' ' + e.message);
+    }
+    return { count: count, lastContent: lastContent };
   }
 
   /** 回收站视图 */
@@ -998,6 +1194,11 @@ struct Index {
           .layoutWeight(1)
           .margin({ left: 12 })
           .alignItems(HorizontalAlign.Start)
+          .onClick(() => {
+            // 点击预览内容
+            this.previewRecycleItem = item;
+            this.showRecyclePreview = true;
+          })
 
           // 恢复按钮
           Text('恢复')
@@ -1009,7 +1210,7 @@ struct Index {
             .margin({ right: 8 })
             .onClick(() => {
               if (workManager.restoreFromRecycleBin(item.id)) {
-                promptAction.showToast({ message: '已恢复到书架', duration: 2000 });
+                this.getUIContext().getPromptAction().showToast({ message: '已恢复到书架', duration: 2000 });
                 this.refreshMaterialLibrary();
               }
             })
@@ -1022,10 +1223,21 @@ struct Index {
             .border({ width: 1, color: '#EF4444' })
             .borderRadius(12)
             .onClick(() => {
-              if (workManager.deleteFromRecycleBin(item.id)) {
-                promptAction.showToast({ message: '已彻底删除', duration: 2000 });
-                this.refreshMaterialLibrary();
-              }
+              this.getUIContext().getPromptAction().showDialog({
+                title: '确认删除',
+                message: `彻底删除「${item.title}」？此操作不可恢复。`,
+                buttons: [
+                  { text: '取消', color: '#9CA3AF' },
+                  { text: '删除', color: '#EF4444' }
+                ]
+              }).then((data) => {
+                if (data.index === 1) {
+                  if (workManager.deleteFromRecycleBin(item.id)) {
+                    this.getUIContext().getPromptAction().showToast({ message: '已彻底删除', duration: 2000 });
+                    this.refreshMaterialLibrary();
+                  }
+                }
+              });
             })
         }
         .width('100%')
@@ -1046,99 +1258,26 @@ struct Index {
         .width('100%')
         .margin({ top: 16 })
         .onClick(() => {
-          workManager.clearRecycleBin();
-          this.refreshMaterialLibrary();
-          promptAction.showToast({ message: '回收站已清空', duration: 2000 });
+          this.getUIContext().getPromptAction().showDialog({
+            title: '确认清空',
+            message: '清空回收站后所有内容将永久删除，无法恢复。',
+            buttons: [
+              { text: '取消', color: '#9CA3AF' },
+              { text: '清空', color: '#EF4444' }
+            ]
+          }).then((data) => {
+            if (data.index === 1) {
+              workManager.clearRecycleBin();
+              this.refreshMaterialLibrary();
+              this.getUIContext().getPromptAction().showToast({ message: '回收站已清空', duration: 2000 });
+            }
+          });
         })
     } else {
       Column() {
         Text('🗑 回收站为空')
           .fontSize(this.sf(16))
           .fontColor('#9CA3AF')
-      }
-      .width('100%')
-      .height(200)
-      .justifyContent(FlexAlign.Center)
-    }
-  }
-
-  /** 中转站视图 */
-  @Builder
-  TransitStationView() {
-    if (this.transitItems.length > 0) {
-      ForEach(this.transitItems, (item: TransitItem) => {
-        Row() {
-          Column() {
-            Text('🔄')
-              .fontSize(this.sf(18))
-              .fontColor('#FFFFFF')
-          }
-          .width(40)
-          .height(40)
-          .borderRadius(8)
-          .backgroundColor('#3B82F6')
-          .justifyContent(FlexAlign.Center)
-          .alignItems(HorizontalAlign.Center)
-
-          Column() {
-            Text(item.title)
-              .fontSize(this.sf(15))
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this.textColor)
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-            Text('来源: ' + item.source + ' | ' + item.createTime)
-              .fontSize(this.sf(11))
-              .fontColor('#9CA3AF')
-              .margin({ top: 2 })
-          }
-          .layoutWeight(1)
-          .margin({ left: 12 })
-          .alignItems(HorizontalAlign.Start)
-
-          // 接收按钮
-          Text('接收')
-            .fontSize(this.sf(12))
-            .fontColor('#3B82F6')
-            .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-            .border({ width: 1, color: '#3B82F6' })
-            .borderRadius(12)
-            .margin({ right: 8 })
-            .onClick(() => {
-              if (workManager.restoreFromRecycleBin(item.id)) {
-                promptAction.showToast({ message: '已接收', duration: 2000 });
-                this.refreshMaterialLibrary();
-              }
-            })
-
-          // 移除
-          Text('移除')
-            .fontSize(this.sf(12))
-            .fontColor('#9CA3AF')
-            .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-            .border({ width: 1, color: '#9CA3AF' })
-            .borderRadius(12)
-            .onClick(() => {
-              if (workManager.removeFromTransit(item.id)) {
-                this.refreshMaterialLibrary();
-              }
-            })
-        }
-        .width('100%')
-        .padding({ left: 16, right: 16, top: 10, bottom: 10 })
-        .backgroundColor(this.cardBg)
-        .borderRadius(8)
-        .margin({ bottom: 8 })
-      }, (item: TransitItem) => item.id)
-    } else {
-      Column() {
-        Text('🔄 中转站为空')
-          .fontSize(this.sf(16))
-          .fontColor('#9CA3AF')
-        Text('跨设备传递的内容将显示在此')
-          .fontSize(this.sf(12))
-          .fontColor('#9CA3AF')
-          .margin({ top: 4 })
       }
       .width('100%')
       .height(200)
@@ -1171,30 +1310,52 @@ struct Index {
               .maxLines(2)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
             Row() {
-              Text(item.fromWidget ? '📱 卡片' : '✍️ 手动')
-                .fontSize(this.sf(10))
-                .fontColor(item.fromWidget ? '#F59E0B' : '#9CA3AF')
-              Text(' | ' + item.createTime)
+              if (item.fromWidget) {
+                Text('📱 卡片')
+                  .fontSize(this.sf(10))
+                  .fontColor('#F59E0B')
+                  .margin({ right: 8 })
+              }
+              Text(item.createTime)
                 .fontSize(this.sf(10))
                 .fontColor('#9CA3AF')
             }
-            .margin({ top: 4 })
+            .margin({ top: 2 })
           }
           .layoutWeight(1)
           .margin({ left: 12 })
           .alignItems(HorizontalAlign.Start)
+          .onClick(() => {
+            // 点击内容编辑灵感
+            this.editingInspirationId = item.id;
+            this.editingInspirationContent = item.content;
+            this.isNewInspiration = false;
+            this.showInspirationEditor = true;
+          })
 
           // 删除按钮
-          Text('删除')
-            .fontSize(this.sf(12))
+          Text('🗑️')
+            .fontSize(this.sf(14))
             .fontColor('#EF4444')
             .padding({ left: 10, right: 10, top: 5, bottom: 5 })
             .border({ width: 1, color: '#EF4444' })
             .borderRadius(12)
             .onClick(() => {
-              if (workManager.deleteInspiration(item.id)) {
-                this.refreshMaterialLibrary();
-              }
+              this.getUIContext().getPromptAction().showDialog({
+                title: '确认删除',
+                message: '删除此灵感？',
+                buttons: [
+                  { text: '取消', color: '#9CA3AF' },
+                  { text: '删除', color: '#EF4444' }
+                ]
+              }).then((data) => {
+                if (data.index === 1) {
+                  if (workManager.deleteInspiration(item.id)) {
+                    this.refreshMaterialLibrary();
+                    this.getUIContext().getPromptAction().showToast({ message: '已删除', duration: 2000 });
+                  }
+                }
+              });
             })
         }
         .width('100%')
@@ -1214,15 +1375,19 @@ struct Index {
         .width('100%')
         .margin({ top: 16 })
         .onClick(() => {
-          workManager.addInspiration('新灵感 ' + new Date().toLocaleTimeString(), 'idea', false);
-          this.refreshMaterialLibrary();
+          this.editingInspirationId = '';
+          // 恢复草稿缓存：误触关闭后重新打开时保留已输入内容
+          this.editingInspirationContent = this.inspirationDraftCache;
+          this.isNewInspiration = true;
+          this.isVoiceRecognizing = false;
+          this.showInspirationEditor = true;
         })
     } else {
       Column() {
         Text('💡 灵感池为空')
           .fontSize(this.sf(16))
           .fontColor('#9CA3AF')
-        Text('从桌面卡片快速记录灵感')
+        Text('点击下方按钮添加灵感，或在桌面卡片速记')
           .fontSize(this.sf(12))
           .fontColor('#9CA3AF')
           .margin({ top: 4 })
@@ -1235,14 +1400,417 @@ struct Index {
           .width('auto')
           .margin({ top: 12 })
           .onClick(() => {
-            workManager.addInspiration('新灵感 ' + new Date().toLocaleTimeString(), 'idea', false);
-            this.refreshMaterialLibrary();
+            this.editingInspirationId = '';
+            // 恢复草稿缓存：误触关闭后重新打开时保留已输入内容
+            this.editingInspirationContent = this.inspirationDraftCache;
+            this.isNewInspiration = true;
+            this.isVoiceRecognizing = false;
+            this.showInspirationEditor = true;
           })
       }
       .width('100%')
       .height(200)
       .justifyContent(FlexAlign.Center)
     }
+  }
+
+  /** 灵感编辑/新建对话框 */
+  @Builder
+  InspirationEditorDialog() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column() {
+        Text(this.isNewInspiration ? '新建灵感' : '编辑灵感')
+          .fontSize(this.sf(18))
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.textColor)
+          .margin({ bottom: 8 })
+
+        // 清空按钮（左）与语音按钮（右）并排，同一行左右排列
+        Row({ space: 8 }) {
+          // 清空输入按钮（左侧）
+          Button('清空输入')
+            .fontSize(this.sf(12))
+            .fontColor('#16A34A')
+            .backgroundColor('#F0FDF4')
+            .borderRadius(8)
+            .height(40)
+            .layoutWeight(1)
+            .onClick(() => {
+              this.editingInspirationContent = '';
+              this.inspirationDraftCache = '';
+            })
+
+          // 语音输入按钮（右侧，Core Speech Kit 流式识别）：
+          // 交互：点按切换 / 长按持续录音、抬手停止；识别中 8 秒无新语音则自动停止（长按中不停止）
+          Row({ space: 6 }) {
+            Text(this.isVoiceRecognizing ? '🎙 松开停止' : '🎙 按住说话')
+              .fontSize(this.sf(13))
+              .fontColor(this.isVoiceRecognizing ? '#FFFFFF' : '#FF6B35')
+              .fontWeight(FontWeight.Medium)
+            Circle({ width: 8, height: 8 })
+              .fill(this.isVoiceRecognizing ? '#FFFFFF' : '#D1D5DB')
+          }
+          .layoutWeight(1)
+          .height(40)
+          .justifyContent(FlexAlign.Center)
+          .backgroundColor(this.isVoiceRecognizing ? '#FF4D4F' : this.cardBg)
+          .border({ width: 1, color: this.isVoiceRecognizing ? '#FF4D4F' : '#D1D5DB' })
+          .borderRadius(8)
+          .onTouch((event: TouchEvent) => {
+          console.info('[VoiceBtn] onTouch type=' + event.type + ' isRecognizing=' + this.isVoiceRecognizing);
+          if (event.type === TouchType.Down) {
+            this.voiceTouchDownTime = Date.now();
+            this.isVoiceHolding = true;
+            if (!this.isVoiceRecognizing) {
+              this.startVoiceRecognition();
+            }
+          } else if (event.type === TouchType.Up) {
+            this.isVoiceHolding = false;
+            if (this.isVoiceRecognizing) {
+              this.stopVoiceRecognition();
+            }
+          } else if (event.type === TouchType.Cancel) {
+            this.isVoiceHolding = false;
+            if (this.isVoiceRecognizing) {
+              this.stopVoiceRecognition();
+            }
+          }
+        })
+        // onClick 兜底：短按切换开关（长按中不触发）
+        .onClick(() => {
+          console.info('[VoiceBtn] onClick trigger, isRecognizing=' + this.isVoiceRecognizing + ' holding=' + this.isVoiceHolding);
+          if (this.isVoiceHolding) {
+            return;
+          }
+          if (this.isVoiceRecognizing) {
+            this.stopVoiceRecognition();
+          } else {
+            this.startVoiceRecognition();
+          }
+        })
+        }
+        .width('100%')
+        .margin({ bottom: 8 })
+
+        TextArea({ placeholder: '输入灵感内容...', text: this.editingInspirationContent })
+          .width('100%')
+          .height(120)
+          .fontSize(this.sf(14))
+          .backgroundColor('#F5F5F5')
+          .borderRadius(8)
+          .padding(12)
+          .onChange((value: string) => {
+            this.editingInspirationContent = value;
+            // 实时写入草稿缓存，误触关闭弹窗后自动恢复
+            this.inspirationDraftCache = value;
+          })
+
+        Row() {
+          Button('取消')
+            .fontColor('#9CA3AF')
+            .backgroundColor(this.cardBg)
+            .border({ width: 1, color: '#D1D5DB' })
+            .borderRadius(8)
+            .height(40)
+            .layoutWeight(1)
+            .margin({ right: 8 })
+            .onClick(() => {
+              this.showInspirationEditor = false;
+            })
+
+          Button('保存')
+            .fontColor('#FFFFFF')
+            .backgroundColor('#FF6B35')
+            .borderRadius(8)
+            .height(40)
+            .layoutWeight(1)
+            .margin({ left: 8 })
+            .onClick(() => {
+              const content = this.editingInspirationContent.trim();
+              if (content.length === 0) {
+                this.getUIContext().getPromptAction().showToast({ message: '内容不能为空', duration: 2000 });
+                return;
+              }
+              if (this.isNewInspiration) {
+                workManager.addInspiration(content, 'idea', false);
+              } else {
+                workManager.updateInspiration(this.editingInspirationId, content);
+              }
+              this.refreshMaterialLibrary();
+              this.editingInspirationContent = '';
+              this.isVoiceRecognizing = false;
+              // 保存成功：彻底清除草稿缓存（AppStorage 键 + @StorageLink 属性双清，避免下次新建残留）
+              AppStorage.setOrCreate('inspirationDraftCache', '');
+              this.inspirationDraftCache = '';
+              // 保存灵感后主动同步桌面卡片计数（问题3修复）
+              this.syncDesktopCardInspirationCount();
+              this.showInspirationEditor = false;
+              this.getUIContext().getPromptAction().showToast({
+                message: this.isNewInspiration ? '灵感已添加' : '灵感已更新',
+                duration: 2000
+              });
+            })
+        }
+        .width('100%')
+        .margin({ top: 16 })
+      }
+      .width('85%')
+      .padding(24)
+      .backgroundColor('#FFFFFF')
+      .border({ width: 1, color: this.cardBorder })
+      .borderRadius(16)
+      .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('rgba(0,0,0,0.9)')
+    .position({ x: 0, y: 0 })
+  }
+
+  /** 语音识别引擎与会话（Core Speech Kit 流式识别） */
+  private asrEngine: speechRecognizer.SpeechRecognitionEngine | null = null;
+  private asrSessionId: string = '';
+  private audioCapturer: audio.AudioCapturer | null = null;
+
+  /** 启动语音识别：申请麦克风权限 → 创建识别引擎 → 录音流喂入 */
+  private async startVoiceRecognition(): Promise<void> {
+    try {
+      // 1. 请求麦克风权限
+      const atManager = abilityAccessCtrl.createAtManager();
+      const permissionResult = await atManager.requestPermissionsFromUser(
+        this.getUIContext().getHostContext() as common.UIAbilityContext,
+        ['ohos.permission.MICROPHONE']
+      );
+      if (permissionResult.authResults.length > 0 && permissionResult.authResults[0] !== 0) {
+        this.getUIContext().getPromptAction().showToast({
+          message: '需要麦克风权限才能使用语音输入', duration: 2500
+        });
+        return;
+      }
+
+      // 2. 创建流式语音识别引擎（按官方示例：extraParams 需带 locate + recognizerMode）
+      //    首次调用需下载/初始化识别引擎，可能超时；加 2 次重试兜底
+      const extraParams: Record<string, Object> = { 'locate': 'CN', 'recognizerMode': 'short' };
+      const engineParams: speechRecognizer.CreateEngineParams = {
+        language: 'zh-CN',
+        online: 1,
+        extraParams: extraParams
+      };
+      let engine: speechRecognizer.SpeechRecognitionEngine | null = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          engine = await speechRecognizer.createEngine(engineParams);
+          break;
+        } catch (err) {
+          const e = err as BusinessError;
+          console.warn(`[Index] createEngine 第${attempt}次失败: code=${e.code} msg=${e.message}`);
+          if (attempt < 3) {
+            await new Promise<void>((resolve) => setTimeout(resolve, 1500));
+          } else {
+            // ArkTS 限制 throw 类型：包装为 Error 抛出，外层 catch 统一处理
+            throw new Error(`createEngine failed after 3 attempts: ${e.message}`);
+          }
+        }
+      }
+      if (!engine) {
+        throw new Error('createEngine 失败');
+      }
+      this.asrEngine = engine;
+
+      // 3. 会话ID
+      this.asrSessionId = 'insp_' + Date.now().toString();
+
+      // 4. 识别结果回调：isFinal 时追加句尾最终文本，isLast 时结束会话
+      this.asrEngine.setListener({
+        onStart: (sessionId: string, eventMessage: string) => {
+          console.info('[Index] ASR start: ' + eventMessage);
+        },
+        onEvent: (sessionId: string, eventCode: number, eventMessage: string) => {
+        },
+        onResult: (sessionId: string, result: speechRecognizer.SpeechRecognitionResult) => {
+          // 句尾最终结果（isFinal）：识别稳定后追加到输入框并同步缓存
+          if (result.isFinal) {
+            const text = result.result || '';
+            if (text.length > 0) {
+              this.editingInspirationContent = this.editingInspirationContent + text;
+              this.inspirationDraftCache = this.editingInspirationContent;
+            }
+            // 收到新结果说明仍在说话，重置静默超时计时器
+            this.resetVoiceSilenceTimer();
+          }
+          // 会话最后一条（isLast）：自动结束会话，触发停止与资源释放
+          if (result.isLast) {
+            this.stopVoiceRecognition();
+          }
+        },
+        onComplete: (sessionId: string, eventMessage: string) => {
+          this.stopVoiceRecognition();
+        },
+        onError: (sessionId: string, errorCode: number, errorMessage: string) => {
+          console.error('[Index] ASR error: ' + errorCode + ' ' + errorMessage);
+          this.stopVoiceRecognition();
+        }
+      });
+
+      // 5. 开始监听
+      const startParams: speechRecognizer.StartParams = {
+        sessionId: this.asrSessionId,
+        audioInfo: { audioType: 'pcm', sampleRate: 16000, soundChannel: 1, sampleBit: 16 }
+      };
+      this.asrEngine.startListening(startParams);
+
+      // 6. 创建录音器（16kHz / 单声道 / S16LE / 录音识别源），readData 事件喂入识别引擎
+      const streamInfo: audio.AudioStreamInfo = {
+        samplingRate: audio.AudioSamplingRate.SAMPLE_RATE_16000,
+        channels: 1,
+        sampleFormat: audio.AudioSampleFormat.SAMPLE_FORMAT_S16LE,
+        encodingType: audio.AudioEncodingType.ENCODING_TYPE_RAW
+      };
+      const capturerInfo: audio.AudioCapturerInfo = {
+        source: audio.SourceType.SOURCE_TYPE_VOICE_RECOGNITION,
+        capturerFlags: 0
+      };
+      const capturerOptions: audio.AudioCapturerOptions = {
+        streamInfo: streamInfo,
+        capturerInfo: capturerInfo
+      };
+      this.audioCapturer = await audio.createAudioCapturer(capturerOptions);
+      this.audioCapturer.on('readData', (buffer: ArrayBuffer) => {
+        if (this.asrEngine && this.isVoiceRecognizing) {
+          const bytes = new Uint8Array(buffer);
+          // writeAudio 每次仅接收 640 或 1280 字节，故按 640 字节（40ms）切片
+          const frameSize = 640;
+          for (let offset = 0; offset + frameSize <= bytes.length; offset += frameSize) {
+            this.asrEngine.writeAudio(this.asrSessionId, bytes.subarray(offset, offset + frameSize));
+          }
+        }
+      });
+      await this.audioCapturer.start();
+      this.isVoiceRecognizing = true;
+      // 启动静默超时：8秒内未检测到新语音则自动停止
+      this.resetVoiceSilenceTimer();
+    } catch (err) {
+      console.error('[Index] startVoiceRecognition error: ' + JSON.stringify(err));
+      this.isVoiceRecognizing = false;
+    }
+  }
+
+  /** 停止语音识别并释放资源 */
+  private stopVoiceRecognition(): void {
+    // 停止静默计时器
+    this.clearVoiceSilenceTimer();
+    try {
+      if (this.audioCapturer) {
+        this.audioCapturer.off('readData');
+        this.audioCapturer.stop();
+        this.audioCapturer.release();
+        this.audioCapturer = null;
+      }
+      if (this.asrEngine) {
+        this.asrEngine.finish(this.asrSessionId);
+        this.asrEngine.shutdown();
+        this.asrEngine = null;
+      }
+    } catch (e) {
+      console.error('[Index] stopVoiceRecognition error: ' + JSON.stringify(e));
+    }
+    this.isVoiceRecognizing = false;
+  }
+
+  /** 重置静默超时：收到新语音结果时调用，8秒内无新结果则自动停止（长按中不停止） */
+  private resetVoiceSilenceTimer(): void {
+    this.clearVoiceSilenceTimer();
+    this.voiceSilenceTimer = setTimeout(() => {
+      if (this.isVoiceRecognizing) {
+        // 长按录音中：静默超时不自动停止，重新计时等待后续语音；抬手后由 Up 事件停止
+        if (this.isVoiceHolding) {
+          this.resetVoiceSilenceTimer();
+          return;
+        }
+        this.stopVoiceRecognition();
+        this.getUIContext().getPromptAction().showToast({
+          message: '长时间未检测到语音，已停止录音',
+          duration: 2000
+        });
+      }
+    }, this.VOICE_SILENCETIMEOUT_MS) as number;
+  }
+
+  /** 清除静默超时计时器 */
+  private clearVoiceSilenceTimer(): void {
+    if (this.voiceSilenceTimer > 0) {
+      clearTimeout(this.voiceSilenceTimer);
+      this.voiceSilenceTimer = 0;
+    }
+  }
+
+  /** 回收站内容预览对话框 */
+  @Builder
+  RecyclePreviewDialog() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column() {
+        Text('作品预览')
+          .fontSize(this.sf(18))
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.textColor)
+          .margin({ bottom: 8 })
+
+        if (this.previewRecycleItem) {
+          Text(this.previewRecycleItem.title)
+            .fontSize(this.sf(16))
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.textColor)
+            .width('100%')
+            .margin({ bottom: 12 })
+
+          Scroll() {
+            Text(this.previewRecycleItem.content || '（无内容）')
+              .fontSize(this.sf(14))
+              .fontColor('#555555')
+              .width('100%')
+              .lineHeight(22)
+          }
+          .height(200)
+          .width('100%')
+          .padding(12)
+          .backgroundColor('#F5F5F5')
+          .borderRadius(8)
+
+          Text('模板: ' + (this.previewRecycleItem.templateName || '自由创作'))
+            .fontSize(this.sf(12))
+            .fontColor('#9CA3AF')
+            .width('100%')
+            .margin({ top: 8 })
+
+          Text('删除时间: ' + this.previewRecycleItem.deleteTime)
+            .fontSize(this.sf(12))
+            .fontColor('#9CA3AF')
+            .width('100%')
+        }
+
+        Button('关闭')
+          .fontColor('#FFFFFF')
+          .backgroundColor('#3B82F6')
+          .borderRadius(8)
+          .height(40)
+          .width('100%')
+          .margin({ top: 16 })
+          .onClick(() => {
+            this.showRecyclePreview = false;
+          })
+      }
+      .width('85%')
+      .padding(24)
+      .backgroundColor('#FFFFFF')
+      .border({ width: 1, color: this.cardBorder })
+      .borderRadius(16)
+      .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
+      .margin({ top: 40, bottom: 40 })
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('rgba(0,0,0,0.9)')
+    .position({ x: 0, y: 0 })
   }
 
   /** 可复用的作品行 */
@@ -1288,7 +1856,7 @@ struct Index {
           .padding({ left: 8, right: 8 })
           .onClick(() => {
             workManager.unarchiveWork(work.id);
-            promptAction.showToast({ message: '已移回书架', duration: 2000 });
+            this.getUIContext().getPromptAction().showToast({ message: '已移回书架', duration: 2000 });
           })
       } else {
         Text('归档')
@@ -1312,7 +1880,7 @@ struct Index {
     .padding({ left: 12, right: 12 })
     .margin({ left: 16, right: 16, bottom: 8 })
     .onClick(() => {
-      router.pushUrl({
+      this.getUIContext().getRouter().pushUrl({
         url: 'pages/PromptEditorPage',
         params: { workId: work.id, mode: work.templateId || 'short_drama' }
       });
@@ -1378,7 +1946,7 @@ struct Index {
                 } else if (this.folderMenuType === 'archive' && this.selectedArchiveFolder) {
                   workManager.renameArchiveFolder(this.selectedArchiveFolder.id, this.renameText.trim());
                 }
-                promptAction.showToast({ message: '已重命名', duration: 2000 });
+                this.getUIContext().getPromptAction().showToast({ message: '已重命名', duration: 2000 });
               }
               this.showRenameDialog = false;
               this.renameText = '';
@@ -1390,12 +1958,16 @@ struct Index {
       }
       .width('80%')
       .padding(24)
-      .backgroundColor(this.cardBg)
+      .backgroundColor('#FFFFFF')
+      .border({ width: 1, color: this.cardBorder })
       .borderRadius(16)
+      .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
+      .margin({ top: 40, bottom: 40 })
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('rgba(0,0,0,0.42)')
+    .backgroundColor('rgba(0,0,0,0.9)')
+    .position({ x: 0, y: 0 })
   }
 
   /** 封面颜色选择器 */
@@ -1426,7 +1998,7 @@ struct Index {
                 } else if (this.folderMenuType === 'archive' && this.selectedArchiveFolder) {
                   workManager.changeArchiveFolderCover(this.selectedArchiveFolder.id, color);
                 }
-                promptAction.showToast({ message: '封面已更新', duration: 2000 });
+                this.getUIContext().getPromptAction().showToast({ message: '封面已更新', duration: 2000 });
                 this.showCoverPicker = false;
                 this.coverPickerTargetType = 'folder';
               })
@@ -1448,12 +2020,16 @@ struct Index {
       }
       .width('80%')
       .padding(24)
-      .backgroundColor(this.cardBg)
+      .backgroundColor('#FFFFFF')
+      .border({ width: 1, color: this.cardBorder })
       .borderRadius(16)
+      .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
+      .margin({ top: 40, bottom: 40 })
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('rgba(0,0,0,0.42)')
+    .backgroundColor('rgba(0,0,0,0.9)')
+    .position({ x: 0, y: 0 })
   }
 
   /** 归档文件夹选择器 */
@@ -1488,7 +2064,7 @@ struct Index {
             .onClick(() => {
               const folder = workManager.createArchiveFolder('归档文件夹');
               workManager.archiveWork(this.workToArchive, folder.id);
-              promptAction.showToast({ message: '已归档到新文件夹', duration: 2000 });
+              this.getUIContext().getPromptAction().showToast({ message: '已归档到新文件夹', duration: 2000 });
               this.showArchiveFolderPicker = false;
             })
 
@@ -1511,7 +2087,7 @@ struct Index {
               .margin({ bottom: 8 })
               .onClick(() => {
                 workManager.archiveWork(this.workToArchive, folder.id);
-                promptAction.showToast({ message: '已归档', duration: 2000 });
+                this.getUIContext().getPromptAction().showToast({ message: '已归档', duration: 2000 });
                 this.showArchiveFolderPicker = false;
               })
             }, (folder: ArchiveFolder) => folder.id)
@@ -1531,7 +2107,7 @@ struct Index {
             .margin({ bottom: 8 })
             .onClick(() => {
               workManager.archiveWork(this.workToArchive);
-              promptAction.showToast({ message: '已归档', duration: 2000 });
+              this.getUIContext().getPromptAction().showToast({ message: '已归档', duration: 2000 });
               this.showArchiveFolderPicker = false;
             })
           }
@@ -1554,12 +2130,16 @@ struct Index {
       }
       .width('80%')
       .padding(24)
-      .backgroundColor(this.cardBg)
+      .backgroundColor('#FFFFFF')
+      .border({ width: 1, color: this.cardBorder })
       .borderRadius(16)
+      .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
+      .margin({ top: 40, bottom: 40 })
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('rgba(0,0,0,0.42)')
+    .backgroundColor('rgba(0,0,0,0.9)')
+    .position({ x: 0, y: 0 })
   }
 
   /** 文件夹长按菜单对话框 */
@@ -1631,14 +2211,14 @@ struct Index {
           const folderName = this.folderMenuType === 'bookshelf'
             ? (this.selectedFolder ? this.selectedFolder.name : '')
             : (this.selectedArchiveFolder ? this.selectedArchiveFolder.name : '');
-          promptAction.showDialog({
+          this.getUIContext().getPromptAction().showDialog({
             title: '确认删除',
-            message: `删除文件夹「${folderName}」？文件夹内作品将变为未分类。`,
+            message: `删除文件夹「${folderName}」？文件夹内作品将移入回收站。`,
             buttons: [
               { text: '取消', color: '#9CA3AF' },
               { text: '删除', color: '#EF4444' }
             ]
-          }).then((data) => {
+          }).then((data: promptAction.ShowDialogSuccessResponse) => {
             if (data.index === 1) {
               if (this.folderMenuType === 'bookshelf' && this.selectedFolder) {
                 workManager.deleteFolder(this.selectedFolder.id);
@@ -1649,7 +2229,7 @@ struct Index {
               }
               this.refreshKey++;
               this.refreshMaterialLibrary();
-              promptAction.showToast({ message: '文件夹已删除', duration: 2000 });
+              this.getUIContext().getPromptAction().showToast({ message: '文件夹已删除', duration: 2000 });
             }
             this.showFolderMenu = false;
           });
@@ -1670,12 +2250,16 @@ struct Index {
       }
       .width('75%')
       .padding(24)
-      .backgroundColor(this.cardBg)
+      .backgroundColor('#FFFFFF')
+      .border({ width: 1, color: this.cardBorder })
       .borderRadius(16)
+      .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
+      .margin({ top: 40, bottom: 40 })
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('rgba(0,0,0,0.42)')
+    .backgroundColor('rgba(0,0,0,0.9)')
+    .position({ x: 0, y: 0 })
   }
 
   /** 作品长按菜单 */
@@ -1791,12 +2375,16 @@ struct Index {
       }
       .width('70%')
       .padding(20)
-      .backgroundColor(this.isDarkMode ? '#1E1E28' : '#FFFFFF')
+      .backgroundColor('#FFFFFF')
+      .border({ width: 1, color: this.cardBorder })
       .borderRadius(16)
+      .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
+      .margin({ top: 40, bottom: 40 })
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('rgba(0,0,0,0.42)')
+    .backgroundColor('rgba(0,0,0,0.9)')
+    .position({ x: 0, y: 0 })
   }
 
   @Builder
@@ -2016,7 +2604,7 @@ struct ShortDramaTab {
           .height(36)
           .padding({ left: 16, right: 16 })
           .onClick(() => {
-            router.pushUrl({ url: 'pages/PromptEditorPage', params: { mode: 'short_drama' } });
+            this.getUIContext().getRouter().pushUrl({ url: 'pages/PromptEditorPage', params: { mode: 'short_drama' } });
           })
       }
       .width('100%')
@@ -2077,10 +2665,11 @@ struct ShortDramaTab {
   TemplateCard(template: TemplateInfo) {
     Row() {
       Stack() {
-        Circle()
+        Column()
           .width(36)
           .height(36)
-          .fill(template.color)
+          .borderRadius(18)
+          .backgroundColor(template.color)
         if (typeof template.icon === 'string') {
           Text(template.icon)
             .fontSize(this.sf(16))
@@ -2115,7 +2704,7 @@ struct ShortDramaTab {
     .borderRadius(10)
     .alignItems(VerticalAlign.Center)
     .onClick(() => {
-      router.pushUrl({
+      this.getUIContext().getRouter().pushUrl({
         url: 'pages/PromptEditorPage',
         params: { templateId: template.id, mode: 'short_drama' }
       });
@@ -2165,10 +2754,10 @@ struct ShortDramaTab {
         .onClick(() => {
           if (isArchived) {
             workManager.unarchiveWork(work.id);
-            promptAction.showToast({ message: '已移回书架', duration: 2000 });
+            this.getUIContext().getPromptAction().showToast({ message: '已移回书架', duration: 2000 });
           } else {
             workManager.archiveWork(work.id);
-            promptAction.showToast({ message: '已移入旧档区', duration: 2000 });
+            this.getUIContext().getPromptAction().showToast({ message: '已移入旧档区', duration: 2000 });
           }
         })
 
@@ -2191,7 +2780,7 @@ struct ShortDramaTab {
     .padding({ left: 12, right: 12 })
     .margin({ left: 16, right: 16, bottom: 8 })
     .onClick(() => {
-      router.pushUrl({
+      this.getUIContext().getRouter().pushUrl({
         url: 'pages/PromptEditorPage',
         params: { workId: work.id, mode: 'short_drama' }
       });
@@ -2209,9 +2798,9 @@ struct ShortDramaTab {
     }).then((result: promptAction.ShowDialogSuccessResponse) => {
       if (result.index === 1) {
         workManager.deleteWork(work.id);
-        promptAction.showToast({ message: '已删除', duration: 2000 });
+        this.getUIContext().getPromptAction().showToast({ message: '已删除', duration: 2000 });
       }
-    });
+    }).catch(() => {});
   }
 }
 
@@ -2326,7 +2915,7 @@ struct NovelTab {
           .height(36)
           .padding({ left: 16, right: 16 })
           .onClick(() => {
-            router.pushUrl({ url: 'pages/PromptEditorPage', params: { mode: 'novel' } });
+            this.getUIContext().getRouter().pushUrl({ url: 'pages/PromptEditorPage', params: { mode: 'novel' } });
           })
       }
       .width('100%')
@@ -2401,10 +2990,11 @@ struct NovelTab {
   TemplateCard(template: TemplateInfo) {
     Row() {
       Stack() {
-        Circle()
+        Column()
           .width(36)
           .height(36)
-          .fill(template.color)
+          .borderRadius(18)
+          .backgroundColor(template.color)
         if (typeof template.icon === 'string') {
           Text(template.icon)
             .fontSize(this.sf(16))
@@ -2439,7 +3029,7 @@ struct NovelTab {
     .borderRadius(10)
     .alignItems(VerticalAlign.Center)
     .onClick(() => {
-      router.pushUrl({
+      this.getUIContext().getRouter().pushUrl({
         url: 'pages/PromptEditorPage',
         params: { templateId: template.id, mode: 'novel' }
       });
@@ -2496,10 +3086,10 @@ struct NovelTab {
         .onClick(() => {
           if (isArchived) {
             workManager.unarchiveWork(work.id);
-            promptAction.showToast({ message: '已移回书架', duration: 2000 });
+            this.getUIContext().getPromptAction().showToast({ message: '已移回书架', duration: 2000 });
           } else {
             workManager.archiveWork(work.id);
-            promptAction.showToast({ message: '已移入旧档区', duration: 2000 });
+            this.getUIContext().getPromptAction().showToast({ message: '已移入旧档区', duration: 2000 });
           }
         })
 
@@ -2522,7 +3112,7 @@ struct NovelTab {
     .padding({ left: 12, right: 12 })
     .margin({ left: 16, right: 16, bottom: 8 })
     .onClick(() => {
-      router.pushUrl({
+      this.getUIContext().getRouter().pushUrl({
         url: 'pages/PromptEditorPage',
         params: { workId: work.id, mode: 'novel' }
       });
@@ -2540,9 +3130,9 @@ struct NovelTab {
     }).then((result: promptAction.ShowDialogSuccessResponse) => {
       if (result.index === 1) {
         workManager.deleteWork(work.id);
-        promptAction.showToast({ message: '已删除', duration: 2000 });
+        this.getUIContext().getPromptAction().showToast({ message: '已删除', duration: 2000 });
       }
-    });
+    }).catch(() => {});
   }
 }
 
@@ -2597,6 +3187,8 @@ struct SettingsTab {
 
   // 暗色模式辅助颜色属性
   get _cardBg(): string { return this.isDarkMode ? '#2D2D3A' : '#FFFFFF'; }
+  /** 弹窗卡片结构边框：深色中灰 / 浅色浅灰，与 _cardBg 协调 */
+  get cardBorder(): string { return this.isDarkMode ? '#44455E' : '#E5E7EB'; }
   get _textPrimary(): string { return this.isDarkMode ? '#FFFFFF' : '#1A1A2E'; }
   get _textSecondary(): string { return this.isDarkMode ? '#9CA3AF' : '#6B7280'; }
 
@@ -2625,7 +3217,7 @@ struct SettingsTab {
   /** 根据当前设置计算并应用暗色模式 */
   applyDarkMode(): void {
     if (settingsManager.settings.followSystemDark) {
-      const ctx = getContext(this) as common.UIAbilityContext;
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
       if (ctx.config && ctx.config.colorMode !== undefined) {
         this.isDarkMode = ctx.config.colorMode === 0;
       }
@@ -2801,7 +3393,7 @@ struct SettingsTab {
           this.SettingRow('自定义提示词', '编辑AI写作指令', true)
         }
         .onClick(() => {
-          router.pushUrl({ url: 'pages/PromptEditorPage', params: { mode: 'prompt_edit' } });
+          this.getUIContext().getRouter().pushUrl({ url: 'pages/PromptEditorPage', params: { mode: 'prompt_edit' } });
         })
 
         ListItem() {
@@ -2883,9 +3475,9 @@ struct SettingsTab {
               this.isHuaweiLoggedIn = false;
               this.huaweiUserInfo = null;
               this.syncStatusText = '';
-              promptAction.showToast({ message: '已退出登录', duration: 2000 });
+              this.getUIContext().getPromptAction().showToast({ message: '已退出登录', duration: 2000 });
             } catch (e) {
-              promptAction.showToast({ message: `退出失败: ${e}`, duration: 2000 });
+              this.getUIContext().getPromptAction().showToast({ message: `退出失败: ${e}`, duration: 2000 });
             }
           } else {
             // 未登录 → 执行登录
@@ -2894,12 +3486,12 @@ struct SettingsTab {
               if (userInfo) {
                 this.isHuaweiLoggedIn = true;
                 this.huaweiUserInfo = userInfo;
-                promptAction.showToast({ message: '登录成功', duration: 2000 });
+                this.getUIContext().getPromptAction().showToast({ message: '登录成功', duration: 2000 });
               } else {
-                promptAction.showToast({ message: '登录失败', duration: 2000 });
+                this.getUIContext().getPromptAction().showToast({ message: '登录失败', duration: 2000 });
               }
             } catch (e) {
-              promptAction.showToast({ message: `登录失败: ${e}`, duration: 2000 });
+              this.getUIContext().getPromptAction().showToast({ message: `登录失败: ${e}`, duration: 2000 });
             }
           }
         })
@@ -2913,17 +3505,17 @@ struct SettingsTab {
         }
         .onClick(async () => {
           if (!this.isHuaweiLoggedIn) {
-            promptAction.showToast({ message: '请先登录华为账号', duration: 2000 });
+            this.getUIContext().getPromptAction().showToast({ message: '请先登录华为账号', duration: 2000 });
             return;
           }
           try {
             this.syncStatusText = '同步中...';
             const success = await cloudSyncService.sync();
             this.syncStatusText = success ? '同步成功' : '同步失败';
-            promptAction.showToast({ message: this.syncStatusText, duration: 2000 });
+            this.getUIContext().getPromptAction().showToast({ message: this.syncStatusText, duration: 2000 });
           } catch (e) {
             this.syncStatusText = `同步失败: ${e}`;
-            promptAction.showToast({ message: this.syncStatusText, duration: 2000 });
+            this.getUIContext().getPromptAction().showToast({ message: this.syncStatusText, duration: 2000 });
           }
         })
 
@@ -2989,14 +3581,14 @@ struct SettingsTab {
           this.SettingRow('应用评分', '⭐⭐⭐⭐⭐', false)
         }
         .onClick(() => {
-          promptAction.showToast({ message: '感谢您的五星好评！', duration: 2000 });
+          this.getUIContext().getPromptAction().showToast({ message: '感谢您的五星好评！', duration: 2000 });
         })
 
         ListItem() {
           this.SettingRow('检查更新', 'v1.2.0', true)
         }
         .onClick(() => {
-          promptAction.showToast({ message: '当前已是最新版本', duration: 2000 });
+          this.getUIContext().getPromptAction().showToast({ message: '当前已是最新版本', duration: 2000 });
         })
 
         ListItem() {
@@ -3026,7 +3618,7 @@ struct SettingsTab {
 
       // 隐私政策/用户协议面板
       if (this.showPrivacyPanel) {
-        Column() {
+        Stack({ alignContent: Alignment.Center }) {
           Column() {
             Text('用户协议与隐私政策')
               .fontSize(this.sf(16))
@@ -3073,24 +3665,21 @@ struct SettingsTab {
           }
           .width('100%')
           .padding(20)
-          .backgroundColor(this._cardBg)
+          .backgroundColor('#FFFFFF')
+          .border({ width: 1, color: this.cardBorder })
           .borderRadius(16)
-          .margin({ left: 24, right: 24 })
-          .hitTestBehavior(HitTestMode.Block)
+          .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
+          .margin({ left: 24, right: 24, top: 40, bottom: 40 })
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0,0,0,0.42)')
-        .justifyContent(FlexAlign.Center)
+        .backgroundColor('rgba(0,0,0,0.9)')
         .position({ x: 0, y: 0 })
-        .onClick(() => {
-          this.showPrivacyPanel = false;
-        })
       }
 
       // 关于面板
       if (this.showAboutPanel) {
-        Column() {
+        Stack({ alignContent: Alignment.Center }) {
           Column() {
             Text('关于 创意写作')
               .fontSize(this.sf(16))
@@ -3135,24 +3724,21 @@ struct SettingsTab {
           }
           .width('100%')
           .padding(20)
-          .backgroundColor(this._cardBg)
+          .backgroundColor('#FFFFFF')
+          .border({ width: 1, color: this.cardBorder })
           .borderRadius(16)
-          .margin({ left: 24, right: 24 })
-          .hitTestBehavior(HitTestMode.Block)
+          .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
+          .margin({ left: 24, right: 24, top: 40, bottom: 40 })
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0,0,0,0.42)')
-        .justifyContent(FlexAlign.Center)
+        .backgroundColor('rgba(0,0,0,0.9)')
         .position({ x: 0, y: 0 })
-        .onClick(() => {
-          this.showAboutPanel = false;
-        })
       }
 
       // 本地字体文件选择面板
       if (this.showFontPicker) {
-        Column() {
+        Stack({ alignContent: Alignment.Center }) {
           Column() {
             Text('选择本地字体文件')
               .fontSize(this.sf(16))
@@ -3188,11 +3774,11 @@ struct SettingsTab {
                     this.localFontPath = result[0];
                     settingsManager.settings.localFontPath = this.localFontPath;
                     settingsManager.save();
-                    promptAction.showToast({ message: `已选择字体: ${this.getFileName(this.localFontPath)}`, duration: 2000 });
+                    this.getUIContext().getPromptAction().showToast({ message: `已选择字体: ${this.getFileName(this.localFontPath)}`, duration: 2000 });
                     this.showFontPicker = false;
                   }
                 } catch (err) {
-                  promptAction.showToast({ message: '选择文件失败', duration: 2000 });
+                  this.getUIContext().getPromptAction().showToast({ message: '选择文件失败', duration: 2000 });
                 }
               })
 
@@ -3208,20 +3794,21 @@ struct SettingsTab {
                 this.localFontPath = '';
                 settingsManager.settings.localFontPath = '';
                 settingsManager.save();
-                promptAction.showToast({ message: '已清除字体选择', duration: 2000 });
+                this.getUIContext().getPromptAction().showToast({ message: '已清除字体选择', duration: 2000 });
                 this.showFontPicker = false;
               })
           }
           .width('85%')
           .padding(20)
           .backgroundColor(this.isDarkMode ? '#2D2D44' : '#FFFFFF')
+          .border({ width: 1, color: this.cardBorder })
           .borderRadius(16)
+          .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
+          .margin({ top: 40, bottom: 40 })
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0,0,0,0.4)')
-        .justifyContent(FlexAlign.Center)
-        .alignItems(HorizontalAlign.Center)
+        .backgroundColor('rgba(0,0,0,0.9)')
         .onClick(() => {
           this.showFontPicker = false;
         })
@@ -3229,7 +3816,7 @@ struct SettingsTab {
 
       // 本地模型文件(GGUF)选择面板
       if (this.showModelPicker) {
-        Column() {
+        Stack({ alignContent: Alignment.Center }) {
           Column() {
             Text('选择本地AI模型文件')
               .fontSize(this.sf(16))
@@ -3267,7 +3854,7 @@ struct SettingsTab {
                       // 将URI文件复制到应用沙箱，C++ fopen需要真实路径
                       const srcFile = fileIo.openSync(srcUri, fileIo.OpenMode.READ_ONLY);
                       const fileName = srcUri.split('/').pop() || 'model.gguf';
-                      const sandboxDir = getContext(this).filesDir;
+                      const sandboxDir = this.getUIContext().getHostContext()!.filesDir;
                       const destPath = `${sandboxDir}/${fileName}`;
                       const destFile = fileIo.openSync(destPath, fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
                       fileIo.copyFileSync(srcFile.fd, destFile.fd);
@@ -3276,14 +3863,14 @@ struct SettingsTab {
                       this.localModelPath = destPath;
                       settingsManager.settings.localModelPath = this.localModelPath;
                       settingsManager.save();
-                      promptAction.showToast({ message: `模型已复制: ${fileName}`, duration: 2000 });
+                      this.getUIContext().getPromptAction().showToast({ message: `模型已复制: ${fileName}`, duration: 2000 });
                     } catch (copyErr) {
-                      promptAction.showToast({ message: '模型文件复制失败: ' + copyErr, duration: 3000 });
+                      this.getUIContext().getPromptAction().showToast({ message: '模型文件复制失败: ' + copyErr, duration: 3000 });
                     }
                     this.showModelPicker = false;
                   }
                 } catch (err) {
-                  promptAction.showToast({ message: '选择文件失败', duration: 2000 });
+                  this.getUIContext().getPromptAction().showToast({ message: '选择文件失败', duration: 2000 });
                 }
               })
 
@@ -3299,20 +3886,21 @@ struct SettingsTab {
                 this.localModelPath = '';
                 settingsManager.settings.localModelPath = '';
                 settingsManager.save();
-                promptAction.showToast({ message: '已清除模型选择', duration: 2000 });
+                this.getUIContext().getPromptAction().showToast({ message: '已清除模型选择', duration: 2000 });
                 this.showModelPicker = false;
               })
           }
           .width('85%')
           .padding(20)
           .backgroundColor(this.isDarkMode ? '#2D2D44' : '#FFFFFF')
+          .border({ width: 1, color: this.cardBorder })
           .borderRadius(16)
+          .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
+          .margin({ top: 40, bottom: 40 })
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0,0,0,0.4)')
-        .justifyContent(FlexAlign.Center)
-        .alignItems(HorizontalAlign.Center)
+        .backgroundColor('rgba(0,0,0,0.9)')
         .onClick(() => {
           this.showModelPicker = false;
         })
@@ -3320,7 +3908,7 @@ struct SettingsTab {
 
       // 导入数据面板
       if (this.showImportPanel) {
-        Column() {
+        Stack({ alignContent: Alignment.Center }) {
           Column() {
             Text('导入数据')
               .fontSize(this.sf(16))
@@ -3369,24 +3957,21 @@ struct SettingsTab {
           }
           .width('100%')
           .padding(20)
-          .backgroundColor(this._cardBg)
+          .backgroundColor('#FFFFFF')
+          .border({ width: 1, color: this.cardBorder })
           .borderRadius(16)
-          .margin({ left: 24, right: 24 })
-          .hitTestBehavior(HitTestMode.Block)
+          .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
+          .margin({ left: 24, right: 24, top: 40, bottom: 40 })
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0,0,0,0.42)')
-        .justifyContent(FlexAlign.Center)
+        .backgroundColor('rgba(0,0,0,0.9)')
         .position({ x: 0, y: 0 })
-        .onClick(() => {
-          this.showImportPanel = false;
-        })
       }
 
       // 权限管理面板
       if (this.showPermissionPanel) {
-        Column() {
+        Stack({ alignContent: Alignment.Center }) {
           Column() {
             Text('权限管理')
               .fontSize(this.sf(16))
@@ -3449,24 +4034,21 @@ struct SettingsTab {
           }
           .width('100%')
           .padding(20)
-          .backgroundColor(this._cardBg)
+          .backgroundColor('#FFFFFF')
+          .border({ width: 1, color: this.cardBorder })
           .borderRadius(16)
-          .margin({ left: 24, right: 24 })
-          .hitTestBehavior(HitTestMode.Block)
+          .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
+          .margin({ left: 24, right: 24, top: 40, bottom: 40 })
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0,0,0,0.42)')
-        .justifyContent(FlexAlign.Center)
+        .backgroundColor('rgba(0,0,0,0.9)')
         .position({ x: 0, y: 0 })
-        .onClick(() => {
-          this.showPermissionPanel = false;
-        })
       }
 
       // 帮助中心面板
       if (this.showHelpPanel) {
-        Column() {
+        Stack({ alignContent: Alignment.Center }) {
           Column() {
             Text('帮助中心')
               .fontSize(this.sf(16))
@@ -3519,24 +4101,23 @@ struct SettingsTab {
           }
           .width('100%')
           .padding(20)
-          .backgroundColor(this._cardBg)
+          .backgroundColor('#FFFFFF')
+          .border({ width: 1, color: this.cardBorder })
           .borderRadius(16)
-          .margin({ left: 24, right: 24 })
-          .hitTestBehavior(HitTestMode.Block)
+          .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
+          .margin({ left: 24, right: 24, top: 40, bottom: 40 })
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0,0,0,0.42)')
-        .justifyContent(FlexAlign.Center)
+        .backgroundColor('rgba(0,0,0,0.9)')
         .position({ x: 0, y: 0 })
-        .onClick(() => {
-          this.showHelpPanel = false;
-        })
       }
+
+      // 问题反馈面板
 
       // 联系反馈面板
       if (this.showFeedbackPanel) {
-        Column() {
+        Stack({ alignContent: Alignment.Center }) {
           Column() {
             Text('联系反馈')
               .fontSize(this.sf(16))
@@ -3585,19 +4166,16 @@ struct SettingsTab {
           }
           .width('100%')
           .padding(20)
-          .backgroundColor(this._cardBg)
+          .backgroundColor('#FFFFFF')
+          .border({ width: 1, color: this.cardBorder })
           .borderRadius(16)
-          .margin({ left: 24, right: 24 })
-          .hitTestBehavior(HitTestMode.Block)
+          .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
+          .margin({ left: 24, right: 24, top: 40, bottom: 40 })
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0,0,0,0.42)')
-        .justifyContent(FlexAlign.Center)
+        .backgroundColor('rgba(0,0,0,0.9)')
         .position({ x: 0, y: 0 })
-        .onClick(() => {
-          this.showFeedbackPanel = false;
-        })
       }
     }
     .width('100%')
@@ -3662,7 +4240,7 @@ struct SettingsTab {
         this.prevFollowSystemDark = false;
         this.applyDarkMode();
         settingsManager.save();
-        promptAction.showToast({ message: '已关闭深色模式', duration: 2000 });
+        this.getUIContext().getPromptAction().showToast({ message: '已关闭深色模式', duration: 2000 });
       } else if (result.index === 1) {
         // 开
         settingsManager.settings.followSystemDark = false;
@@ -3671,7 +4249,7 @@ struct SettingsTab {
         this.prevFollowSystemDark = false;
         this.applyDarkMode();
         settingsManager.save();
-        promptAction.showToast({ message: '已开启深色模式', duration: 2000 });
+        this.getUIContext().getPromptAction().showToast({ message: '已开启深色模式', duration: 2000 });
       } else if (result.index === 2) {
         // 跟随系统
         settingsManager.settings.followSystemDark = true;
@@ -3679,9 +4257,9 @@ struct SettingsTab {
         this.prevFollowSystemDark = true;
         this.applyDarkMode();
         settingsManager.save();
-        promptAction.showToast({ message: '已跟随系统深色模式', duration: 2000 });
+        this.getUIContext().getPromptAction().showToast({ message: '已跟随系统深色模式', duration: 2000 });
       }
-    });
+    }).catch(() => {});
   }
 
   editAutoSaveInterval() {
@@ -3699,9 +4277,9 @@ struct SettingsTab {
         this.autoSaveInterval = values[result.index];
         this.saveSettings();
         const toastOpts: ToastOptions = { message: `已设置为 ${this.autoSaveInterval}分钟`, duration: 2000 };
-        promptAction.showToast(toastOpts);
+        this.getUIContext().getPromptAction().showToast(toastOpts);
       }
-    });
+    }).catch(() => {});
   }
 
   exportData() {
@@ -3709,9 +4287,9 @@ struct SettingsTab {
     const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, json);
     const systemPasteboard = pasteboard.getSystemPasteboard();
     systemPasteboard.setData(pasteData).then(() => {
-      promptAction.showToast({ message: `已导出${workManager.getAllWorks().length}部作品，备份JSON已复制到剪贴板`, duration: 3000 });
+      this.getUIContext().getPromptAction().showToast({ message: `已导出${workManager.getAllWorks().length}部作品，备份JSON已复制到剪贴板`, duration: 3000 });
     }).catch(() => {
-      promptAction.showToast({ message: '导出失败，请重试', duration: 2000 });
+      this.getUIContext().getPromptAction().showToast({ message: '导出失败，请重试', duration: 2000 });
     });
   }
 
@@ -3723,15 +4301,15 @@ struct SettingsTab {
   doImportData() {
     const text = this.importText.trim();
     if (!text) {
-      promptAction.showToast({ message: '请先粘贴备份JSON内容', duration: 2000 });
+      this.getUIContext().getPromptAction().showToast({ message: '请先粘贴备份JSON内容', duration: 2000 });
       return;
     }
     const count = workManager.importWorks(text);
     this.showImportPanel = false;
     if (count > 0) {
-      promptAction.showToast({ message: `成功导入${count}部作品`, duration: 2000 });
+      this.getUIContext().getPromptAction().showToast({ message: `成功导入${count}部作品`, duration: 2000 });
     } else {
-      promptAction.showToast({ message: '未导入新作品（内容无效或已存在）', duration: 2000 });
+      this.getUIContext().getPromptAction().showToast({ message: '未导入新作品（内容无效或已存在）', duration: 2000 });
     }
   }
 
@@ -3739,9 +4317,9 @@ struct SettingsTab {
     permissionManager.requestPermissions([permission]).then((result: PermissionResult) => {
       this.permissionItems = permissionManager.getPermissionItems();
       if (result.granted.length > 0) {
-        promptAction.showToast({ message: '权限已授予', duration: 2000 });
+        this.getUIContext().getPromptAction().showToast({ message: '权限已授予', duration: 2000 });
       } else {
-        promptAction.showToast({ message: '权限申请被拒绝，可在系统设置中手动开启', duration: 3000 });
+        this.getUIContext().getPromptAction().showToast({ message: '权限申请被拒绝，可在系统设置中手动开启', duration: 3000 });
       }
     });
   }
@@ -3749,22 +4327,22 @@ struct SettingsTab {
   submitFeedback() {
     const text = this.feedbackText.trim();
     if (!text) {
-      promptAction.showToast({ message: '请输入反馈内容', duration: 2000 });
+      this.getUIContext().getPromptAction().showToast({ message: '请输入反馈内容', duration: 2000 });
       return;
     }
     const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text);
     const systemPasteboard = pasteboard.getSystemPasteboard();
     systemPasteboard.setData(pasteData).then(() => {
       this.showFeedbackPanel = false;
-      promptAction.showToast({ message: '反馈已复制到剪贴板，感谢支持', duration: 2000 });
+      this.getUIContext().getPromptAction().showToast({ message: '反馈已复制到剪贴板，感谢支持', duration: 2000 });
     }).catch(() => {
       this.showFeedbackPanel = false;
-      promptAction.showToast({ message: '反馈已记录，感谢支持', duration: 2000 });
+      this.getUIContext().getPromptAction().showToast({ message: '反馈已记录，感谢支持', duration: 2000 });
     });
   }
 
   clearCache() {
-    promptAction.showToast({ message: '缓存已清除', duration: 2000 });
+    this.getUIContext().getPromptAction().showToast({ message: '缓存已清除', duration: 2000 });
   }
 
   sf(base: number): number {
