@@ -19,15 +19,14 @@ export type LoginCallback = (success: boolean, userInfo?: HuaweiUserInfo, error?
 
 /**
  * 华为账号认证服务
- * 支持普通登录 + 静默登录（个人开发者配置）
- * 使用 @kit.AccountKit authentication API
+ * 支持普通登录 + 静默登录（个人开发者账号）
  */
 export class HuaweiAuthService {
   private static instance: HuaweiAuthService;
-  private context: common.Context | null = null;
-  private prefs: preferences.Preferences | null = null;
+
   private currentUser: HuaweiUserInfo | null = null;
-  private loginListeners: LoginCallback[] = [];
+  private prefs: preferences.Preferences | null = null;
+  private loginCallbacks: LoginCallback[] = [];
   private readonly PREF_KEY: string = 'huawei_user_info';
 
   private constructor() {}
@@ -40,8 +39,7 @@ export class HuaweiAuthService {
   }
 
   /** 初始化服务 */
-  async init(context: common.Context): Promise<void> {
-    this.context = context;
+  async init(context: common.UIAbilityContext): Promise<void> {
     try {
       this.prefs = await preferences.getPreferences(context, 'huawei_auth');
       // 尝试从本地恢复登录状态
@@ -66,26 +64,62 @@ export class HuaweiAuthService {
   }
 
   /** 订阅登录状态变化 */
-  onLoginChange(callback: LoginCallback): () => void {
-    this.loginListeners.push(callback);
-    return () => {
-      this.loginListeners = this.loginListeners.filter(fn => fn !== callback);
-    };
+  onLoginChange(callback: LoginCallback): void {
+    this.loginCallbacks.push(callback);
   }
 
-  private notifyLogin(success: boolean, userInfo?: HuaweiUserInfo, error?: string): void {
-    for (let i = 0; i < this.loginListeners.length; i++) {
-      this.loginListeners[i](success, userInfo, error);
+  /** 取消订阅 */
+  offLoginChange(callback: LoginCallback): void {
+    const idx = this.loginCallbacks.indexOf(callback);
+    if (idx >= 0) {
+      this.loginCallbacks.splice(idx, 1);
+    }
+  }
+
+  /** 通知所有订阅者 */
+  private notifyLoginChange(success: boolean, userInfo?: HuaweiUserInfo, error?: string): void {
+    for (const cb of this.loginCallbacks) {
+      try {
+        cb(success, userInfo, error);
+      } catch (e) {
+        console.error('[HuaweiAuthService] 回调异常: ' + JSON.stringify(e));
+      }
+    }
+  }
+
+  /** 保存登录用户信息到本地 */
+  private async saveUserInfo(userInfo: HuaweiUserInfo): Promise<void> {
+    if (!this.prefs) {
+      return;
+    }
+    try {
+      await this.prefs.put(this.PREF_KEY, JSON.stringify(userInfo));
+      await this.prefs.flush();
+    } catch (e) {
+      console.error('[HuaweiAuthService] 保存用户信息失败: ' + JSON.stringify(e));
+    }
+  }
+
+  /** 清除本地登录信息 */
+  private async clearUserInfo(): Promise<void> {
+    if (!this.prefs) {
+      return;
+    }
+    try {
+      await this.prefs.delete(this.PREF_KEY);
+      await this.prefs.flush();
+    } catch (e) {
+      console.error('[HuaweiAuthService] 清除用户信息失败: ' + JSON.stringify(e));
     }
   }
 
   /**
-   * 静默登录（不拉起登录页面）
-   * 适用于已授权用户自动登录场景
+   * 静默登录（不拉起登录页，仅当已授权时自动登录）
+   * @param context 当前 UIAbility 的上下文（需从 EntryAbility 传入）
    */
-  async silentLogin(): Promise<HuaweiUserInfo | null> {
-    if (!this.context) {
-      console.error('[HuaweiAuthService] context未初始化');
+  async silentLogin(context: common.UIAbilityContext): Promise<HuaweiUserInfo | null> {
+    if (!context) {
+      console.error('[HuaweiAuthService] context未提供');
       return null;
     }
     try {
@@ -95,7 +129,7 @@ export class HuaweiAuthService {
       loginRequest.forceLogin = false;
       loginRequest.state = util.generateRandomUUID();
 
-      const controller = new authentication.AuthenticationController(this.context);
+      const controller = new authentication.AuthenticationController(context);
       const response = await controller.executeRequest(loginRequest) as authentication.LoginWithHuaweiIDResponse;
       const credential = response?.data;
       if (credential) {
@@ -109,34 +143,33 @@ export class HuaweiAuthService {
         };
         this.currentUser = userInfo;
         await this.saveUserInfo(userInfo);
-        console.info('[HuaweiAuthService] 静默登录成功: openID=' + userInfo.openID);
-        this.notifyLogin(true, userInfo);
+        this.notifyLoginChange(true, userInfo);
         return userInfo;
       }
       return null;
     } catch (e) {
-      const error = e as BusinessError;
-      console.error('[HuaweiAuthService] 静默登录失败: code=' + error.code + ', msg=' + error.message);
+      const err = e as BusinessError;
+      console.error('[HuaweiAuthService] 静默登录失败: code=' + err.code + ', msg=' + err.message);
+      this.notifyLoginChange(false, undefined, err.message);
       return null;
     }
   }
 
   /**
-   * 普通登录（拉起华为账号登录页面）
+   * 普通登录（拉起华为账号登录界面）
    */
-  async login(): Promise<HuaweiUserInfo | null> {
-    if (!this.context) {
-      console.error('[HuaweiAuthService] context未初始化');
+  async login(context: common.UIAbilityContext): Promise<HuaweiUserInfo | null> {
+    if (!context) {
+      console.error('[HuaweiAuthService] context未提供');
       return null;
     }
     try {
       const provider = new authentication.HuaweiIDProvider();
       const loginRequest = provider.createLoginWithHuaweiIDRequest();
-      // forceLogin=true: 若未登录则拉起登录页
       loginRequest.forceLogin = true;
       loginRequest.state = util.generateRandomUUID();
 
-      const controller = new authentication.AuthenticationController(this.context);
+      const controller = new authentication.AuthenticationController(context);
       const response = await controller.executeRequest(loginRequest) as authentication.LoginWithHuaweiIDResponse;
       const credential = response?.data;
       if (credential) {
@@ -150,15 +183,14 @@ export class HuaweiAuthService {
         };
         this.currentUser = userInfo;
         await this.saveUserInfo(userInfo);
-        console.info('[HuaweiAuthService] 登录成功: openID=' + userInfo.openID);
-        this.notifyLogin(true, userInfo);
+        this.notifyLoginChange(true, userInfo);
         return userInfo;
       }
       return null;
     } catch (e) {
-      const error = e as BusinessError;
-      console.error('[HuaweiAuthService] 登录失败: code=' + error.code + ', msg=' + error.message);
-      this.notifyLogin(false, undefined, error.message);
+      const err = e as BusinessError;
+      console.error('[HuaweiAuthService] 普通登录失败: code=' + err.code + ', msg=' + err.message);
+      this.notifyLoginChange(false, undefined, err.message);
       return null;
     }
   }
@@ -166,28 +198,8 @@ export class HuaweiAuthService {
   /** 退出登录 */
   async logout(): Promise<void> {
     this.currentUser = null;
-    if (this.prefs) {
-      try {
-        await this.prefs.delete(this.PREF_KEY);
-        await this.prefs.flush();
-      } catch (e) {
-        console.error('[HuaweiAuthService] logout save failed: ' + JSON.stringify(e));
-      }
-    }
-    console.info('[HuaweiAuthService] 已退出登录');
-    this.notifyLogin(false);
-  }
-
-  /** 保存用户信息到本地 */
-  private async saveUserInfo(userInfo: HuaweiUserInfo): Promise<void> {
-    if (this.prefs) {
-      try {
-        await this.prefs.put(this.PREF_KEY, JSON.stringify(userInfo));
-        await this.prefs.flush();
-      } catch (e) {
-        console.error('[HuaweiAuthService] saveUserInfo failed: ' + JSON.stringify(e));
-      }
-    }
+    await this.clearUserInfo();
+    console.info('[HuaweiAuthService] 退出登录');
   }
 }
 

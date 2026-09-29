@@ -1,5 +1,6 @@
 import UIAbility from '@ohos.app.ability.UIAbility';
 import Want from '@ohos.app.ability.Want';
+import AbilityConstant from '@ohos.app.ability.AbilityConstant';
 import window from '@ohos.window';
 import preferences from '@ohos.data.preferences';
 import { workManager } from '../model/WorkManager';
@@ -12,9 +13,36 @@ import { cloudSyncService } from '../model/CloudSyncService';
 import { distributedSyncService } from '../model/DistributedSyncService';
 
 export default class EntryAbility extends UIAbility {
-  onCreate(): void {
+  /** 从 want 参数中提取卡片跳转目标，与 onNewWant 共用逻辑 */
+  private processCardWant(want: Want | undefined): void {
+    if (!want || !want.parameters) {
+      return;
+    }
+    const params = want.parameters;
+    let target: string = '';
+    const direct = params['target'];
+    if (typeof direct === 'string') {
+      target = direct;
+    } else {
+      const nested = params['params'] as Record<string, Object>;
+      if (nested) {
+        const nestedTarget = nested['target'];
+        if (typeof nestedTarget === 'string') {
+          target = nestedTarget;
+        }
+      }
+    }
+    if (target === 'inspiration') {
+      this.persistCardNavTarget('inspiration');
+      AppStorage.setOrCreate('appNavTarget', 'inspiration');
+    }
+  }
+
+  onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     console.info('[EntryAbility] onCreate');
     console.info('[EntryAbility] VERSION=v5');
+    // 冷启动：处理来自原子卡片的跳转目标
+    this.processCardWant(want);
     workManager.init(this.context);
     settingsManager.init(this.context);
     responsiveManager.init(this.context);
@@ -30,33 +58,10 @@ export default class EntryAbility extends UIAbility {
     AppStorage.setOrCreate('appDarkMode', settingsManager.settings.isDarkMode);
   }
 
-  /** 处理从桌面原子卡片的跳转 */
+  /** 处理从桌面原子卡片的跳转（热启动/前台时） */
   onNewWant(want: Want): void {
     console.info('[EntryAbility] onNewWant raw: ' + JSON.stringify(want.parameters));
-    const params = want.parameters;
-    if (params) {
-      // 卡片 postCardAction 的 params 可能被系统包一层：优先读 params['target']，
-      // 兜底读 params['params']['target']（嵌套结构）
-      let target: string = '';
-      const direct = params['target'];
-      if (typeof direct === 'string') {
-        target = direct;
-      } else {
-        const nested = params['params'] as Record<string, Object>;
-        if (nested) {
-          const nestedTarget = nested['target'];
-          if (typeof nestedTarget === 'string') {
-            target = nestedTarget;
-          }
-        }
-      }
-      console.info('[EntryAbility] onNewWant target=' + target);
-      if (target === 'inspiration') {
-        // 持久化卡片跳转目标（带时间戳），防止高频点击时 App 内存 flag 被合并/丢失
-        this.persistCardNavTarget('inspiration');
-        AppStorage.setOrCreate('appNavTarget', 'inspiration');
-      }
-    }
+    this.processCardWant(want);
   }
 
   /** 持久化卡片跳转目标到 preferences，Index 页 onPageShow/@Watch 兜底消费 */
@@ -101,18 +106,7 @@ export default class EntryAbility extends UIAbility {
 
   onForeground(): void {
     console.info('[EntryAbility] onForeground');
-    // 尝试静默登录（若已授权则自动登录，不拉起登录页）
-    if (!huaweiAuthService.isLoggedIn()) {
-      huaweiAuthService.silentLogin().then((userInfo) => {
-        if (userInfo) {
-          console.info('[EntryAbility] 静默登录成功');
-          // 若启用了自动同步，触发云同步
-          if (cloudSyncService.isAutoSyncEnabled()) {
-            cloudSyncService.sync();
-          }
-        }
-      });
-    }
+    // 静默登录移至 Index.onPageShow（需要 UI 就绪后的实时 context）
     // App 回到前台时，持久化兜底消费卡片跳转目标（防止高频点击时 onNewWant 被合并丢失）
     this.consumePersistedCardNavTargetForForeground();
   }

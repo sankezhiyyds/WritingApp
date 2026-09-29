@@ -79,6 +79,8 @@ struct Index {
   @StorageLink('appNavTarget') @Watch('onAppNavTargetChange') appNavTarget: string = '';
   // 语音输入状态（引擎与会话字段在方法区声明）
   @State isVoiceRecognizing: boolean = false;
+  // 语音识别实时中间结果（非 isFinal 的过渡文本，用于实时写入反馈）
+  @State voiceInterimText: string = '';
   // 长按录音中标志：手指未松开时，静默超时不得停止识别（仅短按开关模式才自动停止）
   private isVoiceHolding: boolean = false;
   // 长按录音模式：按住开始、松开停止；静默超时自动停止
@@ -180,6 +182,8 @@ struct Index {
     });
     // 初始加载素材库数据
     this.refreshMaterialLibrary();
+    // 兜底：消费持久化的卡片跳转目标（覆盖冷启动时 @Watch/onPageShow 都未捕获的场景）
+    this.consumePersistedCardNavTarget();
   }
 
   /** 跳转到灵感池并弹出新建灵感对话框（卡片直达复用逻辑） */
@@ -188,8 +192,9 @@ struct Index {
     this.currentIndex = 3;
     // 切换到灵感池子页签（索引2，0=旧档,1=回收站,2=灵感池）
     this.materialSubTab = 2;
-    // 清除目标，避免重复导航
+    // 清除目标，避免重复导航（包括 AppStorage 和持久化存储）
     AppStorage.setOrCreate('appNavTarget', '');
+    this.clearPersistedCardNavTarget();
     // 卡片直达：恢复缓存（若上次误关丢失）→ 弹出新建灵感输入框
     const cached = AppStorage.get<string>('inspirationDraftCache');
     if (cached) {
@@ -204,10 +209,19 @@ struct Index {
     this.isNewInspiration = true;
     this.showInspirationEditor = true;
     this.isVoiceRecognizing = false;
+    this.voiceInterimText = '';
   }
 
-  /** 页面每次显示时检查导航目标（如从桌面卡片跳转到灵感池） */
+  /** 页面每次显示时检查导航目标（如从桌面卡片跳转到灵感池）并尝试静默登录 */
   onPageShow(): void {
+    // 尝试静默登录（UI 就绪后，使用实时 context）
+    if (!huaweiAuthService.isLoggedIn()) {
+      huaweiAuthService.silentLogin(this.getUIContext().getHostContext() as common.UIAbilityContext).then((userInfo) => {
+        if (userInfo && cloudSyncService.isAutoSyncEnabled()) {
+          cloudSyncService.sync();
+        }
+      });
+    }
     // 1. 内存 flag 通道（onNewWant 高频点击时的实时响应）
     const target = AppStorage.get<string>('appNavTarget');
     if (target === 'inspiration') {
@@ -235,6 +249,21 @@ struct Index {
       }
     } catch (err) {
       console.warn('[Index] 读取持久化卡片目标失败: ' + JSON.stringify(err));
+    }
+  }
+
+  /** 清除持久化的卡片导航目标，防止回前台时重复触发 */
+  private async clearPersistedCardNavTarget(): Promise<void> {
+    try {
+      const ctx = this.getUIContext().getHostContext();
+      if (!ctx) {
+        return;
+      }
+      const prefs = await preferences.getPreferences(ctx, 'writing_app');
+      await prefs.put('card_nav_target', '');
+      await prefs.flush();
+    } catch (err) {
+      console.warn('[Index] 清除持久化卡片目标失败: ' + JSON.stringify(err));
     }
   }
 
@@ -328,7 +357,13 @@ struct Index {
           }
           .layoutWeight(1)
           .height('100%')
-          .backgroundColor(this.bgColor)
+          .linearGradient({
+            direction: GradientDirection.Bottom,
+            colors: [
+              [this.isDarkMode ? 'rgba(28,28,46,0)' : 'rgba(255,255,255,0)', 0.0],
+              [this.bgColor, 0.08]
+            ]
+          })
         }
         .width('100%')
         .height('100%')
@@ -353,18 +388,16 @@ struct Index {
             }
             .width('100%')
             .layoutWeight(1)
-            .padding({ bottom: 88 })
           }
           .width('100%')
           .height('100%')
-          .backgroundColor(this.bgColor)
 
           // 悬浮玻璃底边栏
           this.FloatingTabBar()
         }
         .width('100%')
         .height('100%')
-        .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
+        .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
         .alignContent(Alignment.Bottom)
       }
 
@@ -784,7 +817,7 @@ struct Index {
           }
         }
         .width('100%')
-        .padding({ top: 12 })
+        .padding({ top: 12, bottom: 80 })
       }
       .layoutWeight(1)
       .width('100%')
@@ -860,7 +893,7 @@ struct Index {
           }
         }
         .width('100%')
-        .padding({ top: 12 })
+        .padding({ top: 12, bottom: 80 })
       }
       .layoutWeight(1)
       .width('100%')
@@ -1504,6 +1537,29 @@ struct Index {
             this.inspirationDraftCache = value;
           })
 
+        // 语音实时识别反馈区：说话时显示中间流式结果
+        if (this.isVoiceRecognizing) {
+          Row() {
+            Text('🎙')
+              .fontSize(this.sf(14))
+              .margin({ right: 6 })
+            Text(this.voiceInterimText.length > 0 ? this.voiceInterimText : '正在聆听...')
+              .fontSize(this.sf(13))
+              .fontColor('#FF6B35')
+              .fontWeight(FontWeight.Medium)
+              .lineHeight(18)
+              .maxLines(3)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .layoutWeight(1)
+          }
+          .width('100%')
+          .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+          .backgroundColor('#FFF7ED')
+          .borderRadius(8)
+          .margin({ top: 8, bottom: 4 })
+          .alignItems(VerticalAlign.Center)
+        }
+
         Row() {
           Button('取消')
             .fontColor('#9CA3AF')
@@ -1515,6 +1571,7 @@ struct Index {
             .margin({ right: 8 })
             .onClick(() => {
               this.showInspirationEditor = false;
+              this.voiceInterimText = '';
             })
 
           Button('保存')
@@ -1544,6 +1601,7 @@ struct Index {
               // 保存灵感后主动同步桌面卡片计数（问题3修复）
               this.syncDesktopCardInspirationCount();
               this.showInspirationEditor = false;
+              this.voiceInterimText = '';
               this.getUIContext().getPromptAction().showToast({
                 message: this.isNewInspiration ? '灵感已添加' : '灵感已更新',
                 duration: 2000
@@ -1627,15 +1685,23 @@ struct Index {
         onEvent: (sessionId: string, eventCode: number, eventMessage: string) => {
         },
         onResult: (sessionId: string, result: speechRecognizer.SpeechRecognitionResult) => {
-          // 句尾最终结果（isFinal）：识别稳定后追加到输入框并同步缓存
           if (result.isFinal) {
+            // 句尾最终结果：追加到输入框并同步缓存
             const text = result.result || '';
             if (text.length > 0) {
               this.editingInspirationContent = this.editingInspirationContent + text;
               this.inspirationDraftCache = this.editingInspirationContent;
             }
+            // 清除中间结果占位
+            this.voiceInterimText = '';
             // 收到新结果说明仍在说话，重置静默超时计时器
             this.resetVoiceSilenceTimer();
+          } else {
+            // 非最终结果（实时流式中间识别）：更新临时占位文本，提供实时写入反馈
+            const interim = result.result || '';
+            if (interim.length > 0) {
+              this.voiceInterimText = interim;
+            }
           }
           // 会话最后一条（isLast）：自动结束会话，触发停止与资源释放
           if (result.isLast) {
@@ -1685,6 +1751,7 @@ struct Index {
         }
       });
       await this.audioCapturer.start();
+      this.voiceInterimText = '';
       this.isVoiceRecognizing = true;
       // 启动静默超时：8秒内未检测到新语音则自动停止
       this.resetVoiceSilenceTimer();
@@ -1700,8 +1767,9 @@ struct Index {
     this.clearVoiceSilenceTimer();
     try {
       if (this.audioCapturer) {
-        this.audioCapturer.off('readData');
+        // 先 stop 停止音频流，再移除回调，最后 release——避免 readData 回调在 stop 后仍被触发
         this.audioCapturer.stop();
+        this.audioCapturer.off('readData');
         this.audioCapturer.release();
         this.audioCapturer = null;
       }
@@ -2467,17 +2535,12 @@ struct Index {
     }
       .width('100%')
       .height(64)
-
-      // 底部安全区域
-      Row()
-        .width('100%')
-        .height(8)
     }
     .width('92%')
-    .margin({ bottom: 12 })
+    .position({ bottom: 0, left: '4%' })
     .borderRadius(32)
-    .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
-    .border({ width: 1, color: this.isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' })
+    .backgroundColor(this.isDarkMode ? 'rgba(45,45,58,0.78)' : 'rgba(255,255,255,0.82)')
+    .border({ width: 1, color: this.isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.5)' })
     .shadow({
       radius: 16,
       color: this.isDarkMode ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.15)',
@@ -2647,8 +2710,8 @@ struct ShortDramaTab {
             }
           }, (category: string) => category)
 
-          // 底部留白
-          Column().width('100%').height(8)
+          // 底部留白（防止被tab bar遮挡）
+          Column().width('100%').height(80)
         }
         .width('100%')
       }
@@ -2958,8 +3021,8 @@ struct NovelTab {
             }
           }, (category: string) => category)
 
-          // 底部留白
-          Column().width('100%').height(8)
+          // 底部留白（防止被tab bar遮挡）
+          Column().width('100%').height(80)
         }
         .width('100%')
       }
@@ -3481,7 +3544,7 @@ struct SettingsTab {
           } else {
             // 未登录 → 执行登录
             try {
-              const userInfo = await huaweiAuthService.login();
+              const userInfo = await huaweiAuthService.login(this.getUIContext().getHostContext() as common.UIAbilityContext);
               if (userInfo) {
                 this.isHuaweiLoggedIn = true;
                 this.huaweiUserInfo = userInfo;
@@ -3614,6 +3677,7 @@ struct SettingsTab {
       }
       .width('100%')
       .layoutWeight(1)
+      .padding({ bottom: 80 })
 
       // 隐私政策/用户协议面板
       if (this.showPrivacyPanel) {
