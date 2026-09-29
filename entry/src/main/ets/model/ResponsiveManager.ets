@@ -1,6 +1,6 @@
-import mediaquery from '@ohos.mediaquery';
 import window from '@ohos.window';
 import common from '@ohos.app.ability.common';
+import { display } from '@kit.ArkUI';
 
 /** 断点类型 */
 export type BreakpointType = 'sm' | 'md' | 'lg';
@@ -10,16 +10,14 @@ export type DeviceForm = 'phone' | 'foldable' | 'tablet' | 'pc';
 
 /**
  * 响应式布局管理器
- * 基于 mediaquery 实现断点检测，支持折叠屏/平板/PC自适应
+ * 基于窗口宽度实现断点检测，支持折叠屏/平板/PC自适应
  */
 export class ResponsiveManager {
   private static instance: ResponsiveManager | null = null;
-  private smListener: mediaquery.MediaQueryListener | null = null;
-  private mdListener: mediaquery.MediaQueryListener | null = null;
-  private lgListener: mediaquery.MediaQueryListener | null = null;
   private currentBreakpoint: BreakpointType = 'sm';
   private listeners: Array<(bp: BreakpointType) => void> = [];
   private windowObj: window.Window | null = null;
+  private density: number = 3.0;
 
   /** 断点阈值（vp） */
   static readonly BREAKPOINT_SM = 320;
@@ -33,42 +31,22 @@ export class ResponsiveManager {
     return ResponsiveManager.instance;
   }
 
-  /** 初始化媒体查询监听 */
+  /** 初始化窗口监听 */
   init(context: common.UIAbilityContext): void {
     try {
-      // sm: 320vp-600vp
-      this.smListener = mediaquery.matchMediaSync('(320vp <= width < 600vp)');
-      this.smListener.on('change', (result: mediaquery.MediaQueryResult) => {
-        if (result.matches) {
-          this.updateBreakpoint('sm');
-        }
-      });
+      // 获取屏幕密度（px转vp用）
+      const defaultDisplay = display.getDefaultDisplaySync();
+      this.density = defaultDisplay.densityPixels;
 
-      // md: 600vp-840vp
-      this.mdListener = mediaquery.matchMediaSync('(600vp <= width < 840vp)');
-      this.mdListener.on('change', (result: mediaquery.MediaQueryResult) => {
-        if (result.matches) {
-          this.updateBreakpoint('md');
-        }
-      });
-
-      // lg: 840vp+
-      this.lgListener = mediaquery.matchMediaSync('(width >= 840vp)');
-      this.lgListener.on('change', (result: mediaquery.MediaQueryResult) => {
-        if (result.matches) {
-          this.updateBreakpoint('lg');
-        }
-      });
-
-      // 初始判断
-      this.detectAndUpdateBreakpoint();
-
-      // 窗口尺寸变化监听（支持旋转和分屏）
       window.getLastWindow(context).then((win: window.Window) => {
         this.windowObj = win;
+        // 初始断点检测
+        const props = win.getWindowProperties();
+        this.updateBreakpointFromWidthVp(props.windowRect.width / this.density);
+
         win.on('windowSizeChange', (size: window.Size) => {
           console.info('[ResponsiveManager] windowSizeChange: ' + size.width + 'x' + size.height);
-          this.detectAndUpdateBreakpoint();
+          this.updateBreakpointFromWidthVp(size.width / this.density);
         });
       }).catch(() => {
         console.warn('[ResponsiveManager] window listener init failed');
@@ -78,14 +56,16 @@ export class ResponsiveManager {
     }
   }
 
-  private detectAndUpdateBreakpoint(): void {
-    if (this.lgListener && this.lgListener.matches) {
-      this.updateBreakpoint('lg');
-    } else if (this.mdListener && this.mdListener.matches) {
-      this.updateBreakpoint('md');
+  private updateBreakpointFromWidthVp(widthVp: number): void {
+    let bp: BreakpointType;
+    if (widthVp < ResponsiveManager.BREAKPOINT_MD) {
+      bp = 'sm';
+    } else if (widthVp < ResponsiveManager.BREAKPOINT_LG) {
+      bp = 'md';
     } else {
-      this.updateBreakpoint('sm');
+      bp = 'lg';
     }
+    this.updateBreakpoint(bp);
   }
 
   private updateBreakpoint(bp: BreakpointType): void {
@@ -148,7 +128,7 @@ export class ResponsiveManager {
     } else if (this.currentBreakpoint === 'md') {
       return 3;
     }
-    return 2; // sm 显示2列（原为3，但2列在手机上更舒适）
+    return 2; // sm 显示2列
   }
 
   /** 是否使用侧边导航（宽屏） */
@@ -180,9 +160,9 @@ export class ResponsiveManager {
   /** 销毁监听 */
   destroy(): void {
     try {
-      this.smListener?.off('change');
-      this.mdListener?.off('change');
-      this.lgListener?.off('change');
+      if (this.windowObj) {
+        this.windowObj.off('windowSizeChange');
+      }
     } catch (e) {
       console.error('[ResponsiveManager] destroy failed: ' + JSON.stringify(e));
     }

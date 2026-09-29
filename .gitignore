@@ -41,3 +41,7 @@ entry/src/main/cpp/third_party/
 test_marker.txt
 *.tmp
 *_lock*
+
+# Build logs
+build_*.txt
+full_build*.txt

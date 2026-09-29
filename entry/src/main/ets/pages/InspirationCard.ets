@@ -10,65 +10,70 @@ struct InspirationCard {
 
   build() {
     Column() {
-      // 标题行
+      // 顶部：灯泡 + 标题
       Row() {
+        Text('💡')
+          .fontSize(20)
+        Text('  ')
+          .fontSize(14)
         Text(this.title)
-          .fontWeight(FontWeight.Bold)
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
           .fontColor('#333333')
-          .layoutWeight(1)
-
-        Text('💡 ' + this.inspirationCount)
-          .fontColor('#FF6B35')
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
       .width('100%')
-      .height(40)
-      .padding({ left: 12, right: 12 })
+      .padding({ left: 14, right: 14, top: 10 })
+      .alignItems(VerticalAlign.Center)
 
-      // 最近灵感预览
+      // 最近灵感预览区
       Column() {
         if (this.lastContent.length > 0) {
-          Text(this.lastContent)
-            .fontColor('#555555')
-            .maxLines(2)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-            .padding({ left: 12, right: 12 })
-        } else {
-          Text(this.placeholder)
+          Text('📝 最近')
+            .fontSize(11)
             .fontColor('#999999')
             .width('100%')
-            .padding({ left: 12, right: 12 })
+            .margin({ bottom: 4 })
+          Text(this.lastContent)
+            .fontSize(13)
+            .fontColor('#444444')
+            .maxLines(3)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .lineHeight(18)
+            .width('100%')
+        } else {
+          Text(this.placeholder)
+            .fontSize(13)
+            .fontColor('#BBBBBB')
+            .width('100%')
         }
       }
       .layoutWeight(1)
+      .width('100%')
+      .padding({ left: 14, right: 14, top: 6, bottom: 6 })
       .justifyContent(FlexAlign.Center)
 
-      // 底部按钮：点击打开应用添加灵感
-      Row() {
-        Text('已记录 ' + this.inspirationCount + ' 条灵感')
-          .fontColor('#999999')
-          .layoutWeight(1)
-
-        Button('记灵感')
-          .fontColor('#FFFFFF')
-          .backgroundColor('#FF6B35')
-          .borderRadius(16)
-          .height(32)
-          .padding({ left: 16, right: 16 })
-          .onClick(() => {
-            // 通过router事件拉起应用
-            postCardAction(this, {
-              'action': 'router',
-              'abilityName': 'EntryAbility',
-              'params': {
-                'target': 'inspiration'
-              }
-            });
-          })
-      }
-      .width('100%')
-      .height(44)
-      .padding({ left: 12, right: 12 })
+      // 底部：记灵感按钮（水平居中、适中宽度）
+      Button('✏️ 记灵感')
+        .fontColor('#FFFFFF')
+        .backgroundColor('#FF6B35')
+        .borderRadius(14)
+        .height(30)
+        .fontSize(13)
+        .fontWeight(FontWeight.Medium)
+        .width('auto')
+        .padding({ left: 24, right: 24 })
+        .margin({ bottom: 12 })
+        .onClick(() => {
+          postCardAction(this, {
+            'action': 'router',
+            'abilityName': 'EntryAbility',
+            'params': {
+              'target': 'inspiration'
+            }
+          });
+        })
     }
     .width('100%')
     .height('100%')

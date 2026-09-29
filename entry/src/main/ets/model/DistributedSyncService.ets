@@ -84,36 +84,6 @@ export class DistributedSyncService {
     }
   }
 
-  /**
-   * 发送内容到目标设备（通过中转站）
-   * 将内容添加到中转站，目标设备可从中转站获取
-   */
-  sendToDevice(targetDevice: DeviceInfo, title: string, content: string): boolean {
-    try {
-      workManager.addToTransit(title, content, targetDevice.deviceName, 7);
-      console.info('[DistributedSyncService] 已发送内容到设备: ' + targetDevice.deviceName);
-      return true;
-    } catch (e) {
-      console.error('[DistributedSyncService] 发送失败: ' + JSON.stringify(e));
-      return false;
-    }
-  }
-
-  /**
-   * 从中转站接收内容到书架
-   */
-  receiveFromTransit(transitId: string): boolean {
-    const transitItems = workManager.getTransitItems();
-    const item = transitItems.find(t => t.id === transitId);
-    if (item) {
-      workManager.createFreeWork(item.title, item.content, 'novel');
-      workManager.removeFromTransit(transitId);
-      console.info('[DistributedSyncService] 已从中转站接收: ' + item.title);
-      return true;
-    }
-    return false;
-  }
-
   /** 获取本地设备名称 */
   getLocalDeviceName(): string {
     if (!this.deviceManager) return '';

@@ -22,6 +22,26 @@
           ],
           "when": "inuse"
         }
+      },
+      {
+        "name": "ohos.permission.MICROPHONE",
+        "reason": "$string:permission_reason_microphone",
+        "usedScene": {
+          "abilities": [
+            "EntryAbility"
+          ],
+          "when": "inuse"
+        }
+      },
+      {
+        "name": "ohos.permission.DISTRIBUTED_DATASYNC",
+        "reason": "$string:permission_reason_distributed_sync",
+        "usedScene": {
+          "abilities": [
+            "EntryAbility"
+          ],
+          "when": "always"
+        }
       }
     ],
     "abilities": [

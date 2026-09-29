@@ -1,5 +1,9 @@
+import { RectShape } from '@kit.ArkUI';
 import { workManager, OutlineNode, CharacterInfo, SceneInfo } from '../model/WorkManager';
-import { promptAction } from '@kit.ArkUI';
+
+interface DialogResult {
+  index: number;
+}
 
 /**
  * 大纲管理面板组件
@@ -203,14 +207,14 @@ export struct OutlineManagementPanel {
 
             Text('🗑').fontSize(12).fontColor('#EF4444').margin({ left: 8 })
               .onClick(() => {
-                promptAction.showDialog({
+                this.getUIContext().getPromptAction().showDialog({
                   title: '确认删除',
                   message: '删除该节点及其子节点？',
                   buttons: [
                     { text: '取消', color: '#666666' },
                     { text: '删除', color: '#EF4444' }
                   ]
-                }).then((res: promptAction.ShowDialogSuccessResponse) => {
+                }).then((res: DialogResult) => {
                   if (res.index === 1) {
                     workManager.deleteOutlineNode(this.workId, node.id);
                     this.refreshData();
@@ -277,9 +281,9 @@ export struct OutlineManagementPanel {
         }
         .width('80%').margin({ top: 12 })
       }
-      .width('85%').padding(20).backgroundColor('#FFFFFF').borderRadius(16)
+      .width('85%').padding(20).backgroundColor('#FFFFFF').border({ width: 1, color: '#D1D5DB' }).borderRadius(16).clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 })).margin({ top: 40, bottom: 40 })
     }
-    .width('100%').height('100%').backgroundColor('rgba(0,0,0,0.5)')
+    .width('100%').height('100%')
   }
 
   // ========== 角色管理 ==========
@@ -400,9 +404,9 @@ export struct OutlineManagementPanel {
         }
         .width('80%').margin({ top: 12 })
       }
-      .width('85%').padding(20).backgroundColor('#FFFFFF').borderRadius(16)
+      .width('85%').padding(20).backgroundColor('#FFFFFF').border({ width: 1, color: '#D1D5DB' }).borderRadius(16).clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 })).margin({ top: 40, bottom: 40 })
     }
-    .width('100%').height('100%').backgroundColor('rgba(0,0,0,0.5)')
+    .width('100%').height('100%')
   }
 
   @Builder
@@ -441,9 +445,9 @@ export struct OutlineManagementPanel {
         }
         .width('80%').margin({ top: 12 })
       }
-      .width('85%').padding(20).backgroundColor('#FFFFFF').borderRadius(16)
+      .width('85%').padding(20).backgroundColor('#FFFFFF').border({ width: 1, color: '#D1D5DB' }).borderRadius(16).clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 })).margin({ top: 40, bottom: 40 })
     }
-    .width('100%').height('100%').backgroundColor('rgba(0,0,0,0.5)')
+    .width('100%').height('100%')
   }
 
   // ========== 场景管理 ==========
@@ -579,8 +583,8 @@ export struct OutlineManagementPanel {
         }
         .width('80%').margin({ top: 12 })
       }
-      .width('85%').padding(20).backgroundColor('#FFFFFF').borderRadius(16)
+      .width('85%').padding(20).backgroundColor('#FFFFFF').border({ width: 1, color: '#D1D5DB' }).borderRadius(16).clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 })).margin({ top: 40, bottom: 40 })
     }
-    .width('100%').height('100%').backgroundColor('rgba(0,0,0,0.5)')
+    .width('100%').height('100%')
   }
 }

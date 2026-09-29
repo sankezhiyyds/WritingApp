@@ -83,7 +83,7 @@ struct Index {
   private isVoiceHolding: boolean = false;
   // 长按录音模式：按住开始、松开停止；静默超时自动停止
   private voiceSilenceTimer: number = 0;
-  private readonly VOICE_SILENCETIMEOUT_MS: number = 8000;
+  private readonly VOICE_SILENCE_TIMEOUT_MS: number = 8000;
   // 语音按钮按下时间戳（区分长按/短按）
   private voiceTouchDownTime: number = 0;
   @State showRecyclePreview: boolean = false;
@@ -92,7 +92,6 @@ struct Index {
   sf(base: number): number {
     return Math.round(base * this.fontSize / 14);
   }
-  private controller: TabsController = new TabsController();
   private breakpointCallback: (bp: BreakpointType) => void = (bp: BreakpointType) => {
     this.currentBreakpoint = bp;
     AppStorage.setOrCreate('appBreakpoint', bp);
@@ -735,7 +734,7 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('rgba(0,0,0,0.9)')
+    .backgroundColor(Color.Transparent)
     .position({ x: 0, y: 0 })
   }
 
@@ -1563,7 +1562,7 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('rgba(0,0,0,0.9)')
+    .backgroundColor(Color.Transparent)
     .position({ x: 0, y: 0 })
   }
 
@@ -1733,7 +1732,7 @@ struct Index {
           duration: 2000
         });
       }
-    }, this.VOICE_SILENCETIMEOUT_MS) as number;
+    }, this.VOICE_SILENCE_TIMEOUT_MS) as number;
   }
 
   /** 清除静默超时计时器 */
@@ -1809,7 +1808,7 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('rgba(0,0,0,0.9)')
+    .backgroundColor(Color.Transparent)
     .position({ x: 0, y: 0 })
   }
 
@@ -1966,7 +1965,7 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('rgba(0,0,0,0.9)')
+    .backgroundColor(Color.Transparent)
     .position({ x: 0, y: 0 })
   }
 
@@ -2028,7 +2027,7 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('rgba(0,0,0,0.9)')
+    .backgroundColor(Color.Transparent)
     .position({ x: 0, y: 0 })
   }
 
@@ -2138,7 +2137,7 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('rgba(0,0,0,0.9)')
+    .backgroundColor(Color.Transparent)
     .position({ x: 0, y: 0 })
   }
 
@@ -2258,7 +2257,7 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('rgba(0,0,0,0.9)')
+    .backgroundColor(Color.Transparent)
     .position({ x: 0, y: 0 })
   }
 
@@ -2383,7 +2382,7 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('rgba(0,0,0,0.9)')
+    .backgroundColor(Color.Transparent)
     .position({ x: 0, y: 0 })
   }
 
@@ -3673,7 +3672,7 @@ struct SettingsTab {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0,0,0,0.9)')
+        .backgroundColor(Color.Transparent)
         .position({ x: 0, y: 0 })
       }
 
@@ -3732,7 +3731,7 @@ struct SettingsTab {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0,0,0,0.9)')
+        .backgroundColor(Color.Transparent)
         .position({ x: 0, y: 0 })
       }
 
@@ -3808,7 +3807,7 @@ struct SettingsTab {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0,0,0,0.9)')
+        .backgroundColor(Color.Transparent)
         .onClick(() => {
           this.showFontPicker = false;
         })
@@ -3900,7 +3899,7 @@ struct SettingsTab {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0,0,0,0.9)')
+        .backgroundColor(Color.Transparent)
         .onClick(() => {
           this.showModelPicker = false;
         })
@@ -3965,7 +3964,7 @@ struct SettingsTab {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0,0,0,0.9)')
+        .backgroundColor(Color.Transparent)
         .position({ x: 0, y: 0 })
       }
 
@@ -4042,7 +4041,7 @@ struct SettingsTab {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0,0,0,0.9)')
+        .backgroundColor(Color.Transparent)
         .position({ x: 0, y: 0 })
       }
 
@@ -4109,7 +4108,7 @@ struct SettingsTab {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0,0,0,0.9)')
+        .backgroundColor(Color.Transparent)
         .position({ x: 0, y: 0 })
       }
 
@@ -4174,7 +4173,7 @@ struct SettingsTab {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0,0,0,0.9)')
+        .backgroundColor(Color.Transparent)
         .position({ x: 0, y: 0 })
       }
     }
@@ -4371,5 +4370,14 @@ struct SettingsTab {
     settingsManager.settings.localFontPath = this.localFontPath;
     settingsManager.settings.localModelPath = this.localModelPath;
     settingsManager.save();
+  }
+
+  /** 安全弹出 Toast，避免未捕获异常 */
+  safeToast(message: string, duration: number = 2000): void {
+    try {
+      this.getUIContext().getPromptAction().showToast({ message, duration });
+    } catch (e) {
+      console.error('[Index] showToast failed: ' + JSON.stringify(e));
+    }
   }
 }

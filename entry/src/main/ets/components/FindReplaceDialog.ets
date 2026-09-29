@@ -326,7 +326,7 @@ export struct FindReplaceDialog {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('rgba(0,0,0,0.9)')
+    .backgroundColor(Color.Transparent)
     .position({ x: 0, y: 0 })
   }
 }

@@ -2,7 +2,6 @@ import { aiService } from '../model/AIService';
 import { settingsManager } from '../model/SettingsManager';
 import { workManager, Conversation } from '../model/WorkManager';
 import { BreakpointType } from '../model/ResponsiveManager';
-import promptAction from '@ohos.promptAction';
 import preferences from '@ohos.data.preferences';
 import common from '@ohos.app.ability.common';
 
@@ -159,11 +158,20 @@ export struct AiSidebar {
     return '#FF2D55';
   }
 
+  /** 安全弹出 Toast */
+  safeToast(message: string, duration: number = 2000): void {
+    try {
+      this.getUIContext().getPromptAction().showToast({ message, duration });
+    } catch (e) {
+      console.error('[AiSidebar] showToast failed: ' + JSON.stringify(e));
+    }
+  }
+
   /** 发送AI消息 */
   async sendAiMessage() {
     if (this.currentPrompt.trim().length === 0) return;
     if (!settingsManager.settings.localModelPath) {
-      promptAction.showToast({ message: '请先在设置中选择GGUF模型文件', duration: 2000 });
+      this.safeToast('请先在设置中选择GGUF模型文件');
       return;
     }
 
@@ -219,7 +227,7 @@ export struct AiSidebar {
   /** 将AI输出插入工作台（只插入最后一条AI回复，不含用户消息和前缀） */
   insertToWorkbench() {
     if (this.aiConversation.length === 0) {
-      promptAction.showToast({ message: '没有可插入的内容', duration: 2000 });
+      this.safeToast('没有可插入的内容');
       return;
     }
     // 提取最后一条【AI】回复，去除前缀标记
@@ -236,12 +244,12 @@ export struct AiSidebar {
       insertContent = this.aiConversation.trim();
     }
     if (insertContent.length === 0) {
-      promptAction.showToast({ message: '没有可插入的内容', duration: 2000 });
+      this.safeToast('没有可插入的内容');
       return;
     }
     // 通过AppStorage传递AI内容到工作台
     AppStorage.setOrCreate('aiInsertContent', insertContent);
-    promptAction.showToast({ message: '已插入到正文', duration: 2000 });
+    this.safeToast('已插入到正文');
   }
 
   build() {

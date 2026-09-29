@@ -83,9 +83,13 @@ export class CloudSyncService {
   async setAutoSync(enabled: boolean): Promise<void> {
     this.autoSyncEnabled = enabled;
     if (this.context) {
-      const prefs = await preferences.getPreferences(this.context, 'cloud_sync_settings');
-      await prefs.put('auto_sync_enabled', enabled);
-      await prefs.flush();
+      try {
+        const prefs = await preferences.getPreferences(this.context, 'cloud_sync_settings');
+        await prefs.put('auto_sync_enabled', enabled);
+        await prefs.flush();
+      } catch (e) {
+        console.error('[CloudSyncService] setAutoSync failed: ' + JSON.stringify(e));
+      }
     }
   }
 
@@ -106,15 +110,13 @@ export class CloudSyncService {
       // 收集本地数据
       const worksData = JSON.stringify(workManager.getAllWorks());
       const recycleBinData = JSON.stringify(workManager.getRecycleBinItems());
-      const transitData = JSON.stringify(workManager.getTransitItems());
       const inspirationData = JSON.stringify(workManager.getInspirations());
       const syncTimestamp = new Date().toISOString();
 
       // 通过分布式数据对象同步（需要先创建session）
       // 个人开发者方案：使用preferences云端同步能力
       console.info('[CloudSyncService] 同步数据量: works=' + worksData.length +
-        ', recycle=' + recycleBinData.length + ', transit=' + transitData.length +
-        ', inspiration=' + inspirationData.length);
+        ', recycle=' + recycleBinData.length + ', inspiration=' + inspirationData.length);
 
       // 保存同步时间
       this.lastSyncTime = syncTimestamp;

@@ -55,16 +55,6 @@ export interface RecycleBinItem {
   originalFolderId?: string;
 }
 
-/** 中转站条目（跨设备/跨场景临时内容） */
-export interface TransitItem {
-  id: string;
-  title: string;
-  content: string;
-  source: string; // 来源设备或场景标识
-  createTime: string;
-  expireDays: number; // 过期天数（默认7天）
-}
-
 /** 灵感池条目（原子化服务卡片快速记录） */
 export interface InspirationItem {
   id: string;
@@ -138,13 +128,11 @@ export class WorkManager {
   private folders: BookshelfFolder[] = [];
   private archiveFolders: ArchiveFolder[] = [];
   private recycleBinItems: RecycleBinItem[] = [];
-  private transitItems: TransitItem[] = [];
   private inspirationItems: InspirationItem[] = [];
   private storageKey: string = 'writing_app_works';
   private folderKey: string = 'writing_app_folders';
   private archiveFolderKey: string = 'writing_app_archive_folders';
   private recycleBinKey: string = 'writing_app_recycle_bin';
-  private transitKey: string = 'writing_app_transit';
   private inspirationKey: string = 'writing_app_inspirations';
   private prefs: preferences.Preferences | null = null;
   private context: common.UIAbilityContext | null = null;
@@ -209,14 +197,6 @@ export class WorkManager {
           this.recycleBinItems = recycleParsed;
         }
       }
-      // 加载中转站
-      const transitStored = await this.prefs.get(this.transitKey, '') as string;
-      if (transitStored) {
-        const transitParsed = JSON.parse(transitStored) as TransitItem[];
-        if (Array.isArray(transitParsed)) {
-          this.transitItems = transitParsed;
-        }
-      }
       // 加载灵感池
       const inspirationStored = await this.prefs.get(this.inspirationKey, '') as string;
       if (inspirationStored) {
@@ -241,7 +221,6 @@ export class WorkManager {
         await this.prefs.put(this.folderKey, JSON.stringify(this.folders));
         await this.prefs.put(this.archiveFolderKey, JSON.stringify(this.archiveFolders));
         await this.prefs.put(this.recycleBinKey, JSON.stringify(this.recycleBinItems));
-        await this.prefs.put(this.transitKey, JSON.stringify(this.transitItems));
         await this.prefs.put(this.inspirationKey, JSON.stringify(this.inspirationItems));
         await this.prefs.flush();
       } catch (e) {
@@ -592,15 +571,14 @@ export class WorkManager {
     return false;
   }
 
-  /** 删除书架文件夹（作品变为未分类） */
+  /** 删除书架文件夹（文件夹内作品移入回收站） */
   deleteFolder(folderId: string): boolean {
     const index = this.folders.findIndex(f => f.id === folderId);
     if (index !== -1) {
-      // 将文件夹内的作品设为未分类
-      for (const work of this.works) {
-        if (work.folderId === folderId) {
-          work.folderId = undefined;
-        }
+      // 将文件夹内的作品移入回收站，而非留在书架变成未分类
+      const worksToMove = this.works.filter(w => w.folderId === folderId);
+      for (const work of worksToMove) {
+        this.moveToRecycleBin(work.id, 'bookshelf');
       }
       this.folders.splice(index, 1);
       this.saveToStorage();
@@ -666,14 +644,14 @@ export class WorkManager {
     return false;
   }
 
-  /** 删除旧档区文件夹（作品变为未分类） */
+  /** 删除旧档区文件夹（文件夹内作品移入回收站） */
   deleteArchiveFolder(folderId: string): boolean {
     const index = this.archiveFolders.findIndex(f => f.id === folderId);
     if (index !== -1) {
-      for (const work of this.works) {
-        if (work.archiveFolderId === folderId) {
-          work.archiveFolderId = undefined;
-        }
+      // 将文件夹内的作品移入回收站
+      const worksToMove = this.works.filter(w => w.archiveFolderId === folderId);
+      for (const work of worksToMove) {
+        this.moveToRecycleBin(work.id, 'archive');
       }
       this.archiveFolders.splice(index, 1);
       this.saveToStorage();
@@ -1001,51 +979,6 @@ export class WorkManager {
   /** 获取回收站列表 */
   getRecycleBinItems(): RecycleBinItem[] {
     return this.recycleBinItems;
-  }
-
-  // ==================== 素材库：中转站 ====================
-
-  /** 添加中转站条目 */
-  addToTransit(title: string, content: string, source: string = 'local', expireDays: number = 7): TransitItem {
-    const item: TransitItem = {
-      id: this.generateId(),
-      title: title,
-      content: content,
-      source: source,
-      createTime: this.formatDate(new Date()),
-      expireDays: expireDays
-    };
-    this.transitItems.push(item);
-    this.saveToStorage();
-    return item;
-  }
-
-  /** 获取中转站列表（自动过滤过期） */
-  getTransitItems(): TransitItem[] {
-    const now = new Date();
-    this.transitItems = this.transitItems.filter(item => {
-      const created = new Date(item.createTime);
-      const diffDays = (now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24);
-      return diffDays <= item.expireDays;
-    });
-    return this.transitItems;
-  }
-
-  /** 从中转站移除 */
-  removeFromTransit(transitId: string): boolean {
-    const before = this.transitItems.length;
-    this.transitItems = this.transitItems.filter(t => t.id !== transitId);
-    if (this.transitItems.length !== before) {
-      this.saveToStorage();
-      return true;
-    }
-    return false;
-  }
-
-  /** 清空中转站 */
-  clearTransit(): void {
-    this.transitItems = [];
-    this.saveToStorage();
   }
 
   // ==================== 素材库：灵感池 ====================

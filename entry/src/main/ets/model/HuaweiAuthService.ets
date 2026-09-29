@@ -24,7 +24,7 @@ export type LoginCallback = (success: boolean, userInfo?: HuaweiUserInfo, error?
  */
 export class HuaweiAuthService {
   private static instance: HuaweiAuthService;
-  private context: common.UIAbilityContext | null = null;
+  private context: common.Context | null = null;
   private prefs: preferences.Preferences | null = null;
   private currentUser: HuaweiUserInfo | null = null;
   private loginListeners: LoginCallback[] = [];
@@ -40,7 +40,7 @@ export class HuaweiAuthService {
   }
 
   /** 初始化服务 */
-  async init(context: common.UIAbilityContext): Promise<void> {
+  async init(context: common.Context): Promise<void> {
     this.context = context;
     try {
       this.prefs = await preferences.getPreferences(context, 'huawei_auth');
@@ -167,8 +167,12 @@ export class HuaweiAuthService {
   async logout(): Promise<void> {
     this.currentUser = null;
     if (this.prefs) {
-      await this.prefs.delete(this.PREF_KEY);
-      await this.prefs.flush();
+      try {
+        await this.prefs.delete(this.PREF_KEY);
+        await this.prefs.flush();
+      } catch (e) {
+        console.error('[HuaweiAuthService] logout save failed: ' + JSON.stringify(e));
+      }
     }
     console.info('[HuaweiAuthService] 已退出登录');
     this.notifyLogin(false);
@@ -177,8 +181,12 @@ export class HuaweiAuthService {
   /** 保存用户信息到本地 */
   private async saveUserInfo(userInfo: HuaweiUserInfo): Promise<void> {
     if (this.prefs) {
-      await this.prefs.put(this.PREF_KEY, JSON.stringify(userInfo));
-      await this.prefs.flush();
+      try {
+        await this.prefs.put(this.PREF_KEY, JSON.stringify(userInfo));
+        await this.prefs.flush();
+      } catch (e) {
+        console.error('[HuaweiAuthService] saveUserInfo failed: ' + JSON.stringify(e));
+      }
     }
   }
 }

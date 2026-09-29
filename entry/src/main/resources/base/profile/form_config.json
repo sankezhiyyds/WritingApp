@@ -17,7 +17,6 @@
       "updateEnabled": true,
       "scheduledUpdateTime": "10:30",
       "updateDuration": 1,
-      "formConfigAbility": "ability://EntryAbility",
       "isDynamic": true
     }
   ]
