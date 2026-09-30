@@ -88,6 +88,13 @@ struct Index {
   private readonly VOICE_SILENCE_TIMEOUT_MS: number = 8000;
   // 语音按钮按下时间戳（区分长按/短按）
   private voiceTouchDownTime: number = 0;
+  @State showSearchPage: boolean = false;
+  @State searchQuery: string = '';
+  @State searchBFolders: BookshelfFolder[] = [];
+  @State searchBWorks: WorkItem[] = [];
+  @State searchAFolders: ArchiveFolder[] = [];
+  @State searchAWorks: WorkItem[] = [];
+  @State searchInspirations: InspirationItem[] = [];
   @State showRecyclePreview: boolean = false;
   @State previewRecycleItem: RecycleBinItem | null = null;
 
@@ -149,6 +156,35 @@ struct Index {
 
   get subTextColor(): string {
     return this.isDarkMode ? '#B7BACB' : '#6B7280';
+  }
+
+  /** 执行搜索，更新搜索结果 @State 数组 */
+  private doSearch(query: string): void {
+    const q = query.trim().toLowerCase();
+    if (q.length === 0) {
+      this.searchBFolders = [];
+      this.searchBWorks = [];
+      this.searchAFolders = [];
+      this.searchAWorks = [];
+      this.searchInspirations = [];
+      this.searchInspirations = [];
+      return;
+    }
+    this.searchBFolders = (workManager.getFolders() || []).filter(
+      f => (f.name || '').toLowerCase().includes(q)
+    );
+    this.searchBWorks = (workManager.getBookshelfWorks() || []).filter(
+      w => (w.title || '').toLowerCase().includes(q)
+    );
+    this.searchAFolders = (workManager.getArchiveFolders() || []).filter(
+      f => (f.name || '').toLowerCase().includes(q)
+    );
+    this.searchAWorks = (workManager.getArchivedWorks() || []).filter(
+      w => (w.title || '').toLowerCase().includes(q)
+    );
+    this.searchInspirations = (workManager.getInspirations() || []).filter(
+      insp => (insp.content || '').toLowerCase().includes(q)
+    );
   }
 
   aboutToAppear() {
@@ -310,6 +346,16 @@ struct Index {
 
   /** 系统返回键/侧滑返回处理 - 支持文件夹级返回 */
   onBackPress(): boolean {
+    if (this.showSearchPage) {
+      this.showSearchPage = false;
+      this.searchQuery = '';
+      this.searchBFolders = [];
+      this.searchBWorks = [];
+      this.searchAFolders = [];
+      this.searchAWorks = [];
+      this.searchInspirations = [];
+      return true;
+    }
     if (this.currentFolderId.length > 0) {
       this.currentFolderId = '';
       return true;
@@ -434,6 +480,11 @@ struct Index {
       // 灵感编辑/新建对话框
       if (this.showInspirationEditor) {
         this.InspirationEditorDialog()
+      }
+
+      // 全局搜索页面
+      if (this.showSearchPage) {
+        this.SearchPage()
       }
 
       // 回收站内容预览
@@ -793,7 +844,7 @@ struct Index {
             .fontColor(this.textColor)
             .layoutWeight(1)
         }
-        Button('新建')
+        Button('搜索')
           .fontSize(this.sf(14))
           .fontColor('#FFFFFF')
           .backgroundColor('#FF2D55')
@@ -801,7 +852,13 @@ struct Index {
           .height(36)
           .padding({ left: 16, right: 16 })
           .onClick(() => {
-            this.getUIContext().getRouter().pushUrl({ url: 'pages/PromptEditorPage', params: { mode: 'short_drama' } });
+            this.showSearchPage = true;
+            this.searchQuery = '';
+            this.searchBFolders = [];
+            this.searchBWorks = [];
+            this.searchAFolders = [];
+            this.searchAWorks = [];
+      this.searchInspirations = [];
           })
       }
       .width('100%')
@@ -848,6 +905,22 @@ struct Index {
             .fontWeight(FontWeight.Bold)
             .fontColor(this.textColor)
             .layoutWeight(1)
+          Button('搜索')
+            .fontSize(this.sf(14))
+            .fontColor('#FFFFFF')
+            .backgroundColor('#FF2D55')
+            .borderRadius(20)
+            .height(36)
+            .padding({ left: 16, right: 16 })
+            .onClick(() => {
+              this.showSearchPage = true;
+              this.searchQuery = '';
+              this.searchBFolders = [];
+              this.searchBWorks = [];
+              this.searchAFolders = [];
+              this.searchAWorks = [];
+      this.searchInspirations = [];
+            })
         }
       }
       .width('100%')
@@ -1811,6 +1884,297 @@ struct Index {
     }
   }
 
+  /** 全局搜索页面 */
+  @Builder
+  SearchPage() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      Column() {
+        // 搜索栏
+        Row() {
+          TextInput({ placeholder: '搜索文件夹和作品...', text: this.searchQuery })
+            .layoutWeight(1)
+            .height(44)
+            .fontSize(this.sf(16))
+            .backgroundColor('#F3F4F6')
+            .borderRadius(22)
+            .padding({ left: 16 })
+            .onChange((val: string) => {
+              this.searchQuery = val;
+              this.doSearch(val);
+            })
+          Button('取消')
+            .fontSize(this.sf(15))
+            .fontColor('#FF2D55')
+            .backgroundColor(Color.Transparent)
+            .onClick(() => {
+              this.showSearchPage = false;
+              this.searchQuery = '';
+              this.searchBFolders = [];
+              this.searchBWorks = [];
+              this.searchAFolders = [];
+              this.searchAWorks = [];
+      this.searchInspirations = [];
+            })
+            .margin({ left: 10 })
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 48, bottom: 12 })
+
+        // 搜索结果区
+        Scroll() {
+          Column() {
+            if (this.searchQuery.length > 0) {
+              // 书架区结果
+              if (this.searchBFolders.length > 0 || this.searchBWorks.length > 0) {
+                Text('📖 书架区')
+                  .fontSize(this.sf(16))
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(this.textColor)
+                  .width('100%')
+                  .margin({ top: 8, bottom: 8 })
+
+                // 书架文件夹
+                ForEach(this.searchBFolders, (folder: BookshelfFolder) => {
+                  Row() {
+                    Text('📁')
+                      .fontSize(this.sf(18))
+                      .margin({ right: 10 })
+                    Text(folder.name)
+                      .fontSize(this.sf(15))
+                      .fontColor(this.textColor)
+                    Text('文件夹')
+                      .fontSize(this.sf(12))
+                      .fontColor('#9CA3AF')
+                      .margin({ left: 8 })
+                  }
+                  .width('100%')
+                  .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+                  .backgroundColor(this.cardBg)
+                  .borderRadius(10)
+                  .margin({ bottom: 6 })
+                  .onClick(() => {
+                    this.currentFolderId = folder.id;
+                    this.showSearchPage = false;
+                    this.searchQuery = '';
+                  })
+                }, (folder: BookshelfFolder) => folder.id)
+
+                // 书架作品
+                ForEach(this.searchBWorks, (work: WorkItem) => {
+                  Row() {
+                    Column() {
+                      Text((work.title || '未命名').charAt(0))
+                        .fontSize(this.sf(16))
+                        .fontColor('#FFFFFF')
+                        .fontWeight(FontWeight.Bold)
+                    }
+                    .width(36)
+                    .height(36)
+                    .backgroundColor(work.coverColor || '#FF2D55')
+                    .borderRadius(8)
+                    .justifyContent(FlexAlign.Center)
+                    .margin({ right: 10 })
+
+                    Column() {
+                      Text(work.title || '未命名')
+                        .fontSize(this.sf(15))
+                        .fontColor(this.textColor)
+                        .fontWeight(FontWeight.Medium)
+                        .maxLines(1)
+                        .textOverflow({ overflow: TextOverflow.Ellipsis })
+                      Text(work.templateName || '作品')
+                        .fontSize(this.sf(12))
+                        .fontColor('#9CA3AF')
+                        .maxLines(1)
+                    }
+                    .layoutWeight(1)
+                    .alignItems(HorizontalAlign.Start)
+                  }
+                  .width('100%')
+                  .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+                  .backgroundColor(this.cardBg)
+                  .borderRadius(10)
+                  .margin({ bottom: 6 })
+                  .onClick(() => {
+                    this.showSearchPage = false;
+                    this.searchQuery = '';
+                    this.getUIContext().getRouter().pushUrl({
+                      url: 'pages/PromptEditorPage',
+                      params: { mode: work.workshop || 'short_drama', workId: work.id }
+                    });
+                  })
+                }, (work: WorkItem) => work.id)
+              }
+
+              // 素材区结果
+              if (this.searchAFolders.length > 0 || this.searchAWorks.length > 0) {
+                Text('📦 素材区')
+                  .fontSize(this.sf(16))
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(this.textColor)
+                  .width('100%')
+                  .margin({ top: 16, bottom: 8 })
+
+                // 旧档文件夹
+                ForEach(this.searchAFolders, (folder: ArchiveFolder) => {
+                  Row() {
+                    Text('📁')
+                      .fontSize(this.sf(18))
+                      .margin({ right: 10 })
+                    Text(folder.name)
+                      .fontSize(this.sf(15))
+                      .fontColor(this.textColor)
+                    Text('文件夹')
+                      .fontSize(this.sf(12))
+                      .fontColor('#9CA3AF')
+                      .margin({ left: 8 })
+                  }
+                  .width('100%')
+                  .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+                  .backgroundColor(this.cardBg)
+                  .borderRadius(10)
+                  .margin({ bottom: 6 })
+                  .onClick(() => {
+                    this.currentArchiveFolderId = folder.id;
+                    this.showSearchPage = false;
+                    this.searchQuery = '';
+                  })
+                }, (folder: ArchiveFolder) => folder.id)
+
+                // 旧档作品
+                ForEach(this.searchAWorks, (work: WorkItem) => {
+                  Row() {
+                    Column() {
+                      Text((work.title || '未命名').charAt(0))
+                        .fontSize(this.sf(16))
+                        .fontColor('#FFFFFF')
+                        .fontWeight(FontWeight.Bold)
+                    }
+                    .width(36)
+                    .height(36)
+                    .backgroundColor(work.coverColor || '#6B7280')
+                    .borderRadius(8)
+                    .justifyContent(FlexAlign.Center)
+                    .margin({ right: 10 })
+
+                    Column() {
+                      Text(work.title || '未命名')
+                        .fontSize(this.sf(15))
+                        .fontColor(this.textColor)
+                        .fontWeight(FontWeight.Medium)
+                        .maxLines(1)
+                        .textOverflow({ overflow: TextOverflow.Ellipsis })
+                      Text(work.templateName || '作品')
+                        .fontSize(this.sf(12))
+                        .fontColor('#9CA3AF')
+                        .maxLines(1)
+                    }
+                    .layoutWeight(1)
+                    .alignItems(HorizontalAlign.Start)
+                  }
+                  .width('100%')
+                  .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+                  .backgroundColor(this.cardBg)
+                  .borderRadius(10)
+                  .margin({ bottom: 6 })
+                  .onClick(() => {
+                    this.showSearchPage = false;
+                    this.searchQuery = '';
+                    this.getUIContext().getRouter().pushUrl({
+                      url: 'pages/PromptEditorPage',
+                      params: { mode: work.workshop || 'short_drama', workId: work.id }
+                    });
+                  })
+                }, (work: WorkItem) => work.id)
+              }
+
+              // 灵感池结果
+              if (this.searchInspirations.length > 0) {
+                Text('💡 灵感池')
+                  .fontSize(this.sf(16))
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(this.textColor)
+                  .width('100%')
+                  .margin({ top: 16, bottom: 8 })
+
+                ForEach(this.searchInspirations, (insp: InspirationItem) => {
+                  Row() {
+                    Column() {
+                      Text(insp.category === 'idea' ? '💡' : insp.category === 'snippet' ? '📝' : '📌')
+                        .fontSize(this.sf(18))
+                    }
+                    .width(36)
+                    .height(36)
+                    .backgroundColor(insp.category === 'idea' ? '#FFD700' : insp.category === 'snippet' ? '#4CAF50' : '#2196F3')
+                    .borderRadius(8)
+                    .justifyContent(FlexAlign.Center)
+                    .margin({ right: 10 })
+
+                    Column() {
+                      Text(insp.content.substring(0, 30) + (insp.content.length > 30 ? '...' : ''))
+                        .fontSize(this.sf(14))
+                        .fontColor(this.textColor)
+                        .maxLines(1)
+                        .textOverflow({ overflow: TextOverflow.Ellipsis })
+                      Text(insp.category === 'idea' ? '灵感' : insp.category === 'snippet' ? '片段' : '笔记')
+                        .fontSize(this.sf(12))
+                        .fontColor('#9CA3AF')
+                    }
+                    .layoutWeight(1)
+                    .alignItems(HorizontalAlign.Start)
+                  }
+                  .width('100%')
+                  .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+                  .backgroundColor(this.cardBg)
+                  .borderRadius(10)
+                  .margin({ bottom: 6 })
+                  .onClick(() => {
+                    // 打开灵感编辑器
+                    this.showSearchPage = false;
+                    this.searchQuery = '';
+                    this.editingInspirationId = insp.id;
+                    this.editingInspirationContent = insp.content;
+                    this.showInspirationEditor = true;
+                  })
+                }, (insp: InspirationItem) => insp.id)
+              }
+
+              // 无结果提示
+              if (this.searchBFolders.length === 0 && this.searchBWorks.length === 0 &&
+                  this.searchAFolders.length === 0 && this.searchAWorks.length === 0 &&
+                  this.searchInspirations.length === 0) {
+                Text('未找到匹配的文件夹或作品')
+                  .fontSize(this.sf(15))
+                  .fontColor('#9CA3AF')
+                  .margin({ top: 40 })
+                  .width('100%')
+                  .textAlign(TextAlign.Center)
+              }
+            } else {
+              Text('输入关键词搜索书架和素材库中的文件夹与作品')
+                .fontSize(this.sf(15))
+                .fontColor('#9CA3AF')
+                .margin({ top: 40 })
+                .width('100%')
+                .textAlign(TextAlign.Center)
+            }
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16, bottom: 40 })
+        }
+        .layoutWeight(1)
+        .width('100%')
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor('#FFFFFF')
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('rgba(0,0,0,0.9)')
+    .position({ x: 0, y: 0 })
+  }
+
   /** 回收站内容预览对话框 */
   @Builder
   RecyclePreviewDialog() {
@@ -2260,6 +2624,30 @@ struct Index {
           this.showFolderMenu = false;
           this.showRenameDialog = true;
         })
+
+        // 归档（仅书架文件夹可用）
+        if (this.folderMenuType === 'bookshelf') {
+          Row() {
+            Text('📦 归档')
+              .fontSize(this.sf(15))
+              .fontColor(this.textColor)
+              .layoutWeight(1)
+          }
+          .width('100%')
+          .height(48)
+          .backgroundColor(this.bgColor)
+          .borderRadius(8)
+          .padding({ left: 16, right: 16 })
+          .margin({ bottom: 8 })
+          .onClick(() => {
+            if (this.selectedFolder) {
+              workManager.archiveBookshelfFolder(this.selectedFolder.id);
+              this.selectedFolder = null;
+              this.showFolderMenu = false;
+              this.refreshKey++;
+            }
+          })
+        }
 
         // 删除文件夹
         Row() {

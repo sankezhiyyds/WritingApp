@@ -1,4 +1,4 @@
-﻿import { RectShape } from '@kit.ArkUI';
+﻿ import { RectShape } from '@kit.ArkUI';
 import { TemplateField, TemplateInfo, templateList } from '../model/TemplateModel';
 import { WorkItem, workManager, Chapter, WorkVersion } from '../model/WorkManager';
 import { settingsManager } from '../model/SettingsManager';
@@ -27,6 +27,7 @@ struct PromptEditorPage {
   @State showAiSidebar: boolean = false;  // AI侧栏是否可见
   @State isGenerating: boolean = false;  // AI生成中状态
   @State showFindReplace: boolean = false;  // 查找替换对话框
+  private contentController: TextAreaController = new TextAreaController();
   @State showSaveDialog: boolean = false;  // 保存对话框
   @State saveDialogTitle: string = '';  // 保存对话框中的文件名
   @State saveSelectedFolderId: string = '';  // 保存对话框中选择的文件夹ID
@@ -349,6 +350,21 @@ struct PromptEditorPage {
         this.VersionHistoryView()
       }
 
+      // 查找替换面板（内嵌于编辑器尾部，非独立层级）
+      if (this.showFindReplace) {
+        FindReplaceDialog({
+          content: $generatedContent,
+          isVisible: $showFindReplace,
+          isDarkMode: this.isDarkMode,
+          onJumpToMatch: (start: number, end: number) => {
+            // 先让TextArea获取焦点，再设置光标位置和选中高亮
+            this.getUIContext().getFocusController().requestFocus('contentTextArea');
+            this.contentController.caretPosition(start);
+            this.contentController.setTextSelection(start, end);
+          }
+        })
+      }
+
       // 底部操作栏
       if (this.mode !== 'prompt_edit') {
         Row() {
@@ -473,15 +489,6 @@ struct PromptEditorPage {
       .width('100%')
       .height('100%')
 
-      // 查找替换对话框
-      if (this.showFindReplace) {
-        FindReplaceDialog({
-          content: $generatedContent,
-          isVisible: $showFindReplace,
-          isDarkMode: this.isDarkMode
-        })
-      }
-
       // 保存对话框
       if (this.showSaveDialog) {
         SaveDialog({
@@ -571,13 +578,15 @@ struct PromptEditorPage {
               .fontColor(this.textColor)
               .margin({ bottom: 8 })
               .alignSelf(ItemAlign.Start)
-            TextArea({ placeholder: '直接输入创作内容，或点击右上角AI进入对话模式生成...', text: this.generatedContent })
+            TextArea({ placeholder: '直接输入创作内容，或点击右上角AI进入对话模式生成...', text: this.generatedContent, controller: this.contentController })
               .width('100%')
               .height(240)
               .fontSize(this.fontSize)
               .backgroundColor(this.bgColor)
               .borderRadius(8)
               .padding(12)
+              .id('contentTextArea')
+              .selectedBackgroundColor('#3B82F6')
               .onChange((value: string) => {
                 this.generatedContent = value;
               })

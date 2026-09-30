@@ -12,6 +12,8 @@ export struct FindReplaceDialog {
   @Link isVisible: boolean;
   /** 深色模式 */
   @Prop isDarkMode: boolean = false;
+  /** 跳转到匹配位置回调（参数：起始位置，结束位置） */
+  onJumpToMatch: (start: number, end: number) => void = () => {};
 
   /** 查找文本 */
   @State findText: string = '';
@@ -88,6 +90,7 @@ export struct FindReplaceDialog {
 
     this.matchCount = count;
     this.currentMatch = firstMatch;
+    this.onJumpToMatch(firstMatch, firstMatch + this.findText.length);
     if (count > 0) {
       this.hintText = `找到 ${count} 处匹配`;
     } else {
@@ -194,35 +197,69 @@ export struct FindReplaceDialog {
     // 循环外统一赋值，避免循环内修改@State触发多余UI刷新
     if (foundPos >= 0) {
       this.currentMatch = foundPos;
+      this.onJumpToMatch(foundPos, foundPos + this.findText.length);
+    }
+  }
+
+  /** 跳转到上一个匹配 */
+  findPrev(): void {
+    if (this.matchCount === 0 || this.findText.length === 0) {
+      return;
+    }
+
+    const content = this.content;
+    const findText = this.findText;
+    const caseSensitive = this.caseSensitive;
+    const findLen = findText.length;
+    const lowerFind = caseSensitive ? '' : findText.toLowerCase();
+    // 从当前匹配位置向前查找（排除当前匹配）
+    const startPos = this.currentMatch > 0 ? this.currentMatch - 1 : content.length - findLen;
+    const searchContent = caseSensitive ? content : content.toLowerCase();
+    const searchText = caseSensitive ? findText : lowerFind;
+
+    let foundPos = -1;
+    let pos = startPos;
+
+    while (pos >= 0) {
+      if (searchContent.substring(pos, pos + findLen) === searchText) {
+        foundPos = pos;
+        break;
+      }
+      pos--;
+    }
+
+    // 循环到末尾
+    if (foundPos < 0) {
+      pos = content.length - findLen;
+      while (pos >= 0) {
+        if (searchContent.substring(pos, pos + findLen) === searchText) {
+          foundPos = pos;
+          break;
+        }
+        pos--;
+      }
+    }
+
+    if (foundPos >= 0) {
+      this.currentMatch = foundPos;
+      this.onJumpToMatch(foundPos, foundPos + this.findText.length);
     }
   }
 
   build() {
-    Stack({ alignContent: Alignment.Center }) {
-      Column() {
-        // 标题栏
-        Row() {
-          Text('🔍 查找替换')
-            .fontSize(16)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(this.textColor)
-          Blank()
-          Text('×')
-            .fontSize(22)
-            .fontColor(this.subTextColor)
-            .onClick(() => { this.isVisible = false; })
-        }
+    Column() {
+      // 分割线
+      Divider()
         .width('100%')
-        .margin({ bottom: 16 })
+        .color('#E5E7EB')
+        .margin({ top: 0, bottom: 0 })
 
-        // 查找输入
-        Text('查找')
-          .fontSize(13)
-          .fontColor(this.subTextColor)
-          .margin({ bottom: 4 })
+      // 第一行：查找输入 + 匹配计数 + 导航按钮
+      Row() {
         TextInput({ placeholder: '输入查找内容', text: this.findText })
           .fontSize(14)
           .height(40)
+          .layoutWeight(1)
           .backgroundColor(this.bgColor)
           .borderRadius(8)
           .padding({ left: 12, right: 12 })
@@ -232,14 +269,48 @@ export struct FindReplaceDialog {
             this.performFind();
           })
 
-        // 替换输入
-        Text('替换为')
+        if (this.findText.length > 0) {
+          Text(`${this.currentMatch >= 0 ? this.currentMatch + 1 : 0}/${this.matchCount}`)
+            .fontSize(13)
+            .fontColor(this.subTextColor)
+            .margin({ left: 8, right: 6 })
+            .width(50)
+            .textAlign(TextAlign.Center)
+        }
+
+        Button('上一个')
           .fontSize(13)
+          .fontColor('#FFFFFF')
+          .backgroundColor('#3B82F6')
+          .borderRadius(8)
+          .height(34)
+          .margin({ right: 4 })
+          .onClick(() => this.findPrev())
+
+        Button('下一个')
+          .fontSize(13)
+          .fontColor('#FFFFFF')
+          .backgroundColor('#3B82F6')
+          .borderRadius(8)
+          .height(34)
+          .margin({ right: 6 })
+          .onClick(() => this.findNext())
+
+        Text('✕')
+          .fontSize(18)
           .fontColor(this.subTextColor)
-          .margin({ top: 12, bottom: 4 })
-        TextInput({ placeholder: '输入替换内容', text: this.replaceText })
+          .onClick(() => { this.isVisible = false; })
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+      .padding({ top: 10, bottom: 6 })
+
+      // 第二行：替换输入 + 操作按钮
+      Row() {
+        TextInput({ placeholder: '替换为', text: this.replaceText })
           .fontSize(14)
           .height(40)
+          .layoutWeight(1)
           .backgroundColor(this.bgColor)
           .borderRadius(8)
           .padding({ left: 12, right: 12 })
@@ -247,86 +318,60 @@ export struct FindReplaceDialog {
             this.replaceText = value;
           })
 
-        // 选项
-        Row() {
-          Text('区分大小写')
-            .fontSize(13)
-            .fontColor(this.textColor)
-            .margin({ right: 8 })
-          Toggle({ type: ToggleType.Checkbox, isOn: this.caseSensitive })
-            .onChange((isOn: boolean) => {
-              this.caseSensitive = isOn;
-              this.performFind();
-            })
+        Button('替换')
+          .fontSize(13)
+          .fontColor('#FFFFFF')
+          .backgroundColor('#F59E0B')
+          .borderRadius(8)
+          .height(34)
+          .margin({ left: 8, right: 4 })
+          .onClick(() => this.replaceCurrent())
 
-          Blank()
+        Button('全部替换')
+          .fontSize(13)
+          .fontColor('#FFFFFF')
+          .backgroundColor('#FF2D55')
+          .borderRadius(8)
+          .height(34)
+          .onClick(() => this.replaceAll())
+      }
+      .width('100%')
+      .margin({ top: 0, bottom: 6 })
 
-          Text('正则表达式')
-            .fontSize(13)
-            .fontColor(this.textColor)
-            .margin({ right: 8 })
-          Toggle({ type: ToggleType.Checkbox, isOn: this.useRegex })
-            .onChange((isOn: boolean) => {
-              this.useRegex = isOn;
-            })
-        }
-        .width('100%')
-        .margin({ top: 12 })
+      // 第三行：选项 + 提示
+      Row() {
+        Toggle({ type: ToggleType.Checkbox, isOn: this.caseSensitive })
+          .onChange((isOn: boolean) => {
+            this.caseSensitive = isOn;
+            this.performFind();
+          })
+        Text('区分大小写')
+          .fontSize(12)
+          .fontColor(this.textColor)
+          .margin({ right: 16 })
 
-        // 提示信息
+        Toggle({ type: ToggleType.Checkbox, isOn: this.useRegex })
+          .onChange((isOn: boolean) => {
+            this.useRegex = isOn;
+          })
+        Text('正则')
+          .fontSize(12)
+          .fontColor(this.textColor)
+
+        Blank()
+
         if (this.hintText.length > 0) {
           Text(this.hintText)
             .fontSize(12)
             .fontColor(this.matchCount > 0 ? '#10B981' : '#EF4444')
-            .margin({ top: 8 })
         }
-
-        // 操作按钮
-        Row() {
-          Button('查找下一个')
-            .fontSize(13)
-            .fontColor('#FFFFFF')
-            .backgroundColor('#3B82F6')
-            .borderRadius(8)
-            .height(36)
-            .layoutWeight(1)
-            .margin({ right: 4 })
-            .onClick(() => this.findNext())
-
-          Button('替换')
-            .fontSize(13)
-            .fontColor('#FFFFFF')
-            .backgroundColor('#F59E0B')
-            .borderRadius(8)
-            .height(36)
-            .layoutWeight(1)
-            .margin({ left: 4, right: 4 })
-            .onClick(() => this.replaceCurrent())
-
-          Button('全部替换')
-            .fontSize(13)
-            .fontColor('#FFFFFF')
-            .backgroundColor('#FF2D55')
-            .borderRadius(8)
-            .height(36)
-            .layoutWeight(1)
-            .margin({ left: 4 })
-            .onClick(() => this.replaceAll())
-        }
-        .width('100%')
-        .margin({ top: 16 })
       }
-      .width('85%')
-      .padding(20)
-      .backgroundColor('#FFFFFF')
-      .border({ width: 1, color: this.cardBorder })
-      .borderRadius(16)
-      .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
-      .margin({ top: 40, bottom: 40 })
+      .width('100%')
+      .padding({ bottom: 12 })
+      .alignItems(VerticalAlign.Center)
     }
     .width('100%')
-    .height('100%')
-    .backgroundColor(Color.Transparent)
-    .position({ x: 0, y: 0 })
+    .padding({ left: 16, right: 16 })
+    .backgroundColor(this.bgColor)
   }
 }

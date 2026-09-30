@@ -587,6 +587,31 @@ export class WorkManager {
     return false;
   }
 
+  /** 归档书架文件夹：创建同名旧档文件夹，将全部作品移入，删除原书架文件夹 */
+  archiveBookshelfFolder(folderId: string): boolean {
+    const folder = this.folders.find(f => f.id === folderId);
+    if (!folder) {
+      return false;
+    }
+    // 创建同名旧档文件夹
+    const archiveFolder = this.createArchiveFolder(folder.name, folder.coverColor);
+    // 将书架文件夹内全部作品归档到旧档文件夹
+    const works = this.works.filter(w => w.folderId === folderId);
+    for (const work of works) {
+      work.archived = true;
+      work.archiveFolderId = archiveFolder.id;
+      work.folderId = '';
+      work.updateTime = this.formatDate(new Date());
+    }
+    // 删除原书架文件夹
+    const idx = this.folders.findIndex(f => f.id === folderId);
+    if (idx !== -1) {
+      this.folders.splice(idx, 1);
+    }
+    this.saveToStorage();
+    return true;
+  }
+
   /** 将作品移入书架文件夹 */
   moveWorkToFolder(workId: string, folderId: string): boolean {
     const work = this.works.find(w => w.id === workId);

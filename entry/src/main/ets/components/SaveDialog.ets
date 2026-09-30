@@ -163,10 +163,8 @@ export struct SaveDialog {
             // 新建文件夹按钮
             Button(this.isCreatingFolder ? '取消新建' : '+ 新建文件夹')
               .fontSize(14)
-              .fontColor(this.accentColor)
-              .backgroundColor(Color.Transparent)
-              .borderWidth(1)
-              .borderColor(this.accentColor)
+              .fontColor('#FFFFFF')
+              .backgroundColor(this.accentColor)
               .borderRadius(8)
               .height(36)
               .width('100%')
