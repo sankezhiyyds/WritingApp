@@ -1,6 +1,60 @@
 import preferences from '@ohos.data.preferences';
 import common from '@ohos.app.ability.common';
 import { TemplateInfo } from './TemplateModel';
+import { performanceOptimizer } from './PerformanceOptimizer';
+import { systemResourceMonitor } from './SystemResourceMonitor';
+
+/**
+ * LRU Cache — 内存缓存最近访问的作品，减少 JSON 反序列化频率
+ */
+class LRUCache<T> {
+  private cache: Map<string, T> = new Map();
+  private maxSize: number;
+
+  constructor(maxSize: number = 20) {
+    this.maxSize = maxSize;
+  }
+
+  get(key: string): T | undefined {
+    if (!this.cache.has(key)) return undefined;
+    const value = this.cache.get(key)!;
+    // 移到最近使用（删除再插入）
+    this.cache.delete(key);
+    this.cache.set(key, value);
+    return value;
+  }
+
+  set(key: string, value: T): void {
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    } else if (this.cache.size >= this.maxSize) {
+      // 淘汰最久未使用的
+      const firstKey: string = this.cache.keys().next().value as string;
+      if (firstKey !== undefined) {
+        this.cache.delete(firstKey);
+      }
+    }
+    this.cache.set(key, value);
+  }
+
+  delete(key: string): void {
+    this.cache.delete(key);
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+
+  /** 动态调整缓存上限（低电量/内存紧张时缩减） */
+  resize(newSize: number): void {
+    this.maxSize = newSize;
+    while (this.cache.size > this.maxSize) {
+      const firstKey: string = this.cache.keys().next().value as string;
+      if (firstKey === undefined) break;
+      this.cache.delete(firstKey);
+    }
+  }
+}
 
 export interface WorkItem {
   id: string;
@@ -138,6 +192,18 @@ export class WorkManager {
   private context: common.UIAbilityContext | null = null;
   private changeListeners: Array<() => void> = [];
   private saveQueue: Promise<void> = Promise.resolve();
+  /** LRU 缓存：最近访问的作品 */
+  private workCache: LRUCache<WorkItem> = new LRUCache<WorkItem>(20);
+  /** 防抖存储定时器 */
+  private saveTimer: number = -1;
+  /** 防抖延迟（毫秒），多次写操作合并为一次存储 */
+  private debounceMs: number = 500;
+  /** 脏数据标记：只序列化有变更的数据集 */
+  private dirtyWorks: boolean = false;
+  private dirtyFolders: boolean = false;
+  private dirtyArchiveFolders: boolean = false;
+  private dirtyRecycleBin: boolean = false;
+  private dirtyInspirations: boolean = false;
 
   /** 订阅作品数据变化（增删改/归档），返回取消订阅函数 */
   onChange(callback: () => void): () => void {
@@ -217,17 +283,70 @@ export class WorkManager {
     this.saveQueue = this.saveQueue.then(async () => {
       if (!this.prefs) return;
       try {
-        await this.prefs.put(this.storageKey, JSON.stringify(this.works));
-        await this.prefs.put(this.folderKey, JSON.stringify(this.folders));
-        await this.prefs.put(this.archiveFolderKey, JSON.stringify(this.archiveFolders));
-        await this.prefs.put(this.recycleBinKey, JSON.stringify(this.recycleBinItems));
-        await this.prefs.put(this.inspirationKey, JSON.stringify(this.inspirationItems));
+        // 脏数据追踪：只序列化有变更的数据集，降低 CPU/ROM 开销
+        if (this.dirtyWorks) {
+          const worksJson: string = JSON.stringify(this.works);
+          await this.prefs.put(this.storageKey, worksJson);
+          this.dirtyWorks = false;
+        }
+        if (this.dirtyFolders) {
+          await this.prefs.put(this.folderKey, JSON.stringify(this.folders));
+          this.dirtyFolders = false;
+        }
+        if (this.dirtyArchiveFolders) {
+          await this.prefs.put(this.archiveFolderKey, JSON.stringify(this.archiveFolders));
+          this.dirtyArchiveFolders = false;
+        }
+        if (this.dirtyRecycleBin) {
+          await this.prefs.put(this.recycleBinKey, JSON.stringify(this.recycleBinItems));
+          this.dirtyRecycleBin = false;
+        }
+        if (this.dirtyInspirations) {
+          await this.prefs.put(this.inspirationKey, JSON.stringify(this.inspirationItems));
+          this.dirtyInspirations = false;
+        }
         await this.prefs.flush();
       } catch (e) {
         console.error('[WorkManager] 保存数据失败: ' + JSON.stringify(e));
       }
     });
     return this.saveQueue;
+  }
+
+  /** 防抖调度存储：多次变更合并为一次写入，显著降低 CPU/ROM 开销 */
+  private scheduleSave(): void {
+    // 按系统资源状态动态调整行为
+    this.adaptToSystemResources();
+
+    // 保守标记：标记所有数据集可能已变更
+    this.dirtyWorks = true;
+    this.dirtyFolders = true;
+    this.dirtyArchiveFolders = true;
+    this.dirtyRecycleBin = true;
+    this.dirtyInspirations = true;
+    this.notifyChange();
+    if (this.saveTimer >= 0) {
+      clearTimeout(this.saveTimer);
+    }
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = -1;
+      this.saveToStorage();
+    }, this.debounceMs);
+  }
+
+  /**
+   * 根据系统资源状态动态调整缓存大小和写入策略
+   * 借鉴鸿蒙「分层驻留+页级回收」内存纪律
+   */
+  private adaptToSystemResources(): void {
+    const suggestedCacheSize = systemResourceMonitor.getSuggestedCacheSize();
+    this.workCache.resize(suggestedCacheSize);
+
+    const suggestedDebounceMs = systemResourceMonitor.getSuggestedSaveDebounceMs();
+    if (suggestedDebounceMs !== this.debounceMs) {
+      console.info(`[WorkManager] 防抖间隔调整: ${this.debounceMs}ms → ${suggestedDebounceMs}ms`);
+      this.debounceMs = suggestedDebounceMs;
+    }
   }
 
   createWork(template: TemplateInfo, title: string, content: string): WorkItem {
@@ -245,7 +364,8 @@ export class WorkManager {
       conversations: []
     };
     this.works.unshift(work);
-    this.saveToStorage();
+    this.workCache.set(work.id, work);
+    this.scheduleSave();
     return work;
   }
 
@@ -266,7 +386,7 @@ export class WorkManager {
       conversations: []
     };
     this.works.unshift(work);
-    this.saveToStorage();
+    this.scheduleSave();
     return work;
   }
 
@@ -290,7 +410,7 @@ export class WorkManager {
       }
       work.content = content;
       work.updateTime = this.formatDate(new Date());
-      this.saveToStorage();
+      this.scheduleSave();
     }
     return work || null;
   }
@@ -301,7 +421,7 @@ export class WorkManager {
     if (work) {
       work.title = title;
       work.updateTime = this.formatDate(new Date());
-      this.saveToStorage();
+      this.scheduleSave();
       return true;
     }
     return false;
@@ -327,7 +447,7 @@ export class WorkManager {
         }
         work.content = version.content;
         work.updateTime = this.formatDate(new Date());
-        this.saveToStorage();
+        this.scheduleSave();
         return true;
       }
     }
@@ -350,7 +470,7 @@ export class WorkManager {
       if (!work.chapters) work.chapters = [];
       work.chapters.push(chapter);
       work.updateTime = now;
-      this.saveToStorage();
+      this.scheduleSave();
       return chapter;
     }
     return null;
@@ -364,7 +484,7 @@ export class WorkManager {
         chapter.content = content;
         chapter.updateTime = this.formatDate(new Date());
         work.updateTime = chapter.updateTime;
-        this.saveToStorage();
+        this.scheduleSave();
         return chapter;
       }
     }
@@ -378,7 +498,7 @@ export class WorkManager {
       if (index !== -1) {
         work.chapters.splice(index, 1);
         work.updateTime = this.formatDate(new Date());
-        this.saveToStorage();
+        this.scheduleSave();
         return true;
       }
     }
@@ -398,7 +518,7 @@ export class WorkManager {
       if (!work.conversations) work.conversations = [];
       work.conversations.push(conversation);
       work.updateTime = conversation.timestamp;
-      this.saveToStorage();
+      this.scheduleSave();
       return conversation;
     }
     return null;
@@ -428,7 +548,8 @@ export class WorkManager {
     const index = this.works.findIndex(w => w.id === workId);
     if (index !== -1) {
       this.works.splice(index, 1);
-      this.saveToStorage();
+      this.workCache.delete(workId);
+      this.scheduleSave();
       return true;
     }
     return false;
@@ -440,7 +561,7 @@ export class WorkManager {
     if (work) {
       work.title = newTitle;
       work.updateTime = new Date().toISOString();
-      this.saveToStorage();
+      this.scheduleSave();
       return true;
     }
     return false;
@@ -452,14 +573,19 @@ export class WorkManager {
     if (work) {
       work.coverColor = coverColor;
       work.updateTime = new Date().toISOString();
-      this.saveToStorage();
+      this.scheduleSave();
       return true;
     }
     return false;
   }
 
   getWork(workId: string): WorkItem | null {
-    return this.works.find(w => w.id === workId) || null;
+    // LRU 缓存快速命中
+    const cached = this.workCache.get(workId);
+    if (cached) return cached;
+    const found = this.works.find(w => w.id === workId);
+    if (found) this.workCache.set(workId, found);
+    return found || null;
   }
 
   getAllWorks(): WorkItem[] {
@@ -507,7 +633,7 @@ export class WorkManager {
       work.archived = true;
       work.archiveFolderId = archiveFolderId;
       work.updateTime = this.formatDate(new Date());
-      this.saveToStorage();
+      this.scheduleSave();
       return true;
     }
     return false;
@@ -520,7 +646,7 @@ export class WorkManager {
       work.archived = false;
       work.archiveFolderId = undefined;
       work.updateTime = this.formatDate(new Date());
-      this.saveToStorage();
+      this.scheduleSave();
       return true;
     }
     return false;
@@ -543,7 +669,7 @@ export class WorkManager {
       updateTime: this.formatDate(new Date())
     };
     this.folders.push(folder);
-    this.saveToStorage();
+    this.scheduleSave();
     return folder;
   }
 
@@ -553,7 +679,7 @@ export class WorkManager {
     if (folder) {
       folder.name = name;
       folder.updateTime = this.formatDate(new Date());
-      this.saveToStorage();
+      this.scheduleSave();
       return true;
     }
     return false;
@@ -565,7 +691,7 @@ export class WorkManager {
     if (folder) {
       folder.coverColor = coverColor;
       folder.updateTime = this.formatDate(new Date());
-      this.saveToStorage();
+      this.scheduleSave();
       return true;
     }
     return false;
@@ -581,7 +707,7 @@ export class WorkManager {
         this.moveToRecycleBin(work.id, 'bookshelf');
       }
       this.folders.splice(index, 1);
-      this.saveToStorage();
+      this.scheduleSave();
       return true;
     }
     return false;
@@ -608,7 +734,7 @@ export class WorkManager {
     if (idx !== -1) {
       this.folders.splice(idx, 1);
     }
-    this.saveToStorage();
+    this.scheduleSave();
     return true;
   }
 
@@ -618,7 +744,7 @@ export class WorkManager {
     if (work) {
       work.folderId = folderId;
       work.updateTime = this.formatDate(new Date());
-      this.saveToStorage();
+      this.scheduleSave();
       return true;
     }
     return false;
@@ -641,7 +767,7 @@ export class WorkManager {
       updateTime: this.formatDate(new Date())
     };
     this.archiveFolders.push(folder);
-    this.saveToStorage();
+    this.scheduleSave();
     return folder;
   }
 
@@ -651,7 +777,7 @@ export class WorkManager {
     if (folder) {
       folder.name = name;
       folder.updateTime = this.formatDate(new Date());
-      this.saveToStorage();
+      this.scheduleSave();
       return true;
     }
     return false;
@@ -663,7 +789,7 @@ export class WorkManager {
     if (folder) {
       folder.coverColor = coverColor;
       folder.updateTime = this.formatDate(new Date());
-      this.saveToStorage();
+      this.scheduleSave();
       return true;
     }
     return false;
@@ -679,7 +805,7 @@ export class WorkManager {
         this.moveToRecycleBin(work.id, 'archive');
       }
       this.archiveFolders.splice(index, 1);
-      this.saveToStorage();
+      this.scheduleSave();
       return true;
     }
     return false;
@@ -691,7 +817,7 @@ export class WorkManager {
     if (work) {
       work.aiContent = aiContent;
       work.updateTime = this.formatDate(new Date());
-      this.saveToStorage();
+      this.scheduleSave();
       return true;
     }
     return false;
@@ -718,7 +844,7 @@ export class WorkManager {
         }
       }
       if (count > 0) {
-        this.saveToStorage();
+        this.scheduleSave();
       }
       return count;
     } catch (e) {
@@ -757,7 +883,7 @@ export class WorkManager {
     };
     work.outline.push(node);
     work.updateTime = this.formatDate(new Date());
-    this.saveToStorage();
+    this.scheduleSave();
     return node;
   }
 
@@ -769,7 +895,7 @@ export class WorkManager {
         node.title = title;
         node.content = content;
         work.updateTime = this.formatDate(new Date());
-        this.saveToStorage();
+        this.scheduleSave();
         return true;
       }
     }
@@ -794,7 +920,7 @@ export class WorkManager {
       }
       work.outline = work.outline.filter(n => !toDelete.includes(n.id));
       work.updateTime = this.formatDate(new Date());
-      this.saveToStorage();
+      this.scheduleSave();
       return true;
     }
     return false;
@@ -806,7 +932,7 @@ export class WorkManager {
       const node = work.outline.find(n => n.id === nodeId);
       if (node) {
         node.collapsed = !node.collapsed;
-        this.saveToStorage();
+        this.scheduleSave();
       }
     }
   }
@@ -829,7 +955,7 @@ export class WorkManager {
         node.order = next.order;
         next.order = tempOrder;
       }
-      this.saveToStorage();
+      this.scheduleSave();
     }
   }
 
@@ -850,7 +976,7 @@ export class WorkManager {
     };
     work.characters.push(char);
     work.updateTime = this.formatDate(new Date());
-    this.saveToStorage();
+    this.scheduleSave();
     return char;
   }
 
@@ -866,7 +992,7 @@ export class WorkManager {
         if (updates.appearance !== undefined) char.appearance = updates.appearance;
         if (updates.background !== undefined) char.background = updates.background;
         work.updateTime = this.formatDate(new Date());
-        this.saveToStorage();
+        this.scheduleSave();
         return true;
       }
     }
@@ -880,7 +1006,7 @@ export class WorkManager {
       if (index !== -1) {
         work.characters.splice(index, 1);
         work.updateTime = this.formatDate(new Date());
-        this.saveToStorage();
+        this.scheduleSave();
         return true;
       }
     }
@@ -904,7 +1030,7 @@ export class WorkManager {
     };
     work.scenes.push(scene);
     work.updateTime = this.formatDate(new Date());
-    this.saveToStorage();
+    this.scheduleSave();
     return scene;
   }
 
@@ -919,7 +1045,7 @@ export class WorkManager {
         if (updates.summary !== undefined) scene.summary = updates.summary;
         if (updates.characters !== undefined) scene.characters = updates.characters;
         work.updateTime = this.formatDate(new Date());
-        this.saveToStorage();
+        this.scheduleSave();
         return true;
       }
     }
@@ -933,7 +1059,7 @@ export class WorkManager {
       if (index !== -1) {
         work.scenes.splice(index, 1);
         work.updateTime = this.formatDate(new Date());
-        this.saveToStorage();
+        this.scheduleSave();
         return true;
       }
     }
@@ -959,7 +1085,7 @@ export class WorkManager {
     this.recycleBinItems.push(item);
     // 从works中移除
     this.works = this.works.filter(w => w.id !== workId);
-    this.saveToStorage();
+    this.scheduleSave();
     return true;
   }
 
@@ -980,7 +1106,7 @@ export class WorkManager {
     };
     this.works.push(restoredWork);
     this.recycleBinItems = this.recycleBinItems.filter(r => r.id !== recycleId);
-    this.saveToStorage();
+    this.scheduleSave();
     return true;
   }
 
@@ -989,7 +1115,7 @@ export class WorkManager {
     const before = this.recycleBinItems.length;
     this.recycleBinItems = this.recycleBinItems.filter(r => r.id !== recycleId);
     if (this.recycleBinItems.length !== before) {
-      this.saveToStorage();
+      this.scheduleSave();
       return true;
     }
     return false;
@@ -998,7 +1124,7 @@ export class WorkManager {
   /** 清空回收站 */
   clearRecycleBin(): void {
     this.recycleBinItems = [];
-    this.saveToStorage();
+    this.scheduleSave();
   }
 
   /** 获取回收站列表 */
@@ -1019,7 +1145,7 @@ export class WorkManager {
       deviceId: deviceId
     };
     this.inspirationItems.push(item);
-    this.saveToStorage();
+    this.scheduleSave();
     return item;
   }
 
@@ -1033,7 +1159,7 @@ export class WorkManager {
     const before = this.inspirationItems.length;
     this.inspirationItems = this.inspirationItems.filter(i => i.id !== inspirationId);
     if (this.inspirationItems.length !== before) {
-      this.saveToStorage();
+      this.scheduleSave();
       return true;
     }
     return false;
@@ -1044,7 +1170,7 @@ export class WorkManager {
     const item = this.inspirationItems.find(i => i.id === inspirationId);
     if (item) {
       item.content = content;
-      this.saveToStorage();
+      this.scheduleSave();
       return true;
     }
     return false;

@@ -4,6 +4,13 @@ import { workManager, Conversation } from '../model/WorkManager';
 import { BreakpointType } from '../model/ResponsiveManager';
 import preferences from '@ohos.data.preferences';
 import common from '@ohos.app.ability.common';
+import pasteboard from '@ohos.pasteboard';
+
+/** 一轮对话（用户→AI） */
+export interface ConversationRound {
+  userMessage: string;
+  aiResponse: string;
+}
 
 /**
  * 伴随式AI侧栏组件
@@ -27,7 +34,9 @@ export struct AiSidebar {
   @Link isVisible: boolean;
 
   /** AI对话内容 */
-  @State aiConversation: string = '';
+  @State @Watch('rebuildRounds') aiConversation: string = '';
+  /** 缓存解析后的对话轮次，避免每帧重复解析 */
+  private cachedRounds: ConversationRound[] = [];
   /** 当前输入 */
   @State currentPrompt: string = '';
   /** 是否正在生成 */
@@ -167,6 +176,44 @@ export struct AiSidebar {
     }
   }
 
+  /** @Watch 回调：对话变更时刷新缓存 */
+  rebuildRounds(): void {
+    this.cachedRounds = this.parseConversationRounds();
+  }
+
+  /** 解析对话字符串为轮次列表 */
+  parseConversationRounds(): ConversationRound[] {
+    const rounds: ConversationRound[] = [];
+    const parts = this.aiConversation.split('\n\n');
+    for (const part of parts) {
+      const trimmed = part.trim();
+      if (!trimmed) continue;
+      const userIdx = trimmed.indexOf('【用户】');
+      const aiIdx = trimmed.indexOf('【AI】');
+      if (userIdx >= 0 && aiIdx >= 0 && aiIdx > userIdx) {
+        const userMsg = trimmed.substring(userIdx + 5, aiIdx).trim();
+        const aiResp = trimmed.substring(aiIdx + 4).trim();
+        if (userMsg.length > 0 || aiResp.length > 0) {
+          rounds.push({ userMessage: userMsg, aiResponse: aiResp });
+        }
+      }
+    }
+    return rounds;
+  }
+
+  /** 复制文本到系统剪贴板 */
+  copyToClipboard(text: string): void {
+    try {
+      const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text);
+      const systemPasteboard = pasteboard.getSystemPasteboard();
+      systemPasteboard.setData(pasteData);
+      this.safeToast('已复制到剪贴板');
+    } catch (e) {
+      console.error('[AiSidebar] copyToClipboard failed: ' + JSON.stringify(e));
+      this.safeToast('复制失败');
+    }
+  }
+
   /** 发送AI消息 */
   async sendAiMessage() {
     if (this.currentPrompt.trim().length === 0) return;
@@ -193,11 +240,22 @@ export struct AiSidebar {
     this.aiConversation += (this.aiConversation.length > 0 ? '\n\n' : '') + '【用户】' + userMessage + '\n';
 
     try {
-      const response = await aiService.callAI(userMessage, context);
+      // 流式模式：实时占位并逐 token 刷新，生成完成时再规范化并落库
+      // 用户消息已以单换行结尾，AI占位紧跟其后（同轮次内单换行分隔，轮次间双换行）
+      this.aiConversation += '【AI】';
+      const response = await aiService.callAI(userMessage, context, (token: string) => {
+        this.aiConversation += token;
+      });
 
       if (response.success) {
         if (response.content.length > 0) {
-          this.aiConversation += '【AI】' + response.content + '\n\n';
+          // 去除占位的【AI】后整体规范化，避免流式拼接残留
+          const lastMarkerIndex = this.aiConversation.lastIndexOf('【AI】');
+          if (lastMarkerIndex >= 0) {
+            this.aiConversation = this.aiConversation.substring(0, lastMarkerIndex) + '【AI】' + response.content + '\n\n';
+          } else {
+            this.aiConversation += '\n\n';
+          }
 
           // 保存对话记录到WorkManager
           if (this.workId.length > 0) {
@@ -206,12 +264,14 @@ export struct AiSidebar {
               console.warn('[AiSidebar] 保存对话记录失败');
             }
           }
+        } else {
+          this.aiConversation += '（无内容）\n\n';
         }
       } else {
-        this.aiConversation += '【AI】生成失败：' + (response.error || '未知错误') + '\n\n';
+        this.aiConversation += '生成失败：' + (response.error || '未知错误') + '\n\n';
       }
     } catch (e) {
-      this.aiConversation += '【AI】发生异常：' + e + '\n\n';
+      this.aiConversation += '发生异常：' + e + '\n\n';
     } finally {
       this.isGenerating = false;
       this.saveCache();
@@ -276,8 +336,8 @@ export struct AiSidebar {
 
         Blank()
 
-        // 将最后一条 AI 建议写入正文
-        Button('采用建议')
+        // 将最后一条 AI 建议暂存到书架（含模板+全部对话）
+        Button('暂存')
           .fontSize(this.sf(12))
           .fontColor('#FFFFFF')
           .backgroundColor('#10B981')
@@ -285,7 +345,9 @@ export struct AiSidebar {
           .height(28)
           .padding({ left: 12, right: 12 })
           .margin({ right: 8 })
-          .onClick(() => this.insertToWorkbench())
+          .onClick(() => {
+            AppStorage.setOrCreate('aiAdoptSuggestion', this.aiConversation);
+          })
 
         // 关闭按钮
         Text('×')
@@ -340,14 +402,60 @@ export struct AiSidebar {
             .padding(24)
             .justifyContent(FlexAlign.Center)
           } else {
-            // 对话内容
-            Text(this.aiConversation)
-              .fontSize(this.sf(13))
-              .fontColor(this.sidebarTextColor)
-              .lineHeight(20)
+            // 对话内容（按轮次渲染，每轮支持一键复制）
+            ForEach(this.cachedRounds, (round: ConversationRound, index: number) => {
+              Column() {
+                // 用户消息
+                Row() {
+                  Text('👤 ')
+                    .fontSize(this.sf(12))
+                  Text(round.userMessage)
+                    .fontSize(this.sf(13))
+                    .fontColor(this.sidebarTextColor)
+                    .lineHeight(20)
+                    .layoutWeight(1)
+                }
+                .width('100%')
+                .padding({ top: 6, bottom: 6 })
+
+                // AI回复（含复制按钮）
+                Row() {
+                  Text('AI ')
+                    .fontSize(this.sf(12))
+                  Text(round.aiResponse)
+                    .fontSize(this.sf(13))
+                    .fontColor('#10B981')
+                    .lineHeight(20)
+                    .layoutWeight(1)
+                    .textAlign(TextAlign.Start)
+
+                  Blank()
+
+                  Button('📋')
+                    .fontSize(this.sf(12))
+                    .backgroundColor(Color.Transparent)
+                    .fontColor(this.sidebarSubTextColor)
+                    .width(28)
+                    .height(28)
+                    .padding(0)
+                    .onClick(() => {
+                      this.copyToClipboard(round.aiResponse);
+                    })
+                }
+                .width('100%')
+                .padding({ top: 4, bottom: 8 })
+
+                // 轮次分隔线
+                if (index < this.cachedRounds.length - 1) {
+                  Divider()
+                    .height(0.5)
+                    .color(this.isDarkMode ? '#3A3A4E' : '#E0E0E0')
+                    .margin({ top: 4, bottom: 4 })
+                }
+              }
               .width('100%')
-              .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-              .textAlign(TextAlign.Start)
+              .padding({ left: 16, right: 16, top: 6, bottom: 6 })
+            }, (round: ConversationRound, index: number) => round.userMessage + round.aiResponse + index)
           }
         }
         .width('100%')

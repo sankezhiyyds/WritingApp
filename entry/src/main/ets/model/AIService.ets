@@ -1,5 +1,6 @@
 import { settingsManager } from './SettingsManager';
 import { ggufService } from './GGUFService';
+import { GGUFGenerateResult } from './GGUFService';
 import common from '@ohos.app.ability.common';
 
 export interface AIResponse {
@@ -23,12 +24,15 @@ export class AIService {
     this.context = context;
   }
 
-  /** 本地 GGUF 大模型推理（唯一 AI 后端，无需云端 API / Key） */
-  async callAI(prompt: string, context?: string): Promise<AIResponse> {
-    return await this.callLocalGGUF(prompt, context);
+  /**
+   * 本地 GGUF 大模型推理（唯一 AI 后端，无需云端 API / Key）
+   * @param onToken 可选的流式回调：每生成若干 token 时被调用，用于实时刷新 UI（效果最佳）
+   */
+  async callAI(prompt: string, context?: string, onToken?: (token: string) => void): Promise<AIResponse> {
+    return await this.callLocalGGUF(prompt, context, onToken);
   }
 
-  private async callLocalGGUF(prompt: string, context?: string): Promise<AIResponse> {
+  private async callLocalGGUF(prompt: string, context?: string, onToken?: (token: string) => void): Promise<AIResponse> {
     const settings = settingsManager.settings;
     console.info('[AIService] callLocalGGUF 开始, prompt长度=' + prompt.length);
 
@@ -37,31 +41,25 @@ export class AIService {
       return { content: '', success: false, error: '请先在设置中选择 GGUF 模型文件' };
     }
 
-    if (!ggufService.isNativeAvailable()) {
-      console.warn('[AIService] 原生模块不可用');
-      return {
-        content: '',
-        success: false,
-        error: '本地推理引擎未安装。\n\n请将 llama.cpp 源码放入 entry/src/main/cpp/third_party/llama.cpp 并重新构建。'
-      };
-    }
-
+    // 预览模式提示（桩引擎仍可生成模拟回复，不影响流程）
     if (ggufService.isStubMode()) {
-      console.warn('[AIService] 占位模式，llama.cpp未编译');
-      return {
-        content: '',
-        success: false,
-        error: '本地推理引擎为占位模式（llama.cpp 未编译）。\n\n当前无法执行真正的AI推理。请编译 llama.cpp 后重新构建应用。\n\n您仍可使用写作模板、手动编辑等功能。'
-      };
+      console.info('[AIService] 预览模式（桩引擎）：llama.cpp 未编译，将使用模拟推理');
     }
 
     if (!ggufService.isLoaded()) {
       console.info('[AIService] 模型未加载，尝试加载: ' + settings.localModelPath);
-      const loaded = await ggufService.loadModel({
-        modelPath: settings.localModelPath,
-        contextLength: settings.ggufContextLength ?? 2048,
-        threads: settings.ggufThreads ?? 4
-      });
+      let loaded = false;
+      try {
+        loaded = await ggufService.loadModel({
+          modelPath: settings.localModelPath,
+          contextLength: settings.ggufContextLength ?? 2048,
+          threads: settings.ggufThreads ?? 4
+        });
+      } catch (e) {
+        // 兜底：模型文件损坏/格式错误时 NAPI 可能抛异常，避免未捕获 rejection
+        console.error('[AIService] 模型加载异常: ' + e);
+        return { content: '', success: false, error: '模型加载失败：' + e + '\n\n路径: ' + settings.localModelPath };
+      }
       if (!loaded) {
         console.error('[AIService] 模型加载失败');
         return { content: '', success: false, error: '模型加载失败，请检查文件路径和格式。\n\n路径: ' + settings.localModelPath };
@@ -84,12 +82,20 @@ export class AIService {
     const temperature = settings.ggufTemperature ?? 0.8;
     console.info(`[AIService] 调用generate, fullPrompt长度=${fullPrompt.length}, maxTokens=${maxTokens}, temp=${temperature}`);
 
-    const result = await ggufService.generate({
-      prompt: fullPrompt,
-      maxTokens: maxTokens,
-      temperature: temperature,
-      topP: 0.9
-    });
+    let result: GGUFGenerateResult;
+    try {
+      result = await ggufService.generate({
+        prompt: fullPrompt,
+        maxTokens: maxTokens,
+        temperature: temperature,
+        topP: 0.9,
+        onToken: onToken
+      });
+    } catch (e) {
+      // 兜底：NAPI 调用偶发异常不应导致未捕获 rejection，转为结构化失败返回
+      console.error('[AIService] generate 调用异常: ' + e);
+      return { content: '', success: false, error: 'AI 推理调用异常: ' + e };
+    }
 
     console.info(`[AIService] generate返回: success=${result.success}, text长度=${result.text.length}, error=${result.error || '无'}`);
 

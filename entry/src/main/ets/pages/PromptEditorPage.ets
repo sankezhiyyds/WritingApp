@@ -34,10 +34,15 @@ struct PromptEditorPage {
   @State saveNewFolderName: string = '';  // 保存对话框中新建文件夹名
   @State saveCreateNewFolder: boolean = false;  // 是否新建文件夹
   @StorageLink('aiInsertContent') @Watch('onAiInsert') aiInsertContent: string = '';  // AI侧栏插入内容
+  @StorageLink('aiAdoptSuggestion') @Watch('onAiAdoptSuggestion') aiAdoptSuggestion: string = '';  // AI侧栏采用建议信号
   @State work: WorkItem | null = null;
   @State showChapterList: boolean = false;
   @State currentChapter: Chapter | null = null;
   @State promptText: string = '';
+  @State promptRole: string = '';
+  @State promptStyle: string = '';
+  @State promptFormat: string = '';
+  @State promptConstraints: string = '';
   @State currentBreakpoint: BreakpointType = 'sm';
   @State showVersionHistory: boolean = false;
   @State selectedVersion: number = -1;
@@ -97,6 +102,21 @@ struct PromptEditorPage {
     return this.isDarkMode ? '#44455E' : '#E5E7EB';
   }
 
+  /** 紧凑模式按钮内边距：有work(更多按钮)时缩小 */
+  get btnPad(): number {
+    return this.work ? 12 : 16;
+  }
+
+  /** 保存按钮内边距（默认比其他按钮宽） */
+  get saveBtnPad(): number {
+    return this.work ? 16 : 24;
+  }
+
+  /** 紧凑模式按钮间距 */
+  get btnMargin(): number {
+    return this.work ? 6 : 8;
+  }
+
   get textColor(): string {
     return this.isDarkMode ? '#E0E0E0' : '#1A1A2E';
   }
@@ -128,9 +148,10 @@ struct PromptEditorPage {
     if (params) {
       this.mode = params['mode'] || 'short_drama';
 
-      // 提示词编辑模式
+      // 提示词编辑模式：解析已有提示词到四个字段
       if (this.mode === 'prompt_edit') {
         this.promptText = settingsManager.settings.customPrompt;
+        this.parsePromptToFields();
         return;
       }
 
@@ -294,6 +315,15 @@ struct PromptEditorPage {
     }
   }
 
+  /** 系统返回：侧栏开启时先关闭侧栏，再退出页面 */
+  onBackPress(): boolean {
+    if (this.showAiSidebar) {
+      this.showAiSidebar = false;
+      return true; // 拦截返回，不退出页面
+    }
+    return false; // 允许系统默认返回行为
+  }
+
   build() {
     Stack() {
       Row() {
@@ -367,108 +397,131 @@ struct PromptEditorPage {
 
       // 底部操作栏
       if (this.mode !== 'prompt_edit') {
-        Row() {
-          Text(this.generatedContent.length + ' 字')
-            .fontSize(this.sf(12))
-            .fontColor(this.subTextColor)
-            .margin({ right: 8 })
+        if (this.currentBreakpoint === 'sm' && this.showAiSidebar) {
+          // 窄屏+AI侧栏：竖向紧凑布局（字数统计 + 2列按钮网格）
+          Column() {
+            Text(this.generatedContent.length + ' 字')
+              .fontSize(this.sf(12))
+              .fontColor(this.subTextColor)
+              .margin({ bottom: 8 })
 
-          Blank()
-
-          if (this.work) {
-            if (this.work.chapters && this.work.chapters.length > 0) {
-              Button('章节')
-                .fontSize(this.sf(14))
-                .fontWeight(FontWeight.Medium)
-                .fontColor('#FF2D55')
-                .backgroundColor(this.cardBg)
-                .borderRadius(20)
-                .height(36)
-                .padding({ left: 16, right: 16 })
+            this.BottomButtonGrid()
+          }
+          .width('100%')
+          .padding({ left: 12, right: 12, top: 8, bottom: 12 })
+          .backgroundColor(this.cardBg)
+        } else {
+          // 横向可滚动布局
+          Scroll() {
+            Row() {
+              Text(this.generatedContent.length + ' 字')
+                .fontSize(this.sf(12))
+                .fontColor(this.subTextColor)
                 .margin({ right: 8 })
-                .onClick(() => {
-                  this.showChapterList = true;
-                })
-            }
 
-            if (this.work.versions && this.work.versions.length > 0) {
-              Button('历史')
+              Blank()
+
+              if (this.work) {
+                if (this.work.chapters && this.work.chapters.length > 0) {
+                  Button('章节')
+                    .fontSize(this.sf(14))
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor('#FF2D55')
+                    .backgroundColor(this.cardBg)
+                    .borderRadius(20)
+                    .height(36)
+                    .padding({ left: this.btnPad, right: this.btnPad })
+                    .margin({ right: this.btnMargin })
+                    .onClick(() => {
+                      this.showChapterList = true;
+                    })
+                }
+
+                if (this.work.versions && this.work.versions.length > 0) {
+                  Button('历史')
+                    .fontSize(this.sf(14))
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor('#3B82F6')
+                    .backgroundColor(this.cardBg)
+                    .borderRadius(20)
+                    .height(36)
+                    .padding({ left: this.btnPad, right: this.btnPad })
+                    .margin({ right: this.btnMargin })
+                    .onClick(() => {
+                      this.showVersionHistory = true;
+                    })
+                }
+
+                Button('导出')
+                  .fontSize(this.sf(14))
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor('#10B981')
+                  .backgroundColor(this.cardBg)
+                  .borderRadius(20)
+                  .height(36)
+                  .padding({ left: this.btnPad, right: this.btnPad })
+                  .margin({ right: this.btnMargin })
+                  .onClick(() => {
+                    this.exportWork();
+                  })
+              }
+
+              Button('查找替换')
                 .fontSize(this.sf(14))
                 .fontWeight(FontWeight.Medium)
                 .fontColor('#3B82F6')
                 .backgroundColor(this.cardBg)
                 .borderRadius(20)
                 .height(36)
-                .padding({ left: 16, right: 16 })
-                .margin({ right: 8 })
+                .padding({ left: this.btnPad, right: this.btnPad })
+                .margin({ right: this.btnMargin })
                 .onClick(() => {
-                  this.showVersionHistory = true;
+                  this.showFindReplace = true;
+                })
+
+              Button('保存')
+                .fontSize(this.sf(14))
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#FFFFFF')
+                .backgroundColor('#FF2D55')
+                .borderRadius(20)
+                .height(36)
+                .padding({ left: this.saveBtnPad, right: this.saveBtnPad })
+                .onClick(() => this.saveWork())
+
+              Button(this.showAiSidebar ? '收起AI' : 'AI助手')
+                .fontSize(this.sf(14))
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#FFFFFF')
+                .backgroundColor(this.showAiSidebar ? '#6B7280' : '#10B981')
+                .borderRadius(20)
+                .height(36)
+                .padding({ left: this.btnPad, right: this.btnPad })
+                .margin({ left: this.btnMargin })
+                .onClick(() => {
+                  this.showAiSidebar = !this.showAiSidebar;
                 })
             }
-
-            Button('导出')
-              .fontSize(this.sf(14))
-              .fontWeight(FontWeight.Medium)
-              .fontColor('#10B981')
-              .backgroundColor(this.cardBg)
-              .borderRadius(20)
-              .height(36)
-              .padding({ left: 16, right: 16 })
-              .margin({ right: 8 })
-              .onClick(() => {
-                this.exportWork();
-              })
-          }
-
-          Button('查找替换')
-            .fontSize(this.sf(14))
-            .fontWeight(FontWeight.Medium)
-            .fontColor('#3B82F6')
+            .height(56)
             .backgroundColor(this.cardBg)
-            .borderRadius(20)
-            .height(36)
             .padding({ left: 16, right: 16 })
-            .margin({ right: 8 })
-            .onClick(() => {
-              this.showFindReplace = true;
-            })
-
-          Button('保存')
-            .fontSize(this.sf(14))
-            .fontWeight(FontWeight.Medium)
-            .fontColor('#FFFFFF')
-            .backgroundColor('#FF2D55')
-            .borderRadius(20)
-            .height(36)
-            .padding({ left: 24, right: 24 })
-            .onClick(() => this.saveWork())
-
-          Button(this.showAiSidebar ? '收起AI' : 'AI助手')
-            .fontSize(this.sf(14))
-            .fontWeight(FontWeight.Medium)
-            .fontColor('#FFFFFF')
-            .backgroundColor(this.showAiSidebar ? '#6B7280' : '#10B981')
-            .borderRadius(20)
-            .height(36)
-            .padding({ left: 16, right: 16 })
-            .margin({ left: 8 })
-            .onClick(() => {
-              this.showAiSidebar = !this.showAiSidebar;
-            })
+            .width('100%')
+            .clip(true)
+          }
+          .scrollable(ScrollDirection.Horizontal)
+          .scrollBar(BarState.Off)
+          .width('100%')
+          .height(56)
+          .clip(true)
         }
-        .width('100%')
-        .height(56)
-        .backgroundColor(this.cardBg)
-        .padding({ left: 16, right: 16 })
       }
     }
     .width('100%')
     .height('100%')
     .backgroundColor(this.themeBgColor)
-        .layoutWeight(1)
         .height('100%')
         .backgroundColor(this.themeBgColor)
-        .constraintSize({ maxWidth: this.contentMaxWidth })
+        .layoutWeight(1)
 
         // AI侧栏（伴随式独立列模式 - 所有设备统一宽度）
         if (this.showAiSidebar) {
@@ -480,7 +533,7 @@ struct PromptEditorPage {
             isDarkMode: this.isDarkMode,
             isVisible: $showAiSidebar
           })
-            .width(this.currentBreakpoint === 'sm' ? '85%' : 360)
+            .layoutWeight(1)
             .height('100%')
             .backgroundColor(this.isDarkMode ? '#1E1E2E' : '#F8F9FA')
             .border({ width: { left: 0.5 }, color: { left: this.isDarkMode ? '#3A3A4E' : '#E0E0E0' } })
@@ -507,49 +560,230 @@ struct PromptEditorPage {
   }
 
   @Builder
+  BottomButtonGrid() {
+    Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.SpaceEvenly }) {
+      if (this.work) {
+        if (this.work.chapters && this.work.chapters.length > 0) {
+          Button('章节')
+            .fontSize(this.sf(12))
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#FF2D55')
+            .backgroundColor(this.cardBg)
+            .borderRadius(14)
+            .height(32)
+            .width('48%')
+            .margin({ bottom: 6 })
+            .onClick(() => {
+              this.showChapterList = true;
+            })
+        }
+        if (this.work.versions && this.work.versions.length > 0) {
+          Button('历史')
+            .fontSize(this.sf(12))
+            .fontWeight(FontWeight.Medium)
+            .fontColor('#3B82F6')
+            .backgroundColor(this.cardBg)
+            .borderRadius(14)
+            .height(32)
+            .width('48%')
+            .margin({ bottom: 6 })
+            .onClick(() => {
+              this.showVersionHistory = true;
+            })
+        }
+        Button('导出')
+          .fontSize(this.sf(12))
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#10B981')
+          .backgroundColor(this.cardBg)
+          .borderRadius(14)
+          .height(32)
+          .width('48%')
+          .margin({ bottom: 6 })
+          .onClick(() => {
+            this.exportWork();
+          })
+      }
+      Button('查找替换')
+        .fontSize(this.sf(12))
+        .fontWeight(FontWeight.Medium)
+        .fontColor('#3B82F6')
+        .backgroundColor(this.cardBg)
+        .borderRadius(14)
+        .height(32)
+        .width('48%')
+        .margin({ bottom: 6 })
+        .onClick(() => {
+          this.showFindReplace = true;
+        })
+
+      Button('保存')
+        .fontSize(this.sf(12))
+        .fontWeight(FontWeight.Medium)
+        .fontColor('#FFFFFF')
+        .backgroundColor('#FF2D55')
+        .borderRadius(14)
+        .height(32)
+        .width('48%')
+        .margin({ bottom: 6 })
+        .onClick(() => this.saveWork())
+
+      Button(this.showAiSidebar ? '收起AI' : 'AI助手')
+        .fontSize(this.sf(12))
+        .fontWeight(FontWeight.Medium)
+        .fontColor('#FFFFFF')
+        .backgroundColor(this.showAiSidebar ? '#6B7280' : '#10B981')
+        .borderRadius(14)
+        .height(32)
+        .width('48%')
+        .margin({ bottom: 6 })
+        .onClick(() => {
+          this.showAiSidebar = !this.showAiSidebar;
+        })
+    }
+    .width('100%')
+  }
+
+  @Builder
   PromptEditView() {
+    Scroll() {
+      Column() {
+        Text('自定义AI提示词')
+          .fontSize(this.sf(16))
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.textColor)
+          .margin({ left: 16, top: 16, bottom: 8 })
+          .alignSelf(ItemAlign.Start)
+
+        Text('按下方模板填写关键类目，AI 将据此生成符合你需求的写作内容')
+          .fontSize(this.sf(13))
+          .fontColor(this.subTextColor)
+          .margin({ left: 16, right: 16, bottom: 16 })
+
+        // ── 角色定位 ──
+        this.PromptField('🎭 角色定位', '定义 AI 的身份和核心职责', '你是一位...', this.promptRole, (v: string) => {
+          this.promptRole = v;
+        })
+
+        // ── 写作风格 ──
+        this.PromptField('✍️ 写作风格', '描述 AI 的语言风格、语气和表达方式', '使用简洁明快的语言，注重细节描写...', this.promptStyle, (v: string) => {
+          this.promptStyle = v;
+        })
+
+        // ── 输出格式 ──
+        this.PromptField('📋 输出规范', '指定 AI 输出的结构和格式要求', '以段落形式输出，每段不超过200字...', this.promptFormat, (v: string) => {
+          this.promptFormat = v;
+        })
+
+        // ── 约束条件 ──
+        this.PromptField('🚫 限制条款', '明确 AI 不应做的事项', '避免使用过于华丽的辞藻，不输出与写作无关的内容...', this.promptConstraints, (v: string) => {
+          this.promptConstraints = v;
+        })
+
+        // ── 预览 ──
+        Text('📝 合成预览')
+          .fontSize(this.sf(13))
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.textColor)
+          .margin({ left: 16, top: 12, bottom: 6 })
+          .alignSelf(ItemAlign.Start)
+
+        Text(this.getAssembledPrompt())
+          .fontSize(this.sf(12))
+          .fontColor(this.subTextColor)
+          .backgroundColor(this.cardBg)
+          .borderRadius(8)
+          .padding(12)
+          .width('90%')
+          .lineHeight(18)
+          .alignSelf(ItemAlign.Center)
+
+        Button('保存提示词')
+          .width('90%')
+          .height(48)
+          .fontSize(this.sf(16))
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#FFFFFF')
+          .backgroundColor('#FF2D55')
+          .borderRadius(24)
+          .margin({ top: 20, bottom: 40 })
+          .onClick(() => {
+            // 组装完整提示词
+            this.promptText = this.getAssembledPrompt();
+            settingsManager.settings.customPrompt = this.promptText;
+            settingsManager.save();
+            this.safeToast('提示词已保存');
+            this.getUIContext().getRouter().back();
+          })
+      }
+      .width('100%')
+    }
+    .layoutWeight(1)
+    .width('100%')
+  }
+
+  /** 提示词字段组件 */
+  @Builder
+  PromptField(label: string, desc: string, placeholder: string, initialValue: string, onChange: (value: string) => void) {
     Column() {
-      Text('自定义AI提示词')
-        .fontSize(this.sf(16))
+      Text(label)
+        .fontSize(this.sf(14))
         .fontWeight(FontWeight.Medium)
         .fontColor(this.textColor)
-        .margin({ left: 16, top: 16, bottom: 8 })
         .alignSelf(ItemAlign.Start)
+        .margin({ bottom: 4 })
 
-      Text('这个提示词将作为AI的系统指令，指导AI的写作风格和行为')
-        .fontSize(this.sf(13))
+      Text(desc)
+        .fontSize(this.sf(12))
         .fontColor(this.subTextColor)
-        .margin({ left: 16, right: 16, bottom: 12 })
+        .alignSelf(ItemAlign.Start)
+        .margin({ bottom: 8 })
 
-      TextArea({ placeholder: '请输入自定义提示词...', text: this.promptText })
-        .width('90%')
-        .layoutWeight(1)
+      TextArea({ placeholder: placeholder, text: initialValue })
+        .width('100%')
+        .height(100)
         .fontSize(this.fontSize)
         .backgroundColor(this.cardBg)
         .borderRadius(8)
         .padding(12)
         .onChange((value: string) => {
-          this.promptText = value;
-        })
-
-      Button('保存提示词')
-        .width('90%')
-        .height(48)
-        .fontSize(this.sf(16))
-        .fontWeight(FontWeight.Medium)
-        .fontColor('#FFFFFF')
-        .backgroundColor('#FF2D55')
-        .borderRadius(24)
-        .margin({ top: 16, bottom: 24 })
-        .onClick(() => {
-          settingsManager.settings.customPrompt = this.promptText;
-          settingsManager.save();
-          this.safeToast('提示词已保存');
-          this.getUIContext().getRouter().back();
+          onChange(value);
         })
     }
-    .width('100%')
-    .height('100%')
+    .width('90%')
+    .alignSelf(ItemAlign.Center)
+    .margin({ bottom: 16 })
+  }
+
+  /** 组装完整 system prompt */
+  getAssembledPrompt(): string {
+    const parts: string[] = [];
+    if (this.promptRole.trim()) {
+      parts.push('【角色定位】' + this.promptRole.trim());
+    }
+    if (this.promptStyle.trim()) {
+      parts.push('【写作风格】' + this.promptStyle.trim());
+    }
+    if (this.promptFormat.trim()) {
+      parts.push('【输出规范】' + this.promptFormat.trim());
+    }
+    if (this.promptConstraints.trim()) {
+      parts.push('【限制条款】' + this.promptConstraints.trim());
+    }
+    return parts.join('\n\n');
+  }
+
+  /** 解析已有提示词到四个字段（编辑已有提示词时回填） */
+  parsePromptToFields(): void {
+    const text = this.promptText || '';
+    const roleMatch = text.match(/【角色定位】([\s\S]*?)(?=\n\n【|$)/);
+    const styleMatch = text.match(/【写作风格】([\s\S]*?)(?=\n\n【|$)/);
+    const formatMatch = text.match(/【输出规范】([\s\S]*?)(?=\n\n【|$)/);
+    const constraintMatch = text.match(/【限制条款】([\s\S]*?)(?=\n\n【|$)/);
+    if (roleMatch) this.promptRole = roleMatch[1].trim();
+    if (styleMatch) this.promptStyle = styleMatch[1].trim();
+    if (formatMatch) this.promptFormat = formatMatch[1].trim();
+    if (constraintMatch) this.promptConstraints = constraintMatch[1].trim();
   }
 
   @Builder
@@ -870,6 +1104,24 @@ struct PromptEditorPage {
     this.showSaveDialog = true;
   }
 
+  /** AI侧栏"采用建议"触发：打开保存对话框 */
+  onAiAdoptSuggestion(): void {
+    if (this.aiAdoptSuggestion.length > 0) {
+      this.handleAdoptSuggestion();
+      // 清除信号，防止重复触达
+      AppStorage.set('aiAdoptSuggestion', '');
+    }
+  }
+
+  /** 保存完整工程（含模板+AI对话）到书架 */
+  handleAdoptSuggestion(): void {
+    if (this.generatedContent.trim().length === 0) {
+      this.safeToast('内容不能为空，请先在编辑区写一些内容');
+      return;
+    }
+    this.showSaveDialog = true;
+  }
+
   /** 执行实际保存操作 */
   executeSave(title: string, folderId: string) {
     const finalTitle = title.trim().length > 0 ? title : '未命名作品';
@@ -905,6 +1157,12 @@ struct PromptEditorPage {
       }
       this.previousContent = this.generatedContent;
       this.safeToast('作品已保存');
+    }
+
+    // 保存AI对话数据（含模板+所有AI对话）
+    if (this.aiAdoptSuggestion.length > 0 && this.work) {
+      workManager.updateAiContent(this.work.id, this.aiAdoptSuggestion);
+      AppStorage.set('aiAdoptSuggestion', '');
     }
 
     // 保存成功后清除工作台缓存，避免下次恢复旧数据

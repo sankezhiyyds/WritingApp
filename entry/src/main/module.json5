@@ -53,6 +53,12 @@
         "startWindowIcon": "$media:icon",
         "startWindowBackground": "$color:start_window_background",
         "orientation": "auto_rotation_restricted",
+        "metadata": [
+          {
+            "name": "client_id",
+            "value": "6917617800720226240"
+          }
+        ],
         "exported": true,
         "skills": [
           {

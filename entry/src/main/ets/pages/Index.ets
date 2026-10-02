@@ -1037,7 +1037,7 @@ struct Index {
 
     // 未分类作品
     if (workManager.getFolders().length > 0 && workManager.getUnfiledBookshelfWorks().length > 0) {
-      Text('未分类作品')
+      Text('未完成')
         .fontSize(this.sf(14))
         .fontWeight(FontWeight.Medium)
         .fontColor(this.subTextColor)
@@ -1133,7 +1133,7 @@ struct Index {
     }
 
     if (workManager.getArchiveFolders().length > 0 && workManager.getUnfiledArchivedWorks().length > 0) {
-      Text('未分类作品')
+      Text('未完成')
         .fontSize(this.sf(14))
         .fontWeight(FontWeight.Medium)
         .fontColor(this.subTextColor)

@@ -3,6 +3,7 @@
 #include <vector>
 #include <cstring>
 #include <cstdio>
+#include <cinttypes>
 #include <thread>
 #include <chrono>
 
@@ -59,7 +60,7 @@ bool LlamaRunner::loadModel(const std::string& modelPath, int contextLength, int
     ctxParams.n_threads_batch = threads;
     ctxParams.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_DISABLED; // Disable flash attention
 
-    context_ = llama_new_context_with_model(
+    context_ = llama_init_from_model(
         static_cast<llama_model*>(model_), ctxParams);
     if (!context_) {
         LOGE("Failed to create context");
@@ -229,11 +230,11 @@ std::string LlamaRunner::getModelInfo() const {
     int len = llama_model_meta_val_str(model, "general.name", buf, sizeof(buf));
     std::string name = (len > 0) ? std::string(buf, len) : "unknown";
 
-    int nParams = llama_model_n_params(model);
-    int nCtx = llama_n_ctx(static_cast<llama_context*>(context_));
+    uint64_t nParams = llama_model_n_params(model);
+    uint32_t nCtx = llama_n_ctx(static_cast<llama_context*>(context_));
 
     snprintf(buf, sizeof(buf),
-        "{\"name\":\"%s\",\"params\":%d,\"context\":%d,\"threads\":%d}",
+        "{\"name\":\"%s\",\"params\":%" PRIu64 ",\"context\":%u,\"threads\":%d}",
         name.c_str(), nParams, nCtx, threads_);
     return std::string(buf);
 }

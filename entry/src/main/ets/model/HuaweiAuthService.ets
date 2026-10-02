@@ -28,6 +28,11 @@ export class HuaweiAuthService {
   private prefs: preferences.Preferences | null = null;
   private loginCallbacks: LoginCallback[] = [];
   private readonly PREF_KEY: string = 'huawei_user_info';
+  /** 静默登录冷却：永久性错误（如 client_id 未配置）在冷却期内不再重试 */
+  private lastSilentLoginError: number = 0;
+  private lastSilentLoginTime: number = 0;
+  private readonly SILENT_LOGIN_COOLDOWN_MS: number = 600000; // 10分钟
+  private readonly PERMANENT_FAILURE_CODES: number[] = [1001502003]; // client_id/profile 无效
 
   private constructor() {}
 
@@ -122,6 +127,14 @@ export class HuaweiAuthService {
       console.error('[HuaweiAuthService] context未提供');
       return null;
     }
+    // 冷却检查：永久性错误（如 client_id 未配置）在冷却期内不再重试
+    const now = Date.now();
+    if (now - this.lastSilentLoginError < this.SILENT_LOGIN_COOLDOWN_MS) {
+      console.info('[HuaweiAuthService] 跳过静默登录（冷却期内，距上次错误=' +
+        Math.round((now - this.lastSilentLoginError) / 1000) + 's）');
+      return null;
+    }
+    this.lastSilentLoginTime = now;
     try {
       const provider = new authentication.HuaweiIDProvider();
       const loginRequest = provider.createLoginWithHuaweiIDRequest();
@@ -150,6 +163,12 @@ export class HuaweiAuthService {
     } catch (e) {
       const err = e as BusinessError;
       console.error('[HuaweiAuthService] 静默登录失败: code=' + err.code + ', msg=' + err.message);
+      // 永久性错误（如 client_id 未配置）进入冷却，不再反复重试
+      if (this.PERMANENT_FAILURE_CODES.includes(err.code)) {
+        this.lastSilentLoginError = Date.now();
+        console.warn('[HuaweiAuthService] 永久性失败，进入' +
+          (this.SILENT_LOGIN_COOLDOWN_MS / 60000) + '分钟冷却');
+      }
       this.notifyLoginChange(false, undefined, err.message);
       return null;
     }
