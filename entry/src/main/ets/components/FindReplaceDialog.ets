@@ -1,4 +1,3 @@
-import { RectShape } from '@kit.ArkUI';
 /**
  * 查找替换文本处理组件
  * 类似MT管理器的查找替换功能
@@ -49,6 +48,18 @@ export struct FindReplaceDialog {
   /** 弹窗卡片结构边框：深色中灰 / 浅色浅灰，与 cardBg 协调 */
   get cardBorder(): string {
     return this.isDarkMode ? '#44455E' : '#E5E7EB';
+  }
+  get accentColor(): string {
+    return '#3B82F6';
+  }
+  get warningColor(): string {
+    return '#F59E0B';
+  }
+  get dangerColor(): string {
+    return '#FF2D55';
+  }
+  get buttonTextColor(): string {
+    return '#FFFFFF';
   }
 
   /** 执行查找 */
@@ -280,8 +291,8 @@ export struct FindReplaceDialog {
 
         Button('上一个')
           .fontSize(13)
-          .fontColor('#FFFFFF')
-          .backgroundColor('#3B82F6')
+          .fontColor(this.buttonTextColor)
+          .backgroundColor(this.accentColor)
           .borderRadius(8)
           .height(34)
           .margin({ right: 4 })
@@ -289,8 +300,8 @@ export struct FindReplaceDialog {
 
         Button('下一个')
           .fontSize(13)
-          .fontColor('#FFFFFF')
-          .backgroundColor('#3B82F6')
+          .fontColor(this.buttonTextColor)
+          .backgroundColor(this.accentColor)
           .borderRadius(8)
           .height(34)
           .margin({ right: 6 })
@@ -320,8 +331,8 @@ export struct FindReplaceDialog {
 
         Button('替换')
           .fontSize(13)
-          .fontColor('#FFFFFF')
-          .backgroundColor('#F59E0B')
+          .fontColor(this.buttonTextColor)
+          .backgroundColor(this.warningColor)
           .borderRadius(8)
           .height(34)
           .margin({ left: 8, right: 4 })
@@ -329,8 +340,8 @@ export struct FindReplaceDialog {
 
         Button('全部替换')
           .fontSize(13)
-          .fontColor('#FFFFFF')
-          .backgroundColor('#FF2D55')
+          .fontColor(this.buttonTextColor)
+          .backgroundColor(this.dangerColor)
           .borderRadius(8)
           .height(34)
           .onClick(() => this.replaceAll())

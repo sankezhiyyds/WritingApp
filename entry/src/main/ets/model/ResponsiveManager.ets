@@ -1,6 +1,5 @@
-import window from '@ohos.window';
-import common from '@ohos.app.ability.common';
-import { display } from '@kit.ArkUI';
+import { window, display } from '@kit.ArkUI';
+import { common } from '@kit.AbilityKit';
 
 /** 断点类型 */
 export type BreakpointType = 'sm' | 'md' | 'lg';

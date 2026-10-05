@@ -1,6 +1,6 @@
 import { distributedDeviceManager } from '@kit.DistributedServiceKit';
 import { BusinessError } from '@kit.BasicServicesKit';
-import common from '@ohos.app.ability.common';
+import { common } from '@kit.AbilityKit';
 import { workManager } from './WorkManager';
 
 /** 设备信息 */

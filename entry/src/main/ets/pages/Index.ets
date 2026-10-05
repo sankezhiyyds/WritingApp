@@ -1,24 +1,21 @@
 import { TemplateInfo, templateList } from '../model/TemplateModel';
 import { WorkItem, workManager, BookshelfFolder, ArchiveFolder, RecycleBinItem, InspirationItem } from '../model/WorkManager';
 import { OutlineManagementPanel } from '../components/OutlineManagementPanel';
-import { RectShape } from '@kit.ArkUI';
+import { RectShape, promptAction } from '@kit.ArkUI';
 import { settingsManager } from '../model/SettingsManager';
 import { speechRecognizer } from '@kit.CoreSpeechKit';
 import { audio } from '@kit.AudioKit';
-import abilityAccessCtrl from '@ohos.abilityAccessCtrl';
-import { BusinessError } from '@kit.BasicServicesKit';
+import { abilityAccessCtrl, common } from '@kit.AbilityKit';
+import { BusinessError, pasteboard } from '@kit.BasicServicesKit';
 import { huaweiAuthService, HuaweiUserInfo } from '../model/HuaweiAuthService';
 import { cloudSyncService, SyncStatus } from '../model/CloudSyncService';
 import { responsiveManager, BreakpointType } from '../model/ResponsiveManager';
 import { permissionManager, PermissionItem, PermissionResult } from '../model/PermissionManager';
-import promptAction from '@ohos.promptAction';
 import picker from '@ohos.file.picker';
 import fileIo from '@ohos.file.fs';
-import pasteboard from '@ohos.pasteboard';
-import common from '@ohos.app.ability.common';
 import formProvider from '@ohos.app.form.formProvider';
 import formBindingData from '@ohos.app.form.formBindingData';
-import preferences from '@ohos.data.preferences';
+import { preferences } from '@kit.ArkData';
 
 /** 卡片所需的灵感统计数据 */
 interface InspirationStats {
@@ -167,24 +164,28 @@ struct Index {
       this.searchAFolders = [];
       this.searchAWorks = [];
       this.searchInspirations = [];
-      this.searchInspirations = [];
       return;
     }
-    this.searchBFolders = (workManager.getFolders() || []).filter(
+    const folders = (workManager.getFolders() || []).filter(
       f => (f.name || '').toLowerCase().includes(q)
     );
-    this.searchBWorks = (workManager.getBookshelfWorks() || []).filter(
+    const works = (workManager.getBookshelfWorks() || []).filter(
       w => (w.title || '').toLowerCase().includes(q)
     );
-    this.searchAFolders = (workManager.getArchiveFolders() || []).filter(
+    const aFolders = (workManager.getArchiveFolders() || []).filter(
       f => (f.name || '').toLowerCase().includes(q)
     );
-    this.searchAWorks = (workManager.getArchivedWorks() || []).filter(
+    const aWorks = (workManager.getArchivedWorks() || []).filter(
       w => (w.title || '').toLowerCase().includes(q)
     );
-    this.searchInspirations = (workManager.getInspirations() || []).filter(
+    const inspirations = (workManager.getInspirations() || []).filter(
       insp => (insp.content || '').toLowerCase().includes(q)
     );
+    this.searchBFolders = folders;
+    this.searchBWorks = works;
+    this.searchAFolders = aFolders;
+    this.searchAWorks = aWorks;
+    this.searchInspirations = inspirations;
   }
 
   aboutToAppear() {
@@ -250,14 +251,27 @@ struct Index {
 
   /** 页面每次显示时检查导航目标（如从桌面卡片跳转到灵感池）并尝试静默登录 */
   onPageShow(): void {
-    // 尝试静默登录（UI 就绪后，使用实时 context）
-    if (!huaweiAuthService.isLoggedIn()) {
-      huaweiAuthService.silentLogin(this.getUIContext().getHostContext() as common.UIAbilityContext).then((userInfo) => {
-        if (userInfo && cloudSyncService.isAutoSyncEnabled()) {
+    // 始终尝试静默登录（无论是否有缓存，验证 token 是否仍然有效）
+    huaweiAuthService.silentLogin(this.getUIContext().getHostContext() as common.UIAbilityContext).then((userInfo) => {
+      // 静默登录成功后通过 AppStorage 通知 SettingsTab 更新 UI
+      if (userInfo) {
+        console.info('[Index] 静默登录成功，userInfo=' + JSON.stringify(userInfo));
+        AppStorage.setOrCreate('huaweiLoggedIn', true);
+        AppStorage.setOrCreate('huaweiUserInfo', userInfo);
+        // 登录成功且开启自动同步 → 执行同步
+        if (cloudSyncService.isAutoSyncEnabled()) {
           cloudSyncService.sync();
         }
-      });
-    }
+      } else {
+        // 静默登录未成功（未授权/token过期/设备未登录华为账号）→ 清除stale状态，防止伪登录
+        AppStorage.setOrCreate('huaweiLoggedIn', false);
+        AppStorage.setOrCreate('huaweiUserInfo', null);
+      }
+    }).catch((e: Error) => {
+      console.error('[Index] 静默登录异常: ' + e.message);
+      AppStorage.setOrCreate('huaweiLoggedIn', false);
+      AppStorage.setOrCreate('huaweiUserInfo', null);
+    });
     // 1. 内存 flag 通道（onNewWant 高频点击时的实时响应）
     const target = AppStorage.get<string>('appNavTarget');
     if (target === 'inspiration') {
@@ -739,7 +753,7 @@ struct Index {
             .margin({ bottom: 20 })
             .alignSelf(ItemAlign.Start)
 
-          Text('华为账号登录（可选）')
+          Text('华为账号登录（同步到云盘）')
             .fontSize(this.sf(16))
             .fontWeight(FontWeight.Medium)
             .fontColor(this.textColor)
@@ -752,7 +766,7 @@ struct Index {
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
-          Text('• 未来支持云同步功能')
+          Text('• 数据同步至华为云盘，多设备随时访问')
             .fontSize(this.sf(14))
             .fontColor(this.subTextColor)
             .margin({ bottom: 4 })
@@ -3606,8 +3620,8 @@ struct SettingsTab {
   @State showHelpPanel: boolean = false;
   @State showFeedbackPanel: boolean = false;
   @State feedbackText: string = '';
-  @State isHuaweiLoggedIn: boolean = false;
-  @State huaweiUserInfo: HuaweiUserInfo | null = null;
+  @StorageLink('huaweiLoggedIn') isHuaweiLoggedIn: boolean = false;
+  @StorageLink('huaweiUserInfo') huaweiUserInfo: HuaweiUserInfo | null = null;
   @State syncStatusText: string = '';
   @State localFontPath: string = '';
   @State showFontPicker: boolean = false;
@@ -3632,6 +3646,7 @@ struct SettingsTab {
     this.isHuaweiLoggedIn = huaweiAuthService.isLoggedIn();
     if (this.isHuaweiLoggedIn) {
       this.huaweiUserInfo = huaweiAuthService.getCurrentUser();
+      console.info('[Index] aboutToAppear 恢复登录状态: ' + JSON.stringify(this.huaweiUserInfo));
     }
   }
 
@@ -3905,67 +3920,152 @@ struct SettingsTab {
           this.selectDarkMode();
         })
 
-        // ===== 华为账号与云同步 =====
+        // ===== 华为账号与云盘同步 =====
         ListItem() {
-          this.SectionTitle('华为账号与云同步')
+          this.SectionTitle('华为账号与云盘同步')
         }
 
         ListItem() {
-          this.SettingRow(
-            this.isHuaweiLoggedIn ? '已登录华为账号' : '登录华为账号',
-            this.isHuaweiLoggedIn ? `已登录（${this.huaweiUserInfo?.openID.substring(0, 8) ?? ''}...）` : '登录后可同步作品到云端',
-            true
-          )
+          Row() {
+            // 头像
+            if (this.isHuaweiLoggedIn && this.huaweiUserInfo && this.huaweiUserInfo.picture) {
+              Image(this.huaweiUserInfo.picture)
+                .width(40)
+                .height(40)
+                .borderRadius(20)
+                .margin({ right: 12 })
+            } else if (this.isHuaweiLoggedIn) {
+              // 已登录但无头像 → 显示默认头像占位
+              Row() {
+                Text((this.huaweiUserInfo?.displayName || 'H').charAt(0).toUpperCase())
+                  .fontSize(this.sf(18))
+                  .fontColor('#FFFFFF')
+              }
+              .width(40)
+              .height(40)
+              .borderRadius(20)
+              .backgroundColor('#4A90D9')
+              .margin({ right: 12 })
+              .justifyContent(FlexAlign.Center)
+            }
+
+            Column() {
+              Text(this.isHuaweiLoggedIn && this.huaweiUserInfo
+                ? (this.huaweiUserInfo.displayName
+                  ? this.huaweiUserInfo.displayName
+                  : (this.huaweiUserInfo.openID
+                    ? `${this.huaweiUserInfo.openID.substring(0, 6)}…${this.huaweiUserInfo.openID.slice(-4)}`
+                    : '华为账号已登录'))
+                : '登录华为账号')
+                .fontSize(this.sf(15))
+                .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+
+              Text(this.isHuaweiLoggedIn
+                ? '点击退出登录'
+                : '登录后可将作品同步至华为云盘')
+                .fontSize(this.sf(12))
+                .fontColor('#9CA3AF')
+                .margin({ top: 2 })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+
+            Text('›')
+              .fontSize(this.sf(18))
+              .fontColor('#9CA3AF')
+          }
+          .padding(16)
+          .borderRadius(12)
+          .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
         }
         .onClick(async () => {
           if (this.isHuaweiLoggedIn) {
-            // 已登录 → 退出登录
-            try {
-              await huaweiAuthService.logout();
-              this.isHuaweiLoggedIn = false;
-              this.huaweiUserInfo = null;
-              this.syncStatusText = '';
-              this.getUIContext().getPromptAction().showToast({ message: '已退出登录', duration: 2000 });
-            } catch (e) {
-              this.getUIContext().getPromptAction().showToast({ message: `退出失败: ${e}`, duration: 2000 });
-            }
+            // 已登录 → 弹出确认退出对话框
+            this.getUIContext().getPromptAction().showDialog({
+              title: '退出登录',
+              message: '退出后云盘同步将不可用，确定退出华为账号登录吗？',
+              buttons: [
+                { text: '取消', color: '#6B7280' },
+                { text: '退出', color: '#EF4444' }
+              ]
+            }).then((result: promptAction.ShowDialogSuccessResponse) => {
+              if (result.index === 1) {
+                huaweiAuthService.logout().then(() => {
+                  this.isHuaweiLoggedIn = false;
+                  this.huaweiUserInfo = null;
+                  this.syncStatusText = '';
+                  this.getUIContext().getPromptAction().showToast({ message: '已退出登录', duration: 2000 });
+                }).catch((e: Error) => {
+                  this.getUIContext().getPromptAction().showToast({ message: `退出失败: ${e.message}`, duration: 2000 });
+                });
+              }
+            });
           } else {
             // 未登录 → 执行登录
             try {
               const userInfo = await huaweiAuthService.login(this.getUIContext().getHostContext() as common.UIAbilityContext);
-              if (userInfo) {
+              if (userInfo && (userInfo.openID || userInfo.unionID)) {
                 this.isHuaweiLoggedIn = true;
                 this.huaweiUserInfo = userInfo;
-                this.getUIContext().getPromptAction().showToast({ message: '登录成功', duration: 2000 });
+                console.info('[Index] 登录成功，userInfo=' + JSON.stringify(userInfo));
+                this.getUIContext().getPromptAction().showToast({
+                  message: '登录成功: ' + (userInfo.displayName || '已登录'),
+                  duration: 5000
+                });
+                // 登录成功后自动触发一次同步
+                if (cloudSyncService.isAutoSyncEnabled()) {
+                  cloudSyncService.sync();
+                }
               } else {
-                this.getUIContext().getPromptAction().showToast({ message: '登录失败', duration: 2000 });
+                this.isHuaweiLoggedIn = false;
+                this.getUIContext().getPromptAction().showToast({ message: '登录返回数据无效', duration: 3000 });
               }
             } catch (e) {
-              this.getUIContext().getPromptAction().showToast({ message: `登录失败: ${e}`, duration: 2000 });
+              this.isHuaweiLoggedIn = false;
+              const err = e as BusinessError;
+              const hint = err.code === 1001502003
+                ? '签名证书指纹未在AGC注册或Account Kit未开通，请检查AGC配置'
+                : err.code === 1001502012
+                  ? '用户取消登录'
+                  : `登录失败[${err.code}]: ${err.message}`;
+              this.getUIContext().getPromptAction().showToast({
+                message: hint,
+                duration: 5000
+              });
             }
           }
         })
 
         ListItem() {
           this.SettingRow(
-            '云端同步',
-            this.isHuaweiLoggedIn ? (this.syncStatusText || '点击同步作品到云端') : '请先登录华为账号',
-            this.isHuaweiLoggedIn
+            '同步到云盘',
+            this.syncStatusText || '点击手动同步至华为云盘',
+            true
           )
         }
         .onClick(async () => {
-          if (!this.isHuaweiLoggedIn) {
-            this.getUIContext().getPromptAction().showToast({ message: '请先登录华为账号', duration: 2000 });
+          // 前置检查：未登录华为账号时不允许同步，防止伪同步
+          if (!huaweiAuthService.isLoggedIn()) {
+            this.syncStatusText = '请先登录华为账号';
+            this.getUIContext().getPromptAction().showToast({ message: '请先登录华为账号', duration: 3000 });
             return;
           }
           try {
             this.syncStatusText = '同步中...';
             const success = await cloudSyncService.sync();
-            this.syncStatusText = success ? '同步成功' : '同步失败';
-            this.getUIContext().getPromptAction().showToast({ message: this.syncStatusText, duration: 2000 });
+            if (success) {
+              // 显示真实同步结果（区分设备数/拉取状态），而非笼统"同步成功"
+              this.syncStatusText = cloudSyncService.getLastSyncMessage() || '同步完成';
+            } else {
+              const errMsg = cloudSyncService.getLastErrorMessage();
+              this.syncStatusText = cloudSyncService.getLastSyncMessage() || (errMsg || '同步失败');
+              console.error('[Index] 同步失败详情: ' + errMsg);
+            }
+            this.getUIContext().getPromptAction().showToast({ message: this.syncStatusText, duration: 3000 });
           } catch (e) {
-            this.syncStatusText = `同步失败: ${e}`;
-            this.getUIContext().getPromptAction().showToast({ message: this.syncStatusText, duration: 2000 });
+            const errDetail = (e as Error).message || JSON.stringify(e);
+            this.syncStatusText = `同步失败: ${errDetail}`;
+            this.getUIContext().getPromptAction().showToast({ message: this.syncStatusText, duration: 3000 });
           }
         })
 
@@ -4012,14 +4112,6 @@ struct SettingsTab {
         }
         .onClick(() => {
           this.showPrivacyPanel = true;
-        })
-
-        ListItem() {
-          this.SettingRow('权限管理', '查看与申请应用权限', true)
-        }
-        .onClick(() => {
-          this.permissionItems = permissionManager.getPermissionItems();
-          this.showPermissionPanel = true;
         })
 
         // ===== 关于与支持 =====

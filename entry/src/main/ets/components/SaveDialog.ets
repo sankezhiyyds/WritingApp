@@ -50,6 +50,9 @@ export struct SaveDialog {
   get accentColor(): string {
     return '#3B82F6';
   }
+  get buttonTextColor(): string {
+    return '#FFFFFF';
+  }
 
   aboutToAppear() {
     this.editTitle = this.defaultTitle;
@@ -142,7 +145,7 @@ export struct SaveDialog {
 
                     Button('确定')
                       .fontSize(14)
-                      .fontColor('#FFFFFF')
+                      .fontColor(this.buttonTextColor)
                       .backgroundColor(this.accentColor)
                       .borderRadius(8)
                       .height(40)
@@ -163,7 +166,7 @@ export struct SaveDialog {
             // 新建文件夹按钮
             Button(this.isCreatingFolder ? '取消新建' : '+ 新建文件夹')
               .fontSize(14)
-              .fontColor('#FFFFFF')
+              .fontColor(this.buttonTextColor)
               .backgroundColor(this.accentColor)
               .borderRadius(8)
               .height(36)
@@ -195,7 +198,7 @@ export struct SaveDialog {
 
             Button('保存')
               .fontSize(16)
-              .fontColor('#FFFFFF')
+              .fontColor(this.buttonTextColor)
               .backgroundColor(this.accentColor)
               .borderRadius(24)
               .height(44)
@@ -210,7 +213,7 @@ export struct SaveDialog {
         }
         .width('85%')
         .padding(24)
-        .backgroundColor('#FFFFFF')
+        .backgroundColor(this.bgColor)
         .border({ width: 1, color: this.cardBorder })
         .borderRadius(16)
         .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))

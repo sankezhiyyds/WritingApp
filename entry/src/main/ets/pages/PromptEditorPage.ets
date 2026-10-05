@@ -7,9 +7,9 @@ import { responsiveManager, BreakpointType } from '../model/ResponsiveManager';
 import { AiSidebar } from '../components/AiSidebar';
 import { FindReplaceDialog } from '../components/FindReplaceDialog';
 import { SaveDialog } from '../components/SaveDialog';
-import pasteboard from '@ohos.pasteboard';
-import preferences from '@ohos.data.preferences';
-import common from '@ohos.app.ability.common';
+import { pasteboard } from '@kit.BasicServicesKit';
+import { preferences } from '@kit.ArkData';
+import { common } from '@kit.AbilityKit';
 
 interface TextRange {
   start: number;
@@ -26,6 +26,7 @@ struct PromptEditorPage {
   @State mode: string = 'short_drama';
   @State showAiSidebar: boolean = false;  // AI侧栏是否可见
   @State isGenerating: boolean = false;  // AI生成中状态
+  @State activeFieldKey: string = '';  // 当前活跃的模板字段key（工作流任务标识）
   @State showFindReplace: boolean = false;  // 查找替换对话框
   private contentController: TextAreaController = new TextAreaController();
   @State showSaveDialog: boolean = false;  // 保存对话框
@@ -95,6 +96,14 @@ struct PromptEditorPage {
 
   get cardBg(): string {
     return this.isDarkMode ? '#2D2D44' : '#FFFFFF';
+  }
+
+  get buttonTextColor(): string {
+    return '#FFFFFF';
+  }
+
+  get primaryColor(): string {
+    return '#FF2D55';
   }
 
   /** 弹窗卡片结构边框：深色中灰 / 浅色浅灰，与 cardBg 协调 */
@@ -192,7 +201,7 @@ struct PromptEditorPage {
     // 恢复工作台缓存（仅在无workId时恢复）
     const params0 = this.getUIContext().getRouter().getParams() as Record<string, string>;
     if (!params0 || !params0['workId']) {
-      this.restoreWorkbenchCache();
+      this.restoreWorkbenchCache().catch((e: Error) => console.warn('[PromptEditorPage] restoreWorkbenchCache失败: ' + e));
     }
   }
 
@@ -224,7 +233,7 @@ struct PromptEditorPage {
       }
     } else {
       // 先保存工作台缓存（在创建草稿前保存，确保缓存可用）
-      this.saveWorkbenchCache();
+      this.saveWorkbenchCache().catch((e: Error) => console.warn('[PromptEditorPage] saveWorkbenchCache失败: ' + e));
       // 新作品自动创建草稿，防止闪退丢失
       const draftTitle = this.title.trim().length > 0 ? this.title : '未命名草稿';
       if (this.template) {
@@ -234,7 +243,7 @@ struct PromptEditorPage {
       }
     }
     // 保存工作台缓存
-    this.saveWorkbenchCache();
+    this.saveWorkbenchCache().catch((e: Error) => console.warn('[PromptEditorPage] saveWorkbenchCache失败: ' + e));
   }
 
   /** 保存工作台缓存到preferences（跨会话恢复机制，始终保存） */
@@ -301,7 +310,7 @@ struct PromptEditorPage {
 
   aboutToDisappear() {
     // 先保存工作台缓存（在创建草稿前）
-    this.saveWorkbenchCache();
+    this.saveWorkbenchCache().catch((e: Error) => console.warn('[PromptEditorPage] saveWorkbenchCache失败: ' + e));
     // 离开页面前自动保存，防止闪退丢失
     if (this.mode !== 'prompt_edit') {
       this.autoSave();
@@ -387,10 +396,14 @@ struct PromptEditorPage {
           isVisible: $showFindReplace,
           isDarkMode: this.isDarkMode,
           onJumpToMatch: (start: number, end: number) => {
-            // 先让TextArea获取焦点，再设置光标位置和选中高亮
-            this.getUIContext().getFocusController().requestFocus('contentTextArea');
-            this.contentController.caretPosition(start);
-            this.contentController.setTextSelection(start, end);
+            try {
+              // 先让TextArea获取焦点，再设置光标位置和选中高亮
+              this.getUIContext().getFocusController().requestFocus('contentTextArea');
+              this.contentController.caretPosition(start);
+              this.contentController.setTextSelection(start, end);
+            } catch (e) {
+              console.warn('[PromptEditorPage] onJumpToMatch失败: ' + e);
+            }
           }
         })
       }
@@ -482,8 +495,8 @@ struct PromptEditorPage {
               Button('保存')
                 .fontSize(this.sf(14))
                 .fontWeight(FontWeight.Medium)
-                .fontColor('#FFFFFF')
-                .backgroundColor('#FF2D55')
+                .fontColor(this.buttonTextColor)
+                .backgroundColor(this.primaryColor)
                 .borderRadius(20)
                 .height(36)
                 .padding({ left: this.saveBtnPad, right: this.saveBtnPad })
@@ -492,7 +505,7 @@ struct PromptEditorPage {
               Button(this.showAiSidebar ? '收起AI' : 'AI助手')
                 .fontSize(this.sf(14))
                 .fontWeight(FontWeight.Medium)
-                .fontColor('#FFFFFF')
+                .fontColor(this.buttonTextColor)
                 .backgroundColor(this.showAiSidebar ? '#6B7280' : '#10B981')
                 .borderRadius(20)
                 .height(36)
@@ -531,7 +544,10 @@ struct PromptEditorPage {
             workId: this.work ? this.work.id : '',
             currentBreakpoint: this.currentBreakpoint,
             isDarkMode: this.isDarkMode,
-            isVisible: $showAiSidebar
+            isVisible: $showAiSidebar,
+            activeFieldKey: $activeFieldKey,
+            templateId: this.template?.id ?? '',
+            templateFields: this.template?.fields ?? []
           })
             .layoutWeight(1)
             .height('100%')
@@ -620,8 +636,8 @@ struct PromptEditorPage {
       Button('保存')
         .fontSize(this.sf(12))
         .fontWeight(FontWeight.Medium)
-        .fontColor('#FFFFFF')
-        .backgroundColor('#FF2D55')
+        .fontColor(this.buttonTextColor)
+        .backgroundColor(this.primaryColor)
         .borderRadius(14)
         .height(32)
         .width('48%')
@@ -631,7 +647,7 @@ struct PromptEditorPage {
       Button(this.showAiSidebar ? '收起AI' : 'AI助手')
         .fontSize(this.sf(12))
         .fontWeight(FontWeight.Medium)
-        .fontColor('#FFFFFF')
+        .fontColor(this.buttonTextColor)
         .backgroundColor(this.showAiSidebar ? '#6B7280' : '#10B981')
         .borderRadius(14)
         .height(32)
@@ -703,8 +719,8 @@ struct PromptEditorPage {
           .height(48)
           .fontSize(this.sf(16))
           .fontWeight(FontWeight.Medium)
-          .fontColor('#FFFFFF')
-          .backgroundColor('#FF2D55')
+          .fontColor(this.buttonTextColor)
+          .backgroundColor(this.primaryColor)
           .borderRadius(24)
           .margin({ top: 20, bottom: 40 })
           .onClick(() => {
@@ -1261,7 +1277,9 @@ struct PromptEditorPage {
     try {
       const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, exportText);
       const systemPasteboard = pasteboard.getSystemPasteboard();
-      systemPasteboard.setData(pasteData);
+      systemPasteboard.setData(pasteData).catch((e: Error) => {
+        console.error('[PromptEditorPage] setData失败: ' + e);
+      });
       this.safeToast(`已导出 ${exportText.length} 字到剪贴板`);
     } catch (e) {
       // 降级方案：显示内容供手动复制
@@ -1269,6 +1287,8 @@ struct PromptEditorPage {
         title: '导出内容',
         message: `共 ${exportText.length} 字，复制到剪贴板失败，请手动保存`,
         buttons: [{ text: '确定', color: '#FF6B35' }]
+      }).catch((e: Error) => {
+        console.error('[PromptEditorPage] showDialog失败: ' + e);
       });
     }
   }
@@ -1471,8 +1491,8 @@ struct PromptEditorPage {
             })
           Button('创建')
             .fontSize(this.sf(14))
-            .fontColor('#FFFFFF')
-            .backgroundColor('#FF2D55')
+            .fontColor(this.buttonTextColor)
+            .backgroundColor(this.primaryColor)
             .borderRadius(8)
             .height(40)
             .layoutWeight(1)
@@ -1486,7 +1506,7 @@ struct PromptEditorPage {
       }
       .width('90%')
       .padding(20)
-      .backgroundColor('#FFFFFF')
+      .backgroundColor(this.cardBg)
       .border({ width: 1, color: this.cardBorder })
       .borderRadius(16)
       .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
@@ -1540,8 +1560,8 @@ struct PromptEditorPage {
             })
           Button('保存')
             .fontSize(this.sf(14))
-            .fontColor('#FFFFFF')
-            .backgroundColor('#FF2D55')
+            .fontColor(this.buttonTextColor)
+            .backgroundColor(this.primaryColor)
             .borderRadius(8)
             .height(40)
             .layoutWeight(1)
@@ -1555,7 +1575,7 @@ struct PromptEditorPage {
       }
       .width('90%')
       .padding(20)
-      .backgroundColor('#FFFFFF')
+      .backgroundColor(this.cardBg)
       .border({ width: 1, color: this.cardBorder })
       .borderRadius(16)
       .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))

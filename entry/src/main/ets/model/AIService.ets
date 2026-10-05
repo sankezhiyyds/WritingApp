@@ -1,7 +1,6 @@
 import { settingsManager } from './SettingsManager';
 import { ggufService } from './GGUFService';
 import { GGUFGenerateResult } from './GGUFService';
-import common from '@ohos.app.ability.common';
 
 export interface AIResponse {
   content: string;
@@ -11,7 +10,6 @@ export interface AIResponse {
 
 export class AIService {
   private static instance: AIService | null = null;
-  private context: common.UIAbilityContext | null = null;
 
   static getInstance(): AIService {
     if (!AIService.instance) {
@@ -20,8 +18,9 @@ export class AIService {
     return AIService.instance;
   }
 
-  setContext(context: common.UIAbilityContext): void {
-    this.context = context;
+  /** 是否为桩模式（预览模式），无需真实模型即可生成模拟回复 */
+  isStubMode(): boolean {
+    return ggufService.isStubMode();
   }
 
   /**
@@ -36,7 +35,8 @@ export class AIService {
     const settings = settingsManager.settings;
     console.info('[AIService] callLocalGGUF 开始, prompt长度=' + prompt.length);
 
-    if (!settings.localModelPath) {
+    // 桩模式（预览模式）下无需真实 GGUF 模型文件即可对话
+    if (!settings.localModelPath && !ggufService.isStubMode()) {
       console.warn('[AIService] localModelPath 为空');
       return { content: '', success: false, error: '请先在设置中选择 GGUF 模型文件' };
     }
@@ -46,7 +46,8 @@ export class AIService {
       console.info('[AIService] 预览模式（桩引擎）：llama.cpp 未编译，将使用模拟推理');
     }
 
-    if (!ggufService.isLoaded()) {
+    // 桩模式（预览模式/llama.cpp未编译）下无需加载真实模型即可生成模拟回复
+    if (!ggufService.isLoaded() && !ggufService.isStubMode()) {
       console.info('[AIService] 模型未加载，尝试加载: ' + settings.localModelPath);
       let loaded = false;
       try {

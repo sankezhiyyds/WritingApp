@@ -1,7 +1,6 @@
-import preferences from '@ohos.data.preferences';
-import common from '@ohos.app.ability.common';
+import { preferences } from '@kit.ArkData';
+import { common } from '@kit.AbilityKit';
 import { TemplateInfo } from './TemplateModel';
-import { performanceOptimizer } from './PerformanceOptimizer';
 import { systemResourceMonitor } from './SystemResourceMonitor';
 
 /**
@@ -189,7 +188,6 @@ export class WorkManager {
   private recycleBinKey: string = 'writing_app_recycle_bin';
   private inspirationKey: string = 'writing_app_inspirations';
   private prefs: preferences.Preferences | null = null;
-  private context: common.UIAbilityContext | null = null;
   private changeListeners: Array<() => void> = [];
   private saveQueue: Promise<void> = Promise.resolve();
   /** LRU 缓存：最近访问的作品 */
@@ -220,7 +218,6 @@ export class WorkManager {
   }
 
   async init(context: common.UIAbilityContext): Promise<void> {
-    this.context = context;
     try {
       this.prefs = await preferences.getPreferences(context, 'writing_app');
       await this.loadFromStorage();
@@ -1174,6 +1171,68 @@ export class WorkManager {
       return true;
     }
     return false;
+  }
+
+  /** 从云端合并作品数据（云端数据覆盖本地旧版本） */
+  mergeFromCloud(remoteWorks: WorkItem[]): void {
+    if (!remoteWorks || remoteWorks.length === 0) return;
+    let changed = false;
+    for (const remote of remoteWorks) {
+      const localIndex = this.works.findIndex(w => w.id === remote.id);
+      if (localIndex >= 0) {
+        // 云端版本更新则覆盖
+        if (remote.updateTime > this.works[localIndex].updateTime) {
+          this.works[localIndex] = remote;
+          changed = true;
+        }
+      } else {
+        // 本地没有则新增
+        this.works.push(remote);
+        changed = true;
+      }
+    }
+    if (changed) this.scheduleSave();
+  }
+
+  /** 从云端合并灵感数据 */
+  mergeInspirationsFromCloud(remoteInspirations: InspirationItem[]): void {
+    if (!remoteInspirations || remoteInspirations.length === 0) return;
+    let changed = false;
+    for (const remote of remoteInspirations) {
+      const localIndex = this.inspirationItems.findIndex(i => i.id === remote.id);
+      if (localIndex >= 0) {
+        if (remote.createTime > this.inspirationItems[localIndex].createTime) {
+          this.inspirationItems[localIndex] = remote;
+          changed = true;
+        }
+      } else {
+        this.inspirationItems.push(remote);
+        changed = true;
+      }
+    }
+    if (changed) this.scheduleSave();
+  }
+
+  /** 从云端合并回收站数据（按 deleteTime 择新保留） */
+  mergeRecycleBinFromCloud(remoteItems: RecycleBinItem[]): void {
+    if (!remoteItems || remoteItems.length === 0) return;
+    let changed = false;
+    for (const remote of remoteItems) {
+      const localIndex = this.recycleBinItems.findIndex(r => r.id === remote.id);
+      if (localIndex >= 0) {
+        if (remote.deleteTime > this.recycleBinItems[localIndex].deleteTime) {
+          this.recycleBinItems[localIndex] = remote;
+          changed = true;
+        }
+      } else {
+        this.recycleBinItems.push(remote);
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.dirtyRecycleBin = true;
+      this.scheduleSave();
+    }
   }
 }
 

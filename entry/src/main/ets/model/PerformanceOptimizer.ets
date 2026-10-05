@@ -1,4 +1,4 @@
-import taskpool from '@ohos.taskpool';
+import { taskpool } from '@kit.ArkTS';
 import { systemResourceMonitor, ResourcePressure } from './SystemResourceMonitor';
 
 /**

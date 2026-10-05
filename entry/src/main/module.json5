@@ -14,13 +14,13 @@
     "pages": "$profile:main_pages",
     "requestPermissions": [
       {
-        "name": "ohos.permission.READ_MEDIA",
-        "reason": "$string:permission_reason_read_media",
+        "name": "ohos.permission.INTERNET",
+        "reason": "$string:permission_reason_internet",
         "usedScene": {
           "abilities": [
             "EntryAbility"
           ],
-          "when": "inuse"
+          "when": "always"
         }
       },
       {
@@ -53,13 +53,14 @@
         "startWindowIcon": "$media:icon",
         "startWindowBackground": "$color:start_window_background",
         "orientation": "auto_rotation_restricted",
+        "exported": true,
+        // client_id: AGC OAuth 2.0 Client ID，已在AppGallery Connect创建应用WritingApp
         "metadata": [
           {
             "name": "client_id",
             "value": "6917617800720226240"
           }
         ],
-        "exported": true,
         "skills": [
           {
             "entities": [

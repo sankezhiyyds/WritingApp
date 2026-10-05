@@ -8,6 +8,14 @@ struct InspirationCard {
   @LocalStorageProp('lastContent') lastContent: string = '';
   @LocalStorageProp('inspirationCount') inspirationCount: string = '0';
 
+  get buttonTextColor(): string {
+    return '#FFFFFF';
+  }
+
+  get cardBgColor(): string {
+    return '#FFFFFF';
+  }
+
   build() {
     Column() {
       // 顶部：灯泡 + 标题
@@ -56,7 +64,7 @@ struct InspirationCard {
 
       // 底部：记灵感按钮（水平居中、适中宽度）
       Button('✏️ 记灵感')
-        .fontColor('#FFFFFF')
+        .fontColor(this.buttonTextColor)
         .backgroundColor('#FF6B35')
         .borderRadius(14)
         .height(30)
@@ -77,7 +85,7 @@ struct InspirationCard {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#FFFFFF')
+    .backgroundColor(this.cardBgColor)
     .borderRadius(12)
   }
 }

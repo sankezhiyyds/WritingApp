@@ -1,8 +1,8 @@
 import FormExtensionAbility from '@ohos.app.form.FormExtensionAbility';
 import formBindingData from '@ohos.app.form.formBindingData';
 import formProvider from '@ohos.app.form.formProvider';
-import Want from '@ohos.app.ability.Want';
-import preferences from '@ohos.data.preferences';
+import { Want } from '@kit.AbilityKit';
+import { preferences } from '@kit.ArkData';
 import { BusinessError } from '@kit.BasicServicesKit';
 
 /** 灵感数据 */
@@ -98,33 +98,6 @@ export default class EntryFormAbility extends FormExtensionAbility {
     this.removeFormId(formId);
   }
 
-  /** 保存灵感到本地（灵感池） */
-  private async saveInspiration(content: string): Promise<void> {
-    try {
-      const prefs = await preferences.getPreferences(this.context, 'writing_app');
-      // 读取现有灵感列表
-      const stored = await prefs.get('writing_app_inspirations', '') as string;
-      let inspirations: InspirationData[] = [];
-      if (stored) {
-        inspirations = JSON.parse(stored) as InspirationData[];
-      }
-      // 添加新灵感
-      const newItem: InspirationData = {
-        id: Date.now().toString(),
-        content: content,
-        category: 'idea',
-        createTime: this.formatDate(new Date()),
-        fromWidget: 'true',
-        deviceId: ''
-      };
-      inspirations.push(newItem);
-      await prefs.put('writing_app_inspirations', JSON.stringify(inspirations));
-      await prefs.flush();
-    } catch (e) {
-      console.error('[EntryFormAbility] 保存灵感失败: ' + JSON.stringify(e));
-    }
-  }
-
   /** 获取灵感统计：数量和最近内容 */
   private async getInspirationStats(): Promise<InspirationStats> {
     try {
@@ -177,14 +150,5 @@ export default class EntryFormAbility extends FormExtensionAbility {
     } catch (e) {
       console.error('[EntryFormAbility] 移除formId失败: ' + JSON.stringify(e));
     }
-  }
-
-  private formatDate(date: Date): string {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    const h = String(date.getHours()).padStart(2, '0');
-    const min = String(date.getMinutes()).padStart(2, '0');
-    return `${y}-${m}-${d} ${h}:${min}`;
   }
 }

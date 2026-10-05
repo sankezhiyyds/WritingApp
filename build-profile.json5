@@ -7,11 +7,24 @@
         "material": {
           "certpath": "C:\\Users\\taxia\\.ohos\\config\\default_WritingApp_C1btk0Hzb3vxgotuXLO5Rz7Th_t6qEJI55SbzrGUY4Q=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001A68982380B1C171140D59AB8DB66DC1C6988C6C6228B29A6A44281352BB31D6DA36EBD35C5F65",
+          "keyPassword": "0000001B872A5E75C0AC60D7C27BB3306A9556D0E7AF9161B75464EF4E2C4DB37B94D1B1244D10E4CAEEA4",
           "profile": "C:\\Users\\taxia\\.ohos\\config\\default_WritingApp_C1btk0Hzb3vxgotuXLO5Rz7Th_t6qEJI55SbzrGUY4Q=.p7b",
           "signAlg": "SHA256withECDSA",
           "storeFile": "C:\\Users\\taxia\\.ohos\\config\\default_WritingApp_C1btk0Hzb3vxgotuXLO5Rz7Th_t6qEJI55SbzrGUY4Q=.p12",
-          "storePassword": "0000001ABA6BF61D1696A5FF4DA01DEA0DCEA3A1EED3215D6239E5CCAFE9A89C563E2EAC5FC83B565058"
+          "storePassword": "0000001B74C66F774D3AB8CB3EFBC20916C84B9CC03F84AF22B30E7E3FCD260197E29C43CAF6E556A87BD3"
+        }
+      },
+      {
+        "name": "release",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "D:/Huawei/release.cer",
+          "keyAlias": "release",
+          "keyPassword": "0000001DD308BDC132D8F11DD07985EFD1CE27A390F107F910B635681E4451A0304655772C1835953E3C55480F",
+          "profile": "D:/Huawei/releaseRelease.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "D:/Huawei/release.p12",
+          "storePassword": "0000001D4091323890BFC6E0D01F7DA0A2BC1DC2F3A18A8C3ED9639AFA56608E91B6C772A86A02B5DA94383CDF"
         }
       }
     ],
@@ -19,9 +32,12 @@
       {
         "name": "default",
         "signingConfig": "default",
-        "compatibleSdkVersion": "6.0.0(20)",
-        "targetSdkVersion": "6.0.0(20)",
-        "runtimeOS": "HarmonyOS"
+        "compatibleSdkVersion": "6.1.1(24)",
+        "targetSdkVersion": "6.1.1(24)",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "nativeCompiler": "BiSheng"
+        }
       }
     ],
     "buildModeSet": [

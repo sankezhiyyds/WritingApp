@@ -1,5 +1,5 @@
-import preferences from '@ohos.data.preferences';
-import common from '@ohos.app.ability.common';
+import { preferences } from '@kit.ArkData';
+import { common } from '@kit.AbilityKit';
 
 export interface SettingsData {
   customPrompt: string;

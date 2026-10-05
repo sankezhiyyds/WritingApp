@@ -153,6 +153,10 @@
       "value": "用于发现附近设备，实现跨设备内容传递"
     },
     {
+      "name": "permission_reason_internet",
+      "value": "用于连接华为云盘，实现数据云同步"
+    },
+    {
       "name": "permission_reason_microphone",
       "value": "用于灵感池语音输入，将语音识别为文字"
     }

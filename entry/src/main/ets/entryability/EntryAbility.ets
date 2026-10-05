@@ -1,12 +1,9 @@
-import UIAbility from '@ohos.app.ability.UIAbility';
-import Want from '@ohos.app.ability.Want';
-import AbilityConstant from '@ohos.app.ability.AbilityConstant';
-import window from '@ohos.window';
-import preferences from '@ohos.data.preferences';
+import { UIAbility, Want, AbilityConstant } from '@kit.AbilityKit';
+import { window } from '@kit.ArkUI';
+import { preferences } from '@kit.ArkData';
 import { workManager } from '../model/WorkManager';
 import { settingsManager } from '../model/SettingsManager';
 import { responsiveManager } from '../model/ResponsiveManager';
-import { aiService } from '../model/AIService';
 import { permissionManager } from '../model/PermissionManager';
 import { huaweiAuthService } from '../model/HuaweiAuthService';
 import { cloudSyncService } from '../model/CloudSyncService';
@@ -38,7 +35,7 @@ export default class EntryAbility extends UIAbility {
     }
   }
 
-  onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
+  onCreate(want: Want, _launchParam: AbilityConstant.LaunchParam): void {
     console.info('[EntryAbility] onCreate');
     console.info('[EntryAbility] VERSION=v5');
     // 冷启动：处理来自原子卡片的跳转目标
@@ -46,7 +43,6 @@ export default class EntryAbility extends UIAbility {
     workManager.init(this.context);
     settingsManager.init(this.context);
     responsiveManager.init(this.context);
-    aiService.setContext(this.context);
     permissionManager.init(this.context);
     // 初始化华为账号认证服务
     huaweiAuthService.init(this.context);

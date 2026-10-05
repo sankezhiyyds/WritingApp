@@ -3,7 +3,7 @@ import fileIo from '@ohos.file.fs';
 import { systemResourceMonitor } from './SystemResourceMonitor';
 import { loadModel as nativeLoadModel, generate as nativeGenerate,
   unloadModel as nativeUnloadModel, isModelLoaded as nativeIsModelLoaded,
-  getModelInfo as nativeGetModelInfo, isStubMode as nativeIsStubMode,
+  getModelInfo as nativeGetModelInfo,
   abort as nativeAbort } from 'libgguf.so';
 
 /**
@@ -164,6 +164,7 @@ class GGUFServiceClass {
 
     if (this.nativeAvailable) {
       try {
+        // eslint-disable-next-line @typescript-eslint/await-thenable
         const success = await nativeLoadModel(params.modelPath,
           params.contextLength ?? 1024, params.threads ?? 2);
         if (success) {
@@ -243,8 +244,8 @@ class GGUFServiceClass {
         // 空闲看门狗：只要 token 持续产出就重置计时器，仅"长时间无任何token"才判定超时。
         // 注意：prefill 阶段（喂入整个 prompt，含上下文/历史对话）onToken 不触发，
         // CPU 推理 7B 级别模型 prefill 2000+ tokens 可能耗时数分钟，故阈值需足够大。
-        const idleTimeoutMs = 300000; // 空闲阈值 5min，覆盖 prefill + 首token
-        const totalTimeoutMs = 600000; // 总兜底上限 10min，防真正死锁永久挂起
+        const idleTimeoutMs = 60000;  // 空闲阈值 60s，覆盖 prefill + 首token
+        const totalTimeoutMs = 120000; // 总兜底上限 120s，防真正死锁永久挂起
         let idleTimer: number = 0;
         let totalTimer: number = 0;
         const clearTimers = () => {
@@ -284,6 +285,7 @@ class GGUFServiceClass {
           }
         };
 
+        // eslint-disable-next-line @typescript-eslint/await-thenable
         const text = await nativeGenerate(params.prompt, maxTokens, temperature, topP, wrappedOnToken);
         clearTimers();
         const resultText = (text != null && text != undefined) ? String(text) : '';

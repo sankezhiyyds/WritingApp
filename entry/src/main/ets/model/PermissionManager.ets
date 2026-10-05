@@ -1,6 +1,4 @@
-import abilityAccessCtrl, { PermissionRequestResult, Permissions } from '@ohos.abilityAccessCtrl';
-import bundleManager from '@ohos.bundle.bundleManager';
-import common from '@ohos.app.ability.common';
+import { abilityAccessCtrl, Permissions, bundleManager, common } from '@kit.AbilityKit';
 import { settingsManager } from './SettingsManager';
 
 /** 权限项元信息 */
@@ -32,15 +30,7 @@ export class PermissionManager {
 
   /** 应用声明的运行时权限列表（与 module.json5 requestPermissions 对应） */
   getPermissionItems(): PermissionItem[] {
-    const granted = settingsManager.settings.grantedPermissions;
-    return [
-      {
-        permission: 'ohos.permission.READ_MEDIA',
-        name: '文件读取',
-        reason: '用于加载本地字体文件(.ttf/.otf)和AI模型文件(.gguf)',
-        granted: granted.indexOf('ohos.permission.READ_MEDIA') !== -1
-      }
-    ];
+    return [];
   }
 
   /** 检查单个权限是否已授予 */
