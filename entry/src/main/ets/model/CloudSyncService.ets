@@ -226,6 +226,61 @@ export class CloudSyncService {
     }
   }
 
+  /** 将"创意写作"文件夹中的JSON备份文件复制到云目录 */
+  private async uploadBackupFiles(): Promise<boolean> {
+    if (!this.context) return false;
+    const backupDir = this.context.filesDir + '/创意写作';
+    const cloudDir = await this.ensureCloudDir();
+    if (!cloudDir) return false;
+    // 检查"创意写作"目录是否存在
+    try {
+      fileIo.accessSync(backupDir);
+    } catch (_e) {
+      console.info('[CloudSyncService] 创意写作目录不存在，跳过备份上传');
+      return true; // 目录不存在不算失败
+    }
+    try {
+      // 确保backup子目录存在
+      const backupCloudDir = cloudDir + 'backup/';
+      try {
+        if (!fileIo.accessSync(backupCloudDir)) {
+          fileIo.mkdirSync(backupCloudDir, true);
+        }
+      } catch (_e) {
+        try {
+          fileIo.mkdirSync(backupCloudDir, true);
+        } catch (_e2) {
+          // 已存在或创建失败
+        }
+      }
+      // 读取"创意写作"文件夹中的所有文件
+      const files = fileIo.listFileSync(backupDir);
+      let count = 0;
+      for (const fileName of files) {
+        if (fileName.endsWith('.json')) {
+          const srcPath = backupDir + '/' + fileName;
+          const dstPath = backupCloudDir + fileName;
+          // 读取源文件
+          const srcFile = fileIo.openSync(srcPath, fileIo.OpenMode.READ_ONLY);
+          const stat = fileIo.statSync(srcFile.fd);
+          const buf = new ArrayBuffer(stat.size);
+          fileIo.readSync(srcFile.fd, buf);
+          fileIo.closeSync(srcFile);
+          // 写入云目录
+          const dstFile = fileIo.openSync(dstPath, fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
+          fileIo.writeSync(dstFile.fd, buf);
+          fileIo.closeSync(dstFile);
+          count++;
+        }
+      }
+      console.info(`[CloudSyncService] 已上传${count}个备份文件到云目录`);
+      return true;
+    } catch (e) {
+      console.error('[CloudSyncService] 上传备份文件失败: ' + JSON.stringify(e));
+      return false;
+    }
+  }
+
   // ==================== 核心同步逻辑 ====================
 
   /**
@@ -249,10 +304,10 @@ export class CloudSyncService {
         if (!resolved) {
           resolved = true;
           this.syncPromiseResolve = null;
-          console.error('[CloudSyncService] 同步超时(30s)');
-          resolve(false);
+          console.warn('[CloudSyncService] 同步等待超时(5s)，继续执行');
+          resolve(true);
         }
-      }, 30000);
+      }, 5000);
       this.fileSync!.start().then(() => {
         console.info('[CloudSyncService] fileSync.start() 成功，等待同步完成...');
       }).catch((err: BusinessError) => {
@@ -311,14 +366,23 @@ export class CloudSyncService {
       const recyclePath = await this.writeJsonToCloud('recycle_bin.json', recycleBinData);
       const inspirationPath = await this.writeJsonToCloud('inspirations.json', inspirationData);
 
-      const uploadSuccess = worksPath !== '' && recyclePath !== '' && inspirationPath !== '';
-      console.info('[CloudSyncService] 步骤3完成: uploadSuccess=' + uploadSuccess);
+      // 同时将"创意写作"文件夹中的JSON备份文件复制到云目录
+      const backupUploaded = await this.uploadBackupFiles();
 
-      // 第四步：触发同步，将本地变更上传到云端
+      const uploadSuccess = worksPath !== '' && recyclePath !== '' && inspirationPath !== '';
+      console.info('[CloudSyncService] 步骤3完成: uploadSuccess=' + uploadSuccess + ', backupUploaded=' + backupUploaded);
+
+      // 第四步：触发同步上传（不等待完成，系统会自动同步 cloudFileDir 中的文件）
       if (uploadSuccess) {
-        console.info('[CloudSyncService] 步骤4: 触发同步，上传到云端...');
-        const pushSyncOk = await this.triggerSyncAndWait();
-        console.info('[CloudSyncService] 步骤4完成: pushSyncOk=' + pushSyncOk);
+        console.info('[CloudSyncService] 步骤4: 触发同步上传(异步)...');
+        if (this.fileSync) {
+          this.fileSync.start().then(() => {
+            console.info('[CloudSyncService] push fileSync.start() 已触发');
+          }).catch((e: BusinessError) => {
+            console.warn('[CloudSyncService] push fileSync.start() 异常: ' + e.message);
+          });
+        }
+        console.info('[CloudSyncService] 步骤4完成: 已触发上传');
       }
 
       // 更新同步时间

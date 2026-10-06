@@ -1,4 +1,4 @@
-import { TemplateInfo, templateList } from '../model/TemplateModel';
+﻿import { TemplateInfo, templateList } from '../model/TemplateModel';
 import { WorkItem, workManager, BookshelfFolder, ArchiveFolder, RecycleBinItem, InspirationItem } from '../model/WorkManager';
 import { OutlineManagementPanel } from '../components/OutlineManagementPanel';
 import { RectShape, promptAction } from '@kit.ArkUI';
@@ -13,6 +13,7 @@ import { responsiveManager, BreakpointType } from '../model/ResponsiveManager';
 import { permissionManager, PermissionItem, PermissionResult } from '../model/PermissionManager';
 import picker from '@ohos.file.picker';
 import fileIo from '@ohos.file.fs';
+import { util } from '@kit.ArkTS';
 import formProvider from '@ohos.app.form.formProvider';
 import formBindingData from '@ohos.app.form.formBindingData';
 import { preferences } from '@kit.ArkData';
@@ -1287,14 +1288,14 @@ struct Index {
       ForEach(this.recycleBinItems, (item: RecycleBinItem) => {
         Row() {
           Column() {
-            Text('🗑')
+            Text(item.itemType === 'inspiration' ? '💡' : '📄')
               .fontSize(this.sf(18))
               .fontColor('#FFFFFF')
           }
           .width(40)
           .height(40)
           .borderRadius(8)
-          .backgroundColor('#EF4444')
+          .backgroundColor(item.itemType === 'inspiration' ? '#F59E0B' : '#EF4444')
           .justifyContent(FlexAlign.Center)
           .alignItems(HorizontalAlign.Center)
 
@@ -1305,7 +1306,7 @@ struct Index {
               .fontColor(this.textColor)
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
-            Text('删除时间: ' + item.deleteTime)
+            Text((item.itemType === 'inspiration' ? '灵感 · ' : '作品 · ') + item.deleteTime)
               .fontSize(this.sf(11))
               .fontColor('#9CA3AF')
               .margin({ top: 2 })
@@ -1329,7 +1330,8 @@ struct Index {
             .margin({ right: 8 })
             .onClick(() => {
               if (workManager.restoreFromRecycleBin(item.id)) {
-                this.getUIContext().getPromptAction().showToast({ message: '已恢复到书架', duration: 2000 });
+                const restoreMsg = item.itemType === 'inspiration' ? '已恢复到素材区' : '已恢复到书架';
+                this.getUIContext().getPromptAction().showToast({ message: restoreMsg, duration: 2000 });
                 this.refreshMaterialLibrary();
               }
             })
@@ -1462,7 +1464,7 @@ struct Index {
             .onClick(() => {
               this.getUIContext().getPromptAction().showDialog({
                 title: '确认删除',
-                message: '删除此灵感？',
+                message: '删除此灵感？将移入回收站',
                 buttons: [
                   { text: '取消', color: '#9CA3AF' },
                   { text: '删除', color: '#EF4444' }
@@ -1471,7 +1473,7 @@ struct Index {
                 if (data.index === 1) {
                   if (workManager.deleteInspiration(item.id)) {
                     this.refreshMaterialLibrary();
-                    this.getUIContext().getPromptAction().showToast({ message: '已删除', duration: 2000 });
+                    this.getUIContext().getPromptAction().showToast({ message: '已移入回收站', duration: 2000 });
                   }
                 }
               });
@@ -2820,6 +2822,7 @@ struct Index {
           if (this.selectedWorkForMenu) {
             workManager.deleteWork(this.selectedWorkForMenu.id);
             this.refreshKey++;
+            this.getUIContext().getPromptAction().showToast({ message: '已移入回收站', duration: 2000 });
           }
           this.showWorkMenu = false;
         })
@@ -3254,7 +3257,7 @@ struct ShortDramaTab {
   confirmDelete(work: WorkItem) {
     this.getUIContext().getPromptAction().showDialog({
       title: '删除作品',
-      message: `确定删除《${work.title || '未命名作品'}》吗？此操作不可恢复`,
+      message: `确定删除《${work.title || '未命名作品'}》吗？将移入回收站`,
       buttons: [
         { text: '取消', color: '#6B7280' },
         { text: '删除', color: '#EF4444' }
@@ -3262,7 +3265,7 @@ struct ShortDramaTab {
     }).then((result: promptAction.ShowDialogSuccessResponse) => {
       if (result.index === 1) {
         workManager.deleteWork(work.id);
-        this.getUIContext().getPromptAction().showToast({ message: '已删除', duration: 2000 });
+        this.getUIContext().getPromptAction().showToast({ message: '已移入回收站', duration: 2000 });
       }
     }).catch(() => {});
   }
@@ -3586,7 +3589,7 @@ struct NovelTab {
   confirmDelete(work: WorkItem) {
     this.getUIContext().getPromptAction().showDialog({
       title: '删除作品',
-      message: `确定删除《${work.title || '未命名作品'}》吗？此操作不可恢复`,
+      message: `确定删除《${work.title || '未命名作品'}》吗？将移入回收站`,
       buttons: [
         { text: '取消', color: '#6B7280' },
         { text: '删除', color: '#EF4444' }
@@ -3594,7 +3597,7 @@ struct NovelTab {
     }).then((result: promptAction.ShowDialogSuccessResponse) => {
       if (result.index === 1) {
         workManager.deleteWork(work.id);
-        this.getUIContext().getPromptAction().showToast({ message: '已删除', duration: 2000 });
+        this.getUIContext().getPromptAction().showToast({ message: '已移入回收站', duration: 2000 });
       }
     }).catch(() => {});
   }
@@ -3613,8 +3616,6 @@ struct SettingsTab {
   @StorageProp('appFontSize') fontSize: number = 14;
   @StorageProp('appBreakpoint') appBreakpoint: string = 'sm';
   
-  @State showImportPanel: boolean = false;
-  @State importText: string = '';
   @State showPermissionPanel: boolean = false;
   @State permissionItems: PermissionItem[] = [];
   @State showHelpPanel: boolean = false;
@@ -4044,17 +4045,10 @@ struct SettingsTab {
           )
         }
         .onClick(async () => {
-          // 前置检查：未登录华为账号时不允许同步，防止伪同步
-          if (!huaweiAuthService.isLoggedIn()) {
-            this.syncStatusText = '请先登录华为账号';
-            this.getUIContext().getPromptAction().showToast({ message: '请先登录华为账号', duration: 3000 });
-            return;
-          }
           try {
             this.syncStatusText = '同步中...';
             const success = await cloudSyncService.sync();
             if (success) {
-              // 显示真实同步结果（区分设备数/拉取状态），而非笼统"同步成功"
               this.syncStatusText = cloudSyncService.getLastSyncMessage() || '同步完成';
             } else {
               const errMsg = cloudSyncService.getLastErrorMessage();
@@ -4069,20 +4063,21 @@ struct SettingsTab {
           }
         })
 
+
         // ===== 数据管理 =====
         ListItem() {
           this.SectionTitle('数据管理')
         }
 
         ListItem() {
-          this.SettingRow('导出数据', '备份所有作品到本地', true)
+          this.SettingRow('导出数据', '保存书架和素材区到本地JSON文件', true)
         }
         .onClick(() => {
           this.exportData();
         })
 
         ListItem() {
-          this.SettingRow('导入数据', '从备份文件恢复', true)
+          this.SettingRow('导入数据', '从本地JSON文件恢复数据', true)
         }
         .onClick(() => {
           this.importData();
@@ -4449,69 +4444,6 @@ struct SettingsTab {
         })
       }
 
-      // 导入数据面板
-      if (this.showImportPanel) {
-        Stack({ alignContent: Alignment.Center }) {
-          Column() {
-            Text('导入数据')
-              .fontSize(this.sf(16))
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this._textPrimary)
-              .margin({ bottom: 8 })
-            Text('粘贴此前导出的备份JSON，重复作品会自动跳过')
-              .fontSize(this.sf(12))
-              .fontColor('#9CA3AF')
-              .margin({ bottom: 12 })
-            TextArea({ placeholder: '粘贴备份JSON内容...' })
-              .width('100%')
-              .height(160)
-              .fontSize(this.sf(13))
-              .backgroundColor(this._inputBg)
-              .borderRadius(8)
-              .padding(12)
-              .onChange((value: string) => {
-                this.importText = value;
-              })
-            Row() {
-              Button('取消')
-                .fontSize(this.sf(14))
-                .fontColor(this._cancelText)
-                .backgroundColor(this._cancelBg)
-                .borderRadius(20)
-                .height(40)
-                .layoutWeight(1)
-                .margin({ right: 12 })
-                .onClick(() => {
-                  this.showImportPanel = false;
-                })
-              Button('导入')
-                .fontSize(this.sf(14))
-                .fontColor('#FFFFFF')
-                .backgroundColor('#FF2D55')
-                .borderRadius(20)
-                .height(40)
-                .layoutWeight(1)
-                .onClick(() => {
-                  this.doImportData();
-                })
-            }
-            .width('100%')
-            .margin({ top: 16 })
-          }
-          .width('100%')
-          .padding(20)
-          .backgroundColor('#FFFFFF')
-          .border({ width: 1, color: this.cardBorder })
-          .borderRadius(16)
-          .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
-          .margin({ left: 24, right: 24, top: 40, bottom: 40 })
-        }
-        .width('100%')
-        .height('100%')
-        .backgroundColor(Color.Transparent)
-        .position({ x: 0, y: 0 })
-      }
-
       // 权限管理面板
       if (this.showPermissionPanel) {
         Stack({ alignContent: Alignment.Center }) {
@@ -4619,7 +4551,7 @@ struct SettingsTab {
                   .fontColor(this._textPrimary)
                   .margin({ bottom: 8 })
                   .alignSelf(ItemAlign.Start)
-                Text('Q: AI生成失败怎么办？\nA: 请检查设置中的本地GGUF模型配置是否正确，也可尝试调大AI超时时间。\n\nQ: 作品如何备份？\nA: 设置 → 导出数据，将备份JSON复制保存；换设备后用"导入数据"恢复。\n\nQ: 版本历史在哪里？\nA: 打开作品后点击底部"历史"按钮，可预览并恢复任意历史版本。')
+                Text('Q: AI生成失败怎么办？\nA: 请检查设置中的本地GGUF模型配置是否正确，也可尝试调大AI超时时间。\n\nQ: 作品如何备份？\nA: 设置 → 导出数据，选择保存位置将书架和素材区打包为JSON文件；换设备后用"导入数据"选择JSON文件恢复。\n\nQ: 版本历史在哪里？\nA: 打开作品后点击底部"历史"按钮，可预览并恢复任意历史版本。')
                   .fontSize(this.sf(12))
                   .fontColor(this._textSecondary)
                   .margin({ bottom: 16 })
@@ -4825,34 +4757,64 @@ struct SettingsTab {
     }).catch(() => {});
   }
 
-  exportData() {
-    const json = workManager.exportAll();
-    const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, json);
-    const systemPasteboard = pasteboard.getSystemPasteboard();
-    systemPasteboard.setData(pasteData).then(() => {
-      this.getUIContext().getPromptAction().showToast({ message: `已导出${workManager.getAllWorks().length}部作品，备份JSON已复制到剪贴板`, duration: 3000 });
-    }).catch(() => {
-      this.getUIContext().getPromptAction().showToast({ message: '导出失败，请重试', duration: 2000 });
-    });
-  }
-
-  importData() {
-    this.importText = '';
-    this.showImportPanel = true;
-  }
-
-  doImportData() {
-    const text = this.importText.trim();
-    if (!text) {
-      this.getUIContext().getPromptAction().showToast({ message: '请先粘贴备份JSON内容', duration: 2000 });
-      return;
+  async exportData() {
+    try {
+      const json = workManager.exportAllData();
+      const now = new Date();
+      const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+      // 使用系统文件保存选择器，让用户选择保存位置
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      const documentSaveOptions = new picker.DocumentSaveOptions();
+      documentSaveOptions.newFileNames = [`创意写作_${ts}.json`];
+      documentSaveOptions.fileSuffixChoices = ['文档|.json'];
+      const savePicker = new picker.DocumentViewPicker(ctx);
+      const uris = await savePicker.save(documentSaveOptions);
+      if (!uris || uris.length === 0) {
+        return; // 用户取消
+      }
+      const uri = uris[0];
+      const file = fileIo.openSync(uri, fileIo.OpenMode.READ_WRITE);
+      fileIo.writeSync(file.fd, json);
+      fileIo.closeSync(file);
+      const workCount = workManager.getAllWorks().length;
+      const folderCount = workManager.getFolders().length;
+      const inspCount = workManager.getInspirations().length;
+      this.getUIContext().getPromptAction().showToast({
+        message: `已导出${workCount}部作品、${folderCount}个文件夹、${inspCount}条素材\n文件: 创意写作_${ts}.json`,
+        duration: 4000
+      });
+    } catch (e) {
+      console.error('[Index] 导出数据失败: ' + JSON.stringify(e));
+      this.getUIContext().getPromptAction().showToast({ message: '导出失败: ' + (e as Error).message, duration: 3000 });
     }
-    const count = workManager.importWorks(text);
-    this.showImportPanel = false;
-    if (count > 0) {
-      this.getUIContext().getPromptAction().showToast({ message: `成功导入${count}部作品`, duration: 2000 });
-    } else {
-      this.getUIContext().getPromptAction().showToast({ message: '未导入新作品（内容无效或已存在）', duration: 2000 });
+  }
+
+  async importData() {
+    try {
+      const docPicker = new picker.DocumentViewPicker();
+      const options = new picker.DocumentSelectOptions();
+      options.maxSelectNumber = 1;
+      options.fileSuffixFilters = ['.json'];
+      const uris = await docPicker.select(options);
+      if (!uris || uris.length === 0) {
+        return;
+      }
+      const uri = uris[0];
+      const file = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);
+      const stat = fileIo.statSync(file.fd);
+      const buf = new ArrayBuffer(stat.size);
+      fileIo.readSync(file.fd, buf);
+      fileIo.closeSync(file);
+      const decoder = util.TextDecoder.create('utf-8');
+      const text = decoder.decodeToString(new Uint8Array(buf));
+      const result = workManager.importAllData(text);
+      this.getUIContext().getPromptAction().showToast({
+        message: `导入完成: ${result}`,
+        duration: 4000
+      });
+    } catch (e) {
+      console.error('[Index] 导入数据失败: ' + JSON.stringify(e));
+      this.getUIContext().getPromptAction().showToast({ message: '导入失败: ' + (e as Error).message, duration: 3000 });
     }
   }
 

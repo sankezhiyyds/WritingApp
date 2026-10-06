@@ -2,6 +2,7 @@ import { preferences } from '@kit.ArkData';
 import { common } from '@kit.AbilityKit';
 import { TemplateInfo } from './TemplateModel';
 import { systemResourceMonitor } from './SystemResourceMonitor';
+import { settingsManager } from './SettingsManager';
 
 /**
  * LRU Cache — 内存缓存最近访问的作品，减少 JSON 反序列化频率
@@ -96,7 +97,7 @@ export interface ArchiveFolder {
   updateTime: string;
 }
 
-/** 回收站条目（从书架/旧档删除的作品） */
+/** 回收站条目（从书架/旧档删除的作品或素材区删除的灵感） */
 export interface RecycleBinItem {
   id: string;
   originalWorkId: string;
@@ -104,8 +105,11 @@ export interface RecycleBinItem {
   content: string;
   templateName: string;
   deleteTime: string;
-  source: string; // bookshelf | archive
+  source: string; // bookshelf | archive | inspiration
   originalFolderId?: string;
+  itemType?: string; // work | inspiration，默认 work
+  category?: string; // 灵感分类（itemType=inspiration 时使用）
+  fromWidget?: boolean; // 灵感是否来自桌面卡片
 }
 
 /** 灵感池条目（原子化服务卡片快速记录） */
@@ -542,14 +546,11 @@ export class WorkManager {
   }
 
   deleteWork(workId: string): boolean {
-    const index = this.works.findIndex(w => w.id === workId);
-    if (index !== -1) {
-      this.works.splice(index, 1);
-      this.workCache.delete(workId);
-      this.scheduleSave();
-      return true;
-    }
-    return false;
+    const work = this.works.find(w => w.id === workId);
+    if (!work) return false;
+    // 移入回收站而非永久删除
+    const source = work.archived ? 'archive' : 'bookshelf';
+    return this.moveToRecycleBin(workId, source);
   }
 
   /** 重命名作品 */
@@ -850,6 +851,115 @@ export class WorkManager {
     }
   }
 
+  /** 导出全部数据（书架+素材区+旧档区+回收站）为JSON字符串 */
+  exportAllData(): string {
+    const data: Record<string, Object> = {
+      'works': this.works,
+      'folders': this.folders,
+      'archiveFolders': this.archiveFolders,
+      'inspirations': this.inspirationItems,
+      'recycleBin': this.recycleBinItems,
+      'customPrompt': (settingsManager.settings.customPrompt || '').trim(),
+      'exportTime': new Date().toISOString(),
+      'version': '2.0'
+    };
+    return JSON.stringify(data);
+  }
+
+  /** 从备份JSON导入全部数据，返回导入统计信息 */
+  importAllData(json: string): string {
+    try {
+      const parsed = JSON.parse(json) as Record<string, Object>;
+      let workCount = 0;
+      let folderCount = 0;
+      let archiveFolderCount = 0;
+      let inspirationCount = 0;
+      let recycleCount = 0;
+
+      // 导入作品
+      const works = parsed['works'];
+      if (works && Array.isArray(works)) {
+        const workArr = works as WorkItem[];
+        for (const item of workArr) {
+          if (item && item.id && !this.works.some(w => w.id === item.id)) {
+            this.works.push(item);
+            workCount++;
+          }
+        }
+      }
+
+      // 导入书架文件夹
+      const folders = parsed['folders'];
+      if (folders && Array.isArray(folders)) {
+        const folderArr = folders as BookshelfFolder[];
+        for (const item of folderArr) {
+          if (item && item.id && !this.folders.some(f => f.id === item.id)) {
+            this.folders.push(item);
+            folderCount++;
+          }
+        }
+      }
+
+      // 导入旧档区文件夹
+      const archiveFolders = parsed['archiveFolders'];
+      if (archiveFolders && Array.isArray(archiveFolders)) {
+        const archiveArr = archiveFolders as ArchiveFolder[];
+        for (const item of archiveArr) {
+          if (item && item.id && !this.archiveFolders.some(f => f.id === item.id)) {
+            this.archiveFolders.push(item);
+            archiveFolderCount++;
+          }
+        }
+      }
+
+      // 导入灵感
+      const inspirations = parsed['inspirations'];
+      if (inspirations && Array.isArray(inspirations)) {
+        const inspArr = inspirations as InspirationItem[];
+        for (const item of inspArr) {
+          if (item && item.id && !this.inspirationItems.some(i => i.id === item.id)) {
+            this.inspirationItems.push(item);
+            inspirationCount++;
+          }
+        }
+      }
+
+      // 导入回收站
+      const recycleBin = parsed['recycleBin'];
+      if (recycleBin && Array.isArray(recycleBin)) {
+        const recycleArr = recycleBin as RecycleBinItem[];
+        for (const item of recycleArr) {
+          if (item && item.id && !this.recycleBinItems.some(r => r.id === item.id)) {
+            this.recycleBinItems.push(item);
+            recycleCount++;
+          }
+        }
+      }
+
+      // 导入自定义提示词（非空白时覆盖）
+      let promptImported = false;
+      const customPrompt = parsed['customPrompt'];
+      if (customPrompt && typeof customPrompt === 'string') {
+        const promptText = (customPrompt as string).trim();
+        if (promptText) {
+          settingsManager.settings.customPrompt = promptText;
+          settingsManager.save();
+          promptImported = true;
+        }
+      }
+
+      const total = workCount + folderCount + archiveFolderCount + inspirationCount + recycleCount;
+      if (total > 0) {
+        this.scheduleSave();
+      }
+      const promptStr = promptImported ? ' 提示词✓' : '';
+      return `作品${workCount} 文件夹${folderCount} 旧档${archiveFolderCount} 素材${inspirationCount} 回收站${recycleCount}${promptStr}`;
+    } catch (e) {
+      console.error('[WorkManager] 导入全部数据失败: ' + JSON.stringify(e));
+      return '导入失败：JSON格式错误';
+    }
+  }
+
   private generateId(): string {
     return 'work_' + Date.now() + '_' + Math.random().toString(36).substring(2, 11);
   }
@@ -1077,11 +1187,13 @@ export class WorkManager {
       templateName: work.templateName,
       deleteTime: this.formatDate(new Date()),
       source: source,
-      originalFolderId: work.folderId
+      originalFolderId: work.folderId,
+      itemType: 'work'
     };
     this.recycleBinItems.push(item);
-    // 从works中移除
+    // 从works中移除并清理缓存
     this.works = this.works.filter(w => w.id !== workId);
+    this.workCache.delete(workId);
     this.scheduleSave();
     return true;
   }
@@ -1090,6 +1202,20 @@ export class WorkManager {
   restoreFromRecycleBin(recycleId: string): boolean {
     const item = this.recycleBinItems.find(r => r.id === recycleId);
     if (!item) return false;
+    // 恢复灵感
+    if (item.itemType === 'inspiration') {
+      const restoredInspiration: InspirationItem = {
+        id: item.originalWorkId,
+        content: item.content,
+        category: item.category || 'note',
+        createTime: this.formatDate(new Date()),
+        fromWidget: item.fromWidget || false
+      };
+      this.inspirationItems.push(restoredInspiration);
+      this.recycleBinItems = this.recycleBinItems.filter(r => r.id !== recycleId);
+      this.scheduleSave();
+      return true;
+    }
     // 恢复为works
     const restoredWork: WorkItem = {
       id: item.originalWorkId,
@@ -1151,15 +1277,27 @@ export class WorkManager {
     return this.inspirationItems;
   }
 
-  /** 删除灵感 */
+  /** 删除灵感（移入回收站） */
   deleteInspiration(inspirationId: string): boolean {
-    const before = this.inspirationItems.length;
+    const inspiration = this.inspirationItems.find(i => i.id === inspirationId);
+    if (!inspiration) return false;
+    // 移入回收站
+    const item: RecycleBinItem = {
+      id: this.generateId(),
+      originalWorkId: inspiration.id,
+      title: inspiration.content.length > 30 ? inspiration.content.substring(0, 30) + '...' : inspiration.content,
+      content: inspiration.content,
+      templateName: '灵感',
+      deleteTime: this.formatDate(new Date()),
+      source: 'inspiration',
+      itemType: 'inspiration',
+      category: inspiration.category,
+      fromWidget: inspiration.fromWidget
+    };
+    this.recycleBinItems.push(item);
     this.inspirationItems = this.inspirationItems.filter(i => i.id !== inspirationId);
-    if (this.inspirationItems.length !== before) {
-      this.scheduleSave();
-      return true;
-    }
-    return false;
+    this.scheduleSave();
+    return true;
   }
 
   /** 更新灵感内容 */
