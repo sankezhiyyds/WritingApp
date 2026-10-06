@@ -61,8 +61,7 @@ export struct SaveDialog {
 
   build() {
     if (this.isVisible) {
-      Stack() {
-        // 对话框主体
+      Stack({ alignContent: Alignment.Center }) {
         Column() {
           // 标题栏
           Row() {
@@ -213,7 +212,7 @@ export struct SaveDialog {
         }
         .width('85%')
         .padding(24)
-        .backgroundColor(this.bgColor)
+        .backgroundColor($r('app.color.card_bg'))
         .border({ width: 1, color: this.cardBorder })
         .borderRadius(16)
         .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
