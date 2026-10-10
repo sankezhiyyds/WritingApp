@@ -142,8 +142,12 @@ export class HuaweiAuthService {
       if (!idToken) return empty;
       const parts = idToken.split('.');
       if (parts.length !== 3) return empty;
-      // JWT payload 是 base64url 编码的 JSON
-      const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      // JWT payload 是 base64url 编码的 JSON，需补齐 padding 使长度为4的倍数
+      let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const padLen = base64.length % 4;
+      if (padLen > 0) {
+        base64 += '='.repeat(4 - padLen);
+      }
       const base64Helper = new util.Base64Helper();
       const bytes = base64Helper.decodeSync(base64);
       const decoder = util.TextDecoder.create('utf-8');
@@ -156,7 +160,8 @@ export class HuaweiAuthService {
       };
       return result;
     } catch (e) {
-      console.error('[HuaweiAuthService] 解析 idToken 失败: ' + JSON.stringify(e));
+      const err = e as Error;
+      console.error('[HuaweiAuthService] 解析 idToken 失败: ' + (err.message || String(e)));
       return empty;
     }
   }

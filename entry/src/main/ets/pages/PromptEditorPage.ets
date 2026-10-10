@@ -1,4 +1,4 @@
-﻿ import { RectShape } from '@kit.ArkUI';
+ import { RectShape } from '@kit.ArkUI';
 import { TemplateField, TemplateInfo, templateList } from '../model/TemplateModel';
 import { WorkItem, workManager, Chapter, WorkVersion } from '../model/WorkManager';
 import { settingsManager } from '../model/SettingsManager';
@@ -529,14 +529,11 @@ struct PromptEditorPage {
         }
       }
     }
-    .width('100%')
+    .layoutWeight(1)
     .height('100%')
     .backgroundColor(this.themeBgColor)
-        .height('100%')
-        .backgroundColor(this.themeBgColor)
-        .layoutWeight(1)
 
-        // AI侧栏（伴随式独立列模式 - 所有设备统一宽度）
+        // AI侧栏（与编辑器1:1对称均分）
         if (this.showAiSidebar) {
           AiSidebar({
             workbenchContent: this.generatedContent,

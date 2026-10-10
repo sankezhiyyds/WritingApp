@@ -1,6 +1,6 @@
 import { settingsManager } from './SettingsManager';
 import { ggufService } from './GGUFService';
-import { GGUFGenerateResult } from './GGUFService';
+import { GGUFGenerateResult, ChatMessage } from './GGUFService';
 
 export interface AIResponse {
   content: string;
@@ -23,12 +23,69 @@ export class AIService {
     return ggufService.isStubMode();
   }
 
+  /** 强制重置推理状态（供 UI 停止按钮调用） */
+  forceReset(): void {
+    ggufService.forceReset();
+  }
+
+  /** 卸载当前模型，下次推理时自动用新参数重新加载 */
+  unloadModel(): void {
+    ggufService.unloadModel();
+  }
+
   /**
    * 本地 GGUF 大模型推理（唯一 AI 后端，无需云端 API / Key）
    * @param onToken 可选的流式回调：每生成若干 token 时被调用，用于实时刷新 UI（效果最佳）
    */
   async callAI(prompt: string, context?: string, onToken?: (token: string) => void): Promise<AIResponse> {
     return await this.callLocalGGUF(prompt, context, onToken);
+  }
+
+  /**
+   * 使用 chat template 的多轮对话推理
+   * @param messages 结构化消息列表（system/user/assistant）
+   * @param onToken 流式回调
+   */
+  async callAIWithChat(messages: ChatMessage[], onToken?: (token: string) => void): Promise<AIResponse> {
+    const settings = settingsManager.settings;
+    const ctxLen = Math.max(512, settings.ggufContextLength ?? 1024);
+    const threads = settings.ggufThreads ?? 0;  // 0 = native层自动检测核心数
+    const maxTokens = Math.max(256, Math.min(1024, settings.ggufMaxTokens ?? 256));
+    const temperature = Math.max(0.4, Math.min(0.8, settings.ggufTemperature ?? 0.6));
+    console.info(`[AIService] callAIWithChat 开始, messages=${messages.length}, ctx=${ctxLen}, threads=${threads}, maxTokens=${maxTokens}, temperature=${temperature}`);
+
+    // 确保模型已加载
+    if (!ggufService.isStubMode() && !ggufService.isModelLoaded()) {
+      const loaded = await ggufService.loadModel({
+        modelPath: settings.localModelPath,
+        contextLength: ctxLen,
+        threads: threads
+      });
+      if (!loaded) {
+        return { content: '', success: false, error: '模型加载失败，请检查文件路径和格式。' };
+      }
+    }
+
+    let result: GGUFGenerateResult;
+    try {
+      result = await ggufService.generateChat({
+        messages: messages,
+        maxTokens: maxTokens,
+        temperature: temperature,
+        topP: 0.9,
+        onToken: onToken
+      });
+    } catch (e) {
+      console.error('[AIService] generateChat 调用异常: ' + e);
+      return { content: '', success: false, error: 'AI 推理调用异常: ' + e };
+    }
+
+    console.info(`[AIService] generateChat返回: success=${result.success}, text长度=${result.text.length}`);
+    return {
+      content: result.text,
+      success: result.success,
+      error: result.error
+    };
   }
 
   private async callLocalGGUF(prompt: string, context?: string, onToken?: (token: string) => void): Promise<AIResponse> {
@@ -54,7 +111,7 @@ export class AIService {
         loaded = await ggufService.loadModel({
           modelPath: settings.localModelPath,
           contextLength: settings.ggufContextLength ?? 2048,
-          threads: settings.ggufThreads ?? 4
+          threads: settings.ggufThreads ?? 0  // 0 = native层自动检测核心数
         });
       } catch (e) {
         // 兜底：模型文件损坏/格式错误时 NAPI 可能抛异常，避免未捕获 rejection

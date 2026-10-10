@@ -7,13 +7,18 @@
 
 // Detect if real llama.cpp is available (same logic as llama_runner.cpp)
 #if __has_include("llama.h")
-  #include "llama.h"
   #define LLAMA_AVAILABLE 1
 #else
   #include "llama_stub.h"
   #define LLAMA_AVAILABLE 0
 #endif
 
+#ifdef LOG_TAG
+#undef LOG_TAG
+#endif
+#ifdef LOG_TAG
+#undef LOG_TAG
+#endif
 #define LOG_TAG "GGUF_NAPI"
 #define LOGI(fmt, ...) OH_LOG_Print(LOG_APP, LOG_INFO, LOG_DOMAIN, LOG_TAG, fmt, ##__VA_ARGS__)
 #define LOGE(fmt, ...) OH_LOG_Print(LOG_APP, LOG_ERROR, LOG_DOMAIN, LOG_TAG, fmt, ##__VA_ARGS__)
@@ -85,8 +90,11 @@ static napi_value LoadModel(napi_env env, napi_callback_info info) {
             if (!g_runner) {
                 g_runner = std::make_unique<LlamaRunner>();
             }
+            LOGI("LoadModel start: path=%{public}s ctx=%{public}d threads=%{public}d",
+                 d->modelPath.c_str(), d->contextLength, d->threads);
             d->success = g_runner->loadModel(d->modelPath, d->contextLength, d->threads);
-            LOGI("LoadModel result: %{public}d", d->success);
+            LOGI("LoadModel result: success=%{public}d isLoaded=%{public}d path=%{public}s",
+                 d->success, g_runner->isLoaded() ? 1 : 0, d->modelPath.c_str());
         },
         // Complete on main thread — resolve the Promise
         [](napi_env env, napi_status status, void* rawData) {
@@ -225,8 +233,166 @@ static napi_value Generate(napi_env env, napi_callback_info info) {
     return promise;
 }
 
+// ─── generateChat(messages, maxTokens, temperature, topP, callback): Promise<string> ───
+// messages: Array<{role: string, content: string}>
+static napi_value GenerateChat(napi_env env, napi_callback_info info) {
+    size_t argc = 5;
+    napi_value args[5];
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    // Parse messages array -> vector<ChatMessage>
+    std::vector<ChatMessage> messages;
+    bool is_array;
+    napi_is_array(env, args[0], &is_array);
+    if (is_array) {
+        uint32_t msgCount = 0;
+        napi_get_array_length(env, args[0], &msgCount);
+        for (uint32_t i = 0; i < msgCount; i++) {
+            napi_value msgObj;
+            napi_get_element(env, args[0], i, &msgObj);
+            napi_value roleVal, contentVal;
+            napi_get_named_property(env, msgObj, "role", &roleVal);
+            napi_get_named_property(env, msgObj, "content", &contentVal);
+            size_t roleLen = 0, contentLen = 0;
+            napi_get_value_string_utf8(env, roleVal, nullptr, 0, &roleLen);
+            napi_get_value_string_utf8(env, contentVal, nullptr, 0, &contentLen);
+            std::string role(roleLen + 1, '\0');
+            std::string content(contentLen + 1, '\0');
+            napi_get_value_string_utf8(env, roleVal, &role[0], roleLen + 1, &roleLen);
+            napi_get_value_string_utf8(env, contentVal, &content[0], contentLen + 1, &contentLen);
+            role.resize(roleLen);
+            content.resize(contentLen);
+            messages.push_back({role, content});
+        }
+    }
+
+    int32_t maxTokens = 512;
+    napi_get_value_int32(env, args[1], &maxTokens);
+
+    double temperature = 0.8;
+    napi_get_value_double(env, args[2], &temperature);
+
+    double topP = 0.9;
+    napi_get_value_double(env, args[3], &topP);
+
+    napi_value callback = args[4];
+
+    if (!g_runner || !g_runner->isLoaded()) {
+        LOGE("GenerateChat rejected: model not loaded (g_runner=%{public}d, loaded=%{public}d)",
+             g_runner ? 1 : 0, (g_runner && g_runner->isLoaded()) ? 1 : 0);
+        napi_value errStr;
+        napi_create_string_utf8(env, "model not loaded", NAPI_AUTO_LENGTH, &errStr);
+        napi_deferred rejectDeferred;
+        napi_value rejectPromise;
+        napi_create_promise(env, &rejectDeferred, &rejectPromise);
+        napi_reject_deferred(env, rejectDeferred, errStr);
+        return rejectPromise;
+    }
+
+    // Threadsafe function for streaming tokens
+    napi_value resourceName;
+    napi_create_string_utf8(env, "ggufChatCallback", NAPI_AUTO_LENGTH, &resourceName);
+
+    napi_threadsafe_function tsfn;
+    napi_status tsfnStatus = napi_create_threadsafe_function(
+        env, callback, nullptr, resourceName, 0, 1, nullptr, nullptr, nullptr,
+        [](napi_env env, napi_value cb, void* context, void* data) {
+            // Runs on main thread — call the JS callback with token string
+            const char* token = static_cast<const char*>(data);
+            if (token) {
+                LOGI("tsfn call_js_cb: token='%s' len=%zu", token, strlen(token));
+                if (cb) {
+                    napi_value tokenStr;
+                    napi_create_string_utf8(env, token, NAPI_AUTO_LENGTH, &tokenStr);
+                    napi_value undefined;
+                    napi_get_undefined(env, &undefined);
+                    napi_status callStatus = napi_call_function(env, undefined, cb, 1, &tokenStr, nullptr);
+                    if (callStatus != napi_ok) {
+                        LOGE("tsfn call_js_cb: napi_call_function failed, status=%d", (int)callStatus);
+                    }
+                } else {
+                    LOGE("tsfn call_js_cb: cb is null!");
+                }
+                delete[] token;
+            }
+        },
+        &tsfn
+    );
+    if (tsfnStatus != napi_ok || tsfn == nullptr) {
+        LOGE("GenerateChat: threadsafe function create failed, status=%{public}d", tsfnStatus);
+        napi_value errStr;
+        napi_create_string_utf8(env, "threadsafe function create failed", NAPI_AUTO_LENGTH, &errStr);
+        napi_deferred rejectDeferred;
+        napi_value rejectPromise;
+        napi_create_promise(env, &rejectDeferred, &rejectPromise);
+        napi_reject_deferred(env, rejectDeferred, errStr);
+        return rejectPromise;
+    }
+    napi_acquire_threadsafe_function(tsfn);
+
+    struct ChatAsyncData {
+        napi_async_work work;
+        napi_env env;
+        napi_deferred deferred;
+        napi_threadsafe_function tsfn;
+        std::vector<ChatMessage> messages;
+        int32_t maxTokens;
+        double temperature;
+        double topP;
+        std::string result;
+    };
+
+    auto* data = new ChatAsyncData();
+    data->env = env;
+    data->messages = std::move(messages);
+    data->maxTokens = maxTokens;
+    data->temperature = temperature;
+    data->topP = topP;
+    data->tsfn = tsfn;
+
+    napi_value promise;
+    napi_create_promise(env, &data->deferred, &promise);
+
+    napi_value asyncName;
+    napi_create_string_utf8(env, "ggufGenerateChat", NAPI_AUTO_LENGTH, &asyncName);
+    napi_create_async_work(
+        env, nullptr, asyncName,
+        [](napi_env env, void* userData) {
+            auto* d = static_cast<ChatAsyncData*>(userData);
+            LOGI("GenerateChat Execute: start, msgs=%zu, maxTokens=%d", d->messages.size(), d->maxTokens);
+            d->result = g_runner->generateChat(
+                d->messages, d->maxTokens, (float)d->temperature, (float)d->topP,
+                [d](const std::string& piece) {
+                    char* tokenCopy = new char[piece.size() + 1];
+                    memcpy(tokenCopy, piece.c_str(), piece.size() + 1);
+                    napi_status tsfnStatus = napi_call_threadsafe_function(d->tsfn, tokenCopy, napi_tsfn_nonblocking);
+                    if (tsfnStatus != napi_ok) {
+                        LOGE("GenerateChat: napi_call_threadsafe_function failed, status=%d, piece='%s'", (int)tsfnStatus, piece.c_str());
+                    }
+                }
+            );
+            LOGI("GenerateChat Execute: done, result_len=%zu", d->result.size());
+        },
+        [](napi_env env, napi_status status, void* userData) {
+            auto* d = static_cast<ChatAsyncData*>(userData);
+            LOGI("GenerateChat Complete: status=%d, result_len=%zu, result='%.100s'", (int)status, d->result.size(), d->result.c_str());
+            napi_value resultStr;
+            napi_create_string_utf8(env, d->result.c_str(), d->result.size(), &resultStr);
+            napi_resolve_deferred(env, d->deferred, resultStr);
+            napi_release_threadsafe_function(d->tsfn, napi_tsfn_release);
+            napi_delete_async_work(env, d->work);
+            delete d;
+        },
+        data, &data->work
+    );
+
+    napi_queue_async_work(env, data->work);
+    return promise;
+}
+
 // ─── unloadModel(): void ───
 static napi_value UnloadModel(napi_env env, napi_callback_info info) {
+    (void)info;
     if (g_runner) {
         g_runner->unloadModel();
         LOGI("Model unloaded");
@@ -238,6 +404,7 @@ static napi_value UnloadModel(napi_env env, napi_callback_info info) {
 
 // ─── isModelLoaded(): boolean ───
 static napi_value IsModelLoaded(napi_env env, napi_callback_info info) {
+    (void)info;
     bool loaded = g_runner && g_runner->isLoaded();
     napi_value result;
     napi_get_boolean(env, loaded, &result);
@@ -246,6 +413,7 @@ static napi_value IsModelLoaded(napi_env env, napi_callback_info info) {
 
 // ─── getModelInfo(): string (JSON) ───
 static napi_value GetModelInfo(napi_env env, napi_callback_info info) {
+    (void)info;
     std::string jsonInfo = g_runner ? g_runner->getModelInfo() : "{}";
     napi_value result;
     napi_create_string_utf8(env, jsonInfo.c_str(), jsonInfo.size(), &result);
@@ -254,6 +422,7 @@ static napi_value GetModelInfo(napi_env env, napi_callback_info info) {
 
 // ─── abort(): void ───
 static napi_value Abort(napi_env env, napi_callback_info info) {
+    (void)info;
     if (g_runner) {
         g_runner->abort();
     }
@@ -264,6 +433,7 @@ static napi_value Abort(napi_env env, napi_callback_info info) {
 
 // ─── isStubMode(): boolean — true if llama.cpp not compiled ───
 static napi_value IsStubMode(napi_env env, napi_callback_info info) {
+    (void)info;
     napi_value result;
     napi_get_boolean(env, LLAMA_AVAILABLE == 0, &result);
     return result;
@@ -275,6 +445,7 @@ static napi_value Init(napi_env env, napi_value exports) {
     napi_property_descriptor desc[] = {
         {"loadModel", nullptr, LoadModel, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"generate", nullptr, Generate, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"generateChat", nullptr, GenerateChat, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"unloadModel", nullptr, UnloadModel, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"isModelLoaded", nullptr, IsModelLoaded, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"getModelInfo", nullptr, GetModelInfo, nullptr, nullptr, nullptr, napi_default, nullptr},
@@ -294,7 +465,7 @@ static napi_module ggufModule = {
     .nm_register_func = Init,
     .nm_modname = "gguf",
     .nm_priv = nullptr,
-    {0},
+    .reserved = {0},
 };
 
 extern "C" __attribute__((constructor)) void RegisterGgufModule(void) {

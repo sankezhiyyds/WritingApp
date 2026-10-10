@@ -1,4 +1,5 @@
 import { aiService } from '../model/AIService';
+import { ChatMessage } from '../model/GGUFService';
 import { settingsManager } from '../model/SettingsManager';
 import { workManager } from '../model/WorkManager';
 import { BreakpointType } from '../model/ResponsiveManager';
@@ -11,6 +12,8 @@ import { pasteboard } from '@kit.BasicServicesKit';
 export interface ConversationRound {
   userMessage: string;
   aiResponse: string;
+  thinking?: string;          // 思考过程（<think>...</think> 标签内容）
+  isThinkingOpen?: boolean;   // 思考面板是否展开
 }
 
 /**
@@ -42,7 +45,7 @@ export struct AiSidebar {
   @Prop templateFields: TemplateField[] = [];
 
   /** AI对话内容 */
-  @State @Watch('rebuildRounds') aiConversation: string = '';
+  @State aiConversation: string = '';
   /** 缓存解析后的对话轮次，避免每帧重复解析 */
   @State cachedRounds: ConversationRound[] = [];
   /** 当前输入 */
@@ -58,6 +61,10 @@ export struct AiSidebar {
   @StorageLink('appBackgroundSave') appBackgroundSaveTimestamp: number = 0;
   /** 流式输出 token 计数器，用于每 N 个 token 自动保存 */
   @State private tokenCount: number = 0;
+  /** 节流定时器：流式输出期间延迟重建 cachedRounds，避免每个 token 触发 UI 全量重渲染 */
+  private rebuildTimer: number = 0;
+  /** 发送防抖定时器：连续点击发送时 250ms 内只执行最后一次 */
+  private sendDebounceTimer: number = 0;
 
   /** 缓存偏好实例 */
   private prefs: preferences.Preferences | null = null;
@@ -144,6 +151,7 @@ export struct AiSidebar {
         if (work && work.aiContent && (work.aiContent as string).length > 0) {
           console.info('[AiSidebar] 从作品数据恢复AI对话，workId=' + this.workId);
           this.aiConversation = work.aiContent as string;
+          this.rebuildRounds();
           this.taskConversations.set(this.taskId, work.aiContent as string);
         }
       }
@@ -157,6 +165,7 @@ export struct AiSidebar {
           const cachedPrompt = await this.prefs.get(this.taskId + '_prompt', '');
           if (cachedConversation && (cachedConversation as string).length > 0) {
             this.aiConversation = cachedConversation as string;
+            this.rebuildRounds();
             // 同步写入内存映射表，供后续任务切换直接使用
             this.taskConversations.set(this.taskId, cachedConversation as string);
           }
@@ -179,12 +188,14 @@ export struct AiSidebar {
               if (targetPrompt && (targetPrompt as string).length > 0) {
                 this.taskPrompts.set(targetTaskId, targetPrompt as string);
               }
-              // 设置 activeFieldKey 恢复任务选择状态
+              // ★ 修复：先同步 previousFieldKey，再设置 activeFieldKey，避免触发 onFieldKeyChange 清空对话
+              this.previousFieldKey = savedFieldKey as string;
               this.activeFieldKey = savedFieldKey as string;
               // 如果内存映射表中有对话，立即恢复
               const memConv = this.taskConversations.get(targetTaskId);
               if (memConv !== undefined) {
                 this.aiConversation = memConv;
+                this.rebuildRounds();
                 this.currentPrompt = this.taskPrompts.get(targetTaskId) || '';
               }
             }
@@ -251,6 +262,13 @@ export struct AiSidebar {
 
   /** workId 变化时自动保存旧作品对话 + 加载新作品对话 */
   onWorkIdChange(newWorkId: string): void {
+    // ★ 修复：AI生成中不执行 workId 切换清空，避免流式输出被中断
+    if (this.isGenerating) {
+      console.warn('[AiSidebar] isGenerating=true，跳过onWorkIdChange清空');
+      this.previousWorkId = newWorkId;
+      return;
+    }
+
     if (this.previousWorkId && this.previousWorkId !== newWorkId) {
       // 保存当前对话到内存中的任务映射表
       const oldTaskId = this.templateId && this.activeFieldKey
@@ -269,7 +287,8 @@ export struct AiSidebar {
     }
 
     // ★ 修复：新建作品时 workId 从 '' → 'realId'，将对话迁移保存到新 workId
-    if ((!this.previousWorkId || this.previousWorkId.length === 0) && newWorkId.length > 0 && this.aiConversation.length > 0) {
+    const isNewWorkMigration = (!this.previousWorkId || this.previousWorkId.length === 0) && newWorkId.length > 0;
+    if (isNewWorkMigration && this.aiConversation.length > 0) {
       const newTaskId = this.templateId && this.activeFieldKey
         ? `ai_task_${newWorkId}_${this.templateId}_${this.activeFieldKey}`
         : `ai_task_${newWorkId}`;
@@ -289,6 +308,9 @@ export struct AiSidebar {
       } catch (e) {
         console.warn('[AiSidebar] 新建作品对话迁移保存失败: ' + e);
       }
+      // ★ 迁移场景：保留对话内容，仅更新 previousWorkId，不清空
+      this.previousWorkId = newWorkId;
+      return;
     }
 
     this.previousWorkId = newWorkId;
@@ -333,6 +355,13 @@ export struct AiSidebar {
   onFieldKeyChange(newFieldKey: string): void {
     if (this.previousFieldKey === newFieldKey) return;
 
+    // ★ 修复：AI生成中不执行 fieldKey 切换清空，避免流式输出被中断
+    if (this.isGenerating) {
+      console.warn('[AiSidebar] isGenerating=true，跳过onFieldKeyChange清空');
+      this.previousFieldKey = newFieldKey;
+      return;
+    }
+
     // 保存当前任务对话到内存映射表（仅当已有有效 fieldKey 时）
     if (this.previousFieldKey.length > 0) {
       const oldTaskId = `ai_task_${this.workId}_${this.templateId}_${this.previousFieldKey}`;
@@ -348,6 +377,7 @@ export struct AiSidebar {
     const cachedConv = this.taskConversations.get(newTaskId);
     if (cachedConv !== undefined) {
       this.aiConversation = cachedConv;
+      this.rebuildRounds();
       this.currentPrompt = this.taskPrompts.get(newTaskId) || '';
       console.info(`[AiSidebar] 已从内存恢复任务(${newFieldKey})对话`);
     } else {
@@ -423,30 +453,79 @@ export struct AiSidebar {
     }
   }
 
-  /** @Watch 回调：对话变更时刷新缓存 */
+  /** 手动调用：对话变更时刷新缓存（固定间隔节流，流式输出期间每 150ms 刷新一次） */
   rebuildRounds(): void {
-    try {
-      this.cachedRounds = this.parseConversationRounds();
-    } catch (e) {
-      console.error('[AiSidebar] rebuildRounds异常: ' + e);
-      this.cachedRounds = [];
-    }
+    // 已有定时器在等待 → 不重置，让它在固定间隔后触发，保证流式期间持续刷新
+    if (this.rebuildTimer !== 0) return;
+    this.rebuildTimer = setTimeout(() => {
+      this.rebuildTimer = 0;
+      try {
+        this.cachedRounds = this.parseConversationRounds();
+      } catch (e) {
+        console.error('[AiSidebar] rebuildRounds异常: ' + e);
+        this.cachedRounds = [];
+      }
+    }, 150);
   }
 
   /** 解析对话字符串为轮次列表 */
   parseConversationRounds(): ConversationRound[] {
     const rounds: ConversationRound[] = [];
-    const parts = this.aiConversation.split('\n\n');
-    for (const part of parts) {
-      const trimmed = part.trim();
+    const conv = this.aiConversation;
+    if (!conv || conv.length === 0) return rounds;
+
+    // 按【用户】标记分割轮次，避免思考内容中的 \n\n 导致错误分割
+    const userMarker = '【用户】';
+    const markerPositions: number[] = [];
+    let searchPos = 0;
+    while (true) {
+      const idx = conv.indexOf(userMarker, searchPos);
+      if (idx < 0) break;
+      markerPositions.push(idx);
+      searchPos = idx + userMarker.length;
+    }
+
+    for (let i = 0; i < markerPositions.length; i++) {
+      const start = markerPositions[i];
+      const end = (i + 1 < markerPositions.length) ? markerPositions[i + 1] : conv.length;
+      const trimmed = conv.substring(start, end).trim();
       if (!trimmed) continue;
-      const userIdx = trimmed.indexOf('【用户】');
+
       const aiIdx = trimmed.indexOf('【AI】');
-      if (userIdx >= 0 && aiIdx >= 0 && aiIdx > userIdx) {
-        const userMsg = trimmed.substring(userIdx + 4, aiIdx).trim();
-        const aiResp = trimmed.substring(aiIdx + 4).trim();
-        if (userMsg.length > 0 || aiResp.length > 0) {
-          rounds.push({ userMessage: userMsg, aiResponse: aiResp });
+      if (aiIdx >= 0) {
+        // 完整轮次：有用户消息 + AI回复
+        const userMsg = trimmed.substring(4, aiIdx).trim();
+        let aiResp = trimmed.substring(aiIdx + 4).trim();
+        // 解析【思考】标记，分离思考过程和正式回复
+        let thinking = '';
+        const thinkIdx = aiResp.indexOf('【思考】');
+        if (thinkIdx >= 0) {
+          const afterThink = aiResp.substring(thinkIdx + 4);
+          const replyIdx = afterThink.indexOf('【回复】');
+          if (replyIdx >= 0) {
+            thinking = afterThink.substring(0, replyIdx).trim();
+            aiResp = afterThink.substring(replyIdx + 4).trim();
+          } else {
+            thinking = afterThink.trim();
+            aiResp = '';
+          }
+        }
+        if (userMsg.length > 0 || aiResp.length > 0 || thinking.length > 0) {
+          const existing = this.cachedRounds.find(r => r.userMessage === userMsg);
+          const hadThinking = existing !== undefined && existing.thinking !== undefined && existing.thinking.length > 0;
+          const autoOpen = thinking.length > 0;
+          rounds.push({
+            userMessage: userMsg,
+            aiResponse: aiResp,
+            thinking: thinking || undefined,
+            isThinkingOpen: (existing && hadThinking) ? existing.isThinkingOpen : autoOpen
+          });
+        }
+      } else {
+        // 待回复轮次：只有【用户】没有【AI】（用户刚发送，AI正在推理）
+        const userMsg = trimmed.substring(4).trim();
+        if (userMsg.length > 0) {
+          rounds.push({ userMessage: userMsg, aiResponse: '', thinking: undefined, isThinkingOpen: false });
         }
       }
     }
@@ -468,9 +547,28 @@ export struct AiSidebar {
     }
   }
 
-  /** 发送AI消息 */
+  /** 发送AI消息（带250ms防抖） */
   async sendAiMessage() {
     if (this.currentPrompt.trim().length === 0) return;
+    if (this.isGenerating) return; // 生成中不响应新请求
+
+    // ── 防抖：250ms 内连续发送只执行最后一次 ──
+    if (this.sendDebounceTimer !== 0) {
+      clearTimeout(this.sendDebounceTimer);
+    }
+    const promptToSend = this.currentPrompt;
+    return new Promise<void>((resolve) => {
+      this.sendDebounceTimer = setTimeout(() => {
+        this.sendDebounceTimer = 0;
+        this.sendAiMessageInner(promptToSend).then(() => resolve());
+      }, 250);
+    });
+  }
+
+  /** sendAiMessage 的实际执行体 */
+  private async sendAiMessageInner(userMessage: string) {
+    console.info('[AiSidebar] sendAiMessageInner, prompt=' + userMessage.length + 'chars, modelPath=' + settingsManager.settings.localModelPath);
+    if (userMessage.trim().length === 0) return;
 
     // 桩模式（预览模式）下无需真实 GGUF 模型文件即可对话
     if (!settingsManager.settings.localModelPath && !aiService.isStubMode()) {
@@ -480,46 +578,157 @@ export struct AiSidebar {
 
     this.isGenerating = true;
     this.tokenCount = 0;
-    const userMessage = this.currentPrompt;
     this.currentPrompt = '';
 
-    // 构建上下文：工作台内容 + 工作标题
-    let context = '';
+    // 构建结构化 chat messages（使用模型内嵌 chat template 格式化）
+    const chatMessages: ChatMessage[] = [];
+
+    // system 消息：自定义提示词 + 工作台上下文
+    let systemContent = '';
+    const customPrompt = (settingsManager.settings.customPrompt || '').trim();
+    if (customPrompt) {
+      systemContent += customPrompt;
+    }
     if (this.workTitle.length > 0) {
-      context += `当前作品：${this.workTitle}\n`;
+      systemContent += (systemContent ? '\n' : '') + `当前作品：${this.workTitle}`;
     }
     if (this.workbenchContent.length > 0) {
-      // 传递工作台内容作为上下文（最多2000字）
-      context += `工作台内容：${this.workbenchContent.substring(0, 2000)}`;
+      // 严格控制 system 上下文，避免 prompt 超过模型 ctx 后预填充过慢/截断
+      systemContent += (systemContent ? '\n' : '') + `工作台内容：${this.workbenchContent.substring(0, 700)}`;
     }
+    if (systemContent.length > 1200) {
+      systemContent = systemContent.substring(0, 1200) + '...';
+    }
+    if (systemContent) {
+      chatMessages.push({ role: 'system', content: systemContent });
+    }
+
+    // 历史对话轮次作为 user/assistant 消息
+    const existingRounds = this.parseConversationRounds();
+
+    // ── 对话历史裁剪：超 KV cache 窗口时从最旧的轮次开始截断 ──
+    // 估算策略：中文/混排按 1 字符约 1 token 保守估算，contextLength 需预留 maxTokens 空间
+    const contextLength = settingsManager.settings.ggufContextLength ?? 1024;
+    const maxTokens = settingsManager.settings.ggufMaxTokens ?? 512;
+    const tokenBudget = contextLength - maxTokens - 64;
+    let estimatedTokens = systemContent.length + userMessage.length;
+    let trimmedRounds = existingRounds;
+    if (estimatedTokens > tokenBudget && existingRounds.length > 1) {
+      // 从最新的轮次往前保留，直到预算耗尽
+      const kept: ConversationRound[] = [];
+      for (let i = existingRounds.length - 1; i >= 0; i--) {
+        const r = existingRounds[i];
+        const roundTokens = r.userMessage.length + r.aiResponse.length + (r.thinking?.length ?? 0);
+        if (estimatedTokens + roundTokens > tokenBudget) break;
+        estimatedTokens += roundTokens;
+        kept.unshift(r);
+      }
+      if (kept.length < existingRounds.length) {
+        console.info(`[AiSidebar] 对话历史裁剪: ${existingRounds.length} → ${kept.length} 轮 (token预算=${tokenBudget})`);
+      }
+      trimmedRounds = kept;
+    }
+
+    for (const round of trimmedRounds) {
+      if (round.userMessage.length > 0) {
+        chatMessages.push({ role: 'user', content: round.userMessage.substring(0, 800) });
+      }
+      if (round.aiResponse.length > 0) {
+        chatMessages.push({ role: 'assistant', content: round.aiResponse.substring(0, 800) });
+      }
+    }
+
+    // 当前用户消息
+    chatMessages.push({ role: 'user', content: userMessage });
 
     // 追加用户消息到AI对话窗口
     this.aiConversation += (this.aiConversation.length > 0 ? '\n\n' : '') + '【用户】' + userMessage + '\n';
+    this.rebuildRounds();
 
     try {
       // 流式模式：实时占位并逐 token 刷新
-      this.aiConversation += '【AI】';
+      // 思考/回复分离累积：模型可能输出  IMDG... IMDG 包裹的思考过程
+      let streamingThinking = '';
+      let streamingResponse = '';
+      let inThinking = false;       // 是否处于  IMDG 标签内
 
-      // 首token超时：90s无首个token则判定超时并中断生成
-      // 注意：超时后仅设置UI状态，不调用 ggufService.abort()
-      // （native abort 在 decode 中调用会导致 SIGABRT 闪退，由 GGUFService 内部超时自行处理）
+      // 首token超时：360s无首个token则判定超时（prefill 可能需 5 分钟）
       let firstTokenReceived = false;
       const firstTokenTimeoutId = setTimeout(() => {
         if (!firstTokenReceived && this.isGenerating) {
-          console.warn('[AiSidebar] 首token超时(90s)，重置生成状态，等待GGUFService内部超时');
-          this.aiConversation += '\n\n（AI回复超时，请重试）\n\n';
+          console.warn('[AiSidebar] 首token超时(360s)，重置生成状态');
+          this.aiConversation += '【AI】（AI回复超时，请重试）\n\n';
+          this.rebuildRounds();
           this.isGenerating = false;
           this.saveCache().catch((e: Error) => console.warn('[AiSidebar] saveCache失败: ' + e));
         }
-      }, 90000);
+      }, 360000);
 
-      const response = await aiService.callAI(userMessage, context, (token: string) => {
+      const response = await aiService.callAIWithChat(chatMessages, (token: string) => {
         if (!firstTokenReceived) {
           firstTokenReceived = true;
           clearTimeout(firstTokenTimeoutId);
+          console.info('[AiSidebar] 首个流式token已到达，开始渲染UI');
         }
-        this.aiConversation += token;
         this.tokenCount++;
+
+        // ── 解析  IMDG 标签，分离思考和回复 ──
+        // ── 解析思考标签，分离思考和回复 ──
+        // 兼容 <think></think> 和 <thinking></thinking> 两种形式
+        // 标签可能被拆成多个 token，所以除了检查单个 token，还要检查累积后的字符串
+        if (token.includes('<think>') || token.includes('<thinking>')) {
+          inThinking = true;
+          const afterTag = token.replace(/.*<\/?(?:think|thinking)>/s, '');
+          if (afterTag.length > 0) streamingThinking += afterTag;
+        } else if (token.includes('</think>') || token.includes('</thinking>')) {
+          inThinking = false;
+          const beforeTag = token.replace(/<\/?(?:think|thinking)>.*/s, '');
+          if (beforeTag.length > 0) streamingThinking += beforeTag;
+        } else if (inThinking) {
+          streamingThinking += token;
+        } else {
+          streamingResponse += token;
+        }
+
+        // ── 处理标签被拆成多个 token 的情况 ──
+        // 检查 streamingThinking 中是否出现了结束标签
+        const endTagMatch = streamingThinking.match(/<\/(?:think|thinking)>/);
+        if (endTagMatch && endTagMatch.index !== undefined) {
+          const endTagIdx = endTagMatch.index;
+          const afterEnd = streamingThinking.substring(endTagIdx + endTagMatch[0].length);
+          streamingThinking = streamingThinking.substring(0, endTagIdx);
+          if (afterEnd.length > 0) streamingResponse = afterEnd + streamingResponse;
+          inThinking = false;
+        }
+        // 检查 streamingResponse 中是否出现了开始标签
+        if (!inThinking) {
+          const startTagMatch = streamingResponse.match(/<(?:think|thinking)>/);
+          if (startTagMatch && startTagMatch.index !== undefined) {
+            const startTagIdx = startTagMatch.index;
+            const afterStart = streamingResponse.substring(startTagIdx + startTagMatch[0].length);
+            const beforeStart = streamingResponse.substring(0, startTagIdx);
+            streamingResponse = beforeStart;
+            if (afterStart.length > 0) streamingThinking += afterStart;
+            inThinking = true;
+          }
+        }
+
+        // ── 实时更新 aiConversation，格式包含思考块 ──
+        let aiText = '';
+        if (streamingThinking.length > 0) {
+          aiText += '【思考】' + streamingThinking.length + '字\n【回复】';
+        }
+        aiText += streamingThinking + streamingResponse;
+        // 替换最后一条 AI 回复（从【AI】标记到末尾）
+        const aiStartIdx = this.aiConversation.lastIndexOf('【AI】');
+        if (aiStartIdx >= 0) {
+          this.aiConversation = this.aiConversation.substring(0, aiStartIdx) + '【AI】' + aiText;
+        } else {
+          this.aiConversation += '【AI】' + aiText;
+        }
+
+        // 节流重建UI：rebuildRounds 内部 150ms 节流，避免每个 token 全量重渲染阻塞主线程
+        this.rebuildRounds();
         // 每 30 个 token 自动保存一次，防止流式输出中闪退丢失
         if (this.tokenCount % 30 === 0) {
           this.saveCache().catch((e: Error) => console.warn('[AiSidebar] saveCache失败: ' + e));
@@ -532,8 +741,14 @@ export struct AiSidebar {
 
       if (response.success) {
         if (response.content.length > 0) {
-          // 流式文本已通过 onToken 完整累积，仅追加双换行结束本轮
-          this.aiConversation += '\n\n';
+          if (firstTokenReceived) {
+            // 流式文本已通过 onToken 完整累积，仅追加双换行结束本轮
+            this.aiConversation += '\n\n';
+          } else {
+            // 非流式返回：native 返回了文本但未触发 onToken 回调，需手动追加完整响应
+            console.warn('[AiSidebar] native返回文本但未触发onToken，手动追加完整响应');
+            this.aiConversation += '【AI】' + response.content + '\n\n';
+          }
 
           // 保存对话记录到 WorkManager
           if (this.workId.length > 0) {
@@ -543,15 +758,21 @@ export struct AiSidebar {
             }
           }
         } else {
-          this.aiConversation += '（无内容）\n\n';
+          this.aiConversation += '【AI】（无内容）\n\n';
         }
       } else {
-        this.aiConversation += '生成失败：' + (response.error || '未知错误') + '\n\n';
+        this.aiConversation += '【AI】生成失败：' + (response.error || '未知错误') + '\n\n';
       }
     } catch (e) {
-      this.aiConversation += '发生异常：' + e + '\n\n';
+      this.aiConversation += '【AI】发生异常：' + e + '\n\n';
     } finally {
       this.isGenerating = false;
+      // 生成完成后立即同步重建（取消节流定时器，确保最终状态正确）
+      if (this.rebuildTimer !== 0) {
+        clearTimeout(this.rebuildTimer);
+        this.rebuildTimer = 0;
+      }
+      this.cachedRounds = this.parseConversationRounds();
       this.saveCache().catch((e: Error) => console.warn('[AiSidebar] saveCache失败: ' + e));
     }
   }
@@ -559,6 +780,7 @@ export struct AiSidebar {
   /** 清空对话 */
   clearConversation() {
     this.aiConversation = '';
+    this.cachedRounds = [];
     this.saveCache().catch((e: Error) => console.warn('[AiSidebar] saveCache失败: ' + e));
   }
 
@@ -577,6 +799,14 @@ export struct AiSidebar {
       let raw = this.aiConversation.substring(lastAiIndex + aiMarker.length);
       // 去除末尾的多余换行
       insertContent = raw.replace(/\n+$/, '').trim();
+      // 如果包含【回复】标记，只提取回复部分（去除思考过程）
+      const replyMarker = '【回复】';
+      const replyIdx = insertContent.indexOf(replyMarker);
+      if (replyIdx >= 0) {
+        insertContent = insertContent.substring(replyIdx + replyMarker.length).trim();
+      } else if (insertContent.indexOf('【思考】') >= 0) {
+        insertContent = '';
+      }
     } else {
       // 没有AI标记时，直接使用全部内容
       insertContent = this.aiConversation.trim();
@@ -591,12 +821,12 @@ export struct AiSidebar {
   }
 
   build() {
-    // 侧栏容器 - 伴随式独立列模式（所有设备统一）
+    // 侧栏容器 - 与编辑器1:1对称均分（外层layoutWeight(1)）
     if (this.isVisible) {
       Column() {
         this.SidebarContent()
       }
-      .width(this.sidebarWidth)
+      .width('100%')
       .height('100%')
       .backgroundColor(this.sidebarCardBg)
     }
@@ -756,7 +986,35 @@ export struct AiSidebar {
                 .padding({ top: 4, bottom: 4 })
                 .justifyContent(FlexAlign.Start)
 
-                // ===== AI回复（右侧气泡） =====
+                // ===== AI思考状态（仅显示状态行，不展开内容） =====
+                if (round.thinking && round.thinking.length > 0) {
+                  Row() {
+                    Text(this.isGenerating && index === this.cachedRounds.length - 1
+                      ? '💭 思考中…(' + round.thinking + ')'
+                      : '💭 已思考(' + round.thinking + ')')
+                      .fontSize(this.sf(11))
+                      .fontColor(this.isDarkMode ? '#9E9E9E' : '#757575')
+                      .layoutWeight(1)
+                      .margin({ left: 6, right: 6 })
+
+                    // AI头像
+                    Text('AI')
+                      .width(28)
+                      .height(28)
+                      .borderRadius(14)
+                      .backgroundColor(this.isDarkMode ? '#2E4A3A' : '#4CAF50')
+                      .textAlign(TextAlign.Center)
+                      .fontColor(this.buttonTextColor)
+                      .fontSize(this.sf(10))
+                      .fontWeight(FontWeight.Bold)
+                      .flexShrink(0)
+                  }
+                  .width('100%')
+                  .padding({ top: 4, bottom: 4 })
+                  .justifyContent(FlexAlign.End)
+                }
+
+                // ===== AI回复（独立右侧气泡） =====
                 Row() {
                   // 复制按钮
                   Button() {
@@ -772,44 +1030,39 @@ export struct AiSidebar {
                     this.copyToClipboard(round.aiResponse);
                   })
 
-                  // AI气泡
-                  if (round.aiResponse.length > 0) {
-                    Text(round.aiResponse)
-                      .fontSize(this.sf(13))
-                      .fontColor(this.isDarkMode ? '#E0E0E0' : '#1A1A2E')
-                      .lineHeight(20)
-                      .backgroundColor(this.isDarkMode ? '#2E4A3A' : '#E8F5E9')
-                      .borderRadius(12)
-                      .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-                      .maxLines(20)
-                      .layoutWeight(1)
-                      .margin({ left: 6, right: 6 })
-                  } else if (this.isGenerating) {
-                    Row() {
-                      if (this.tokenCount === 0) {
+                  // 回复气泡
+                  Column() {
+                    if (round.aiResponse.length > 0) {
+                      Text(round.aiResponse)
+                        .fontSize(this.sf(13))
+                        .fontColor(this.isDarkMode ? '#E0E0E0' : '#1A1A2E')
+                        .lineHeight(20)
+                    } else if (this.isGenerating && index === this.cachedRounds.length - 1) {
+                      if (round.thinking && round.thinking.length > 0) {
+                        Text('正在回复...')
+                          .fontSize(this.sf(13))
+                          .fontColor(this.sidebarSubTextColor)
+                          .lineHeight(20)
+                      } else if (this.tokenCount === 0) {
                         Text('模型推理中...')
                           .fontSize(this.sf(13))
                           .fontColor(this.sidebarSubTextColor)
                           .lineHeight(20)
                       } else {
-                        Text('思考中...')
+                        Text('思考中...(' + this.tokenCount + ' tokens)')
                           .fontSize(this.sf(13))
                           .fontColor(this.sidebarSubTextColor)
                           .lineHeight(20)
-                        Text('(' + this.tokenCount + ' tokens)')
-                          .fontSize(this.sf(11))
-                          .fontColor(this.sidebarSubTextColor)
-                          .margin({ left: 6 })
                       }
                     }
-                      .backgroundColor(this.isDarkMode ? '#2E4A3A' : '#E8F5E9')
-                      .borderRadius(12)
-                      .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-                      .layoutWeight(1)
-                      .margin({ left: 6, right: 6 })
                   }
+                  .backgroundColor(this.isDarkMode ? '#2E4A3A' : '#E8F5E9')
+                  .borderRadius(12)
+                  .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+                  .layoutWeight(1)
+                  .margin({ left: 6, right: 6 })
 
-                  // AI头像（无 emoji，使用绿色圆形+AI文字）
+                  // AI头像
                   Text('AI')
                     .width(28)
                     .height(28)
@@ -835,7 +1088,30 @@ export struct AiSidebar {
               }
               .width('100%')
               .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-            }, (round: ConversationRound, index: number) => round.userMessage + round.aiResponse + index)
+            }, (round: ConversationRound, index: number) => round.userMessage + round.aiResponse + (round.thinking || '') + index)
+          }
+
+          // prefill 阶段提示：推理已启动但尚未收到首个 token
+          if (this.isGenerating && this.tokenCount === 0) {
+            Row() {
+              Text('AI')
+                .width(28)
+                .height(28)
+                .borderRadius(14)
+                .backgroundColor(this.isDarkMode ? '#2E4A3A' : '#4CAF50')
+                .textAlign(TextAlign.Center)
+                .fontColor(this.buttonTextColor)
+                .fontSize(this.sf(10))
+                .fontWeight(FontWeight.Bold)
+                .flexShrink(0)
+              Text('正在思考中...')
+                .fontSize(this.sf(13))
+                .fontColor('#9CA3AF')
+                .margin({ left: 8 })
+            }
+            .width('100%')
+            .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+            .justifyContent(FlexAlign.End)
           }
         }
         .width('100%')
@@ -867,8 +1143,8 @@ export struct AiSidebar {
         Row() {
           TextArea({ placeholder: '输入消息...', text: this.currentPrompt })
             .layoutWeight(1)
-            .maxLines(8)
-            .constraintSize({ minHeight: 40, maxHeight: 200 })
+            .maxLines(20)
+            .constraintSize({ minHeight: 40, maxHeight: 320 })
             .fontSize(this.sf(13))
             .fontColor(this.sidebarTextColor)
             .backgroundColor(this.sidebarInputBg)
@@ -878,15 +1154,23 @@ export struct AiSidebar {
               this.currentPrompt = value;
             })
 
-          Button(this.isGenerating ? '...' : '发送')
+          Button(this.isGenerating ? '停止' : '发送')
             .fontSize(this.sf(13))
             .fontColor(this.buttonTextColor)
-            .backgroundColor(this.isGenerating ? '#9CA3AF' : '#10B981')
+            .backgroundColor(this.isGenerating ? '#EF4444' : '#10B981')
             .borderRadius(8)
             .height(40)
             .margin({ left: 8 })
-            .enabled(!this.isGenerating)
-            .onClick(() => this.sendAiMessage().catch((e: Error) => console.error('[AiSidebar] sendAiMessage异常: ' + e)))
+            .onClick(() => {
+              if (this.isGenerating) {
+                // 强制停止推理：重置 generateInFlight + abort native
+                aiService.forceReset();
+                this.isGenerating = false;
+                console.warn('[AiSidebar] 用户点击停止，强制重置推理状态');
+              } else {
+                this.sendAiMessage().catch((e: Error) => console.error('[AiSidebar] sendAiMessage异常: ' + e));
+              }
+            })
         }
         .width('100%')
       }

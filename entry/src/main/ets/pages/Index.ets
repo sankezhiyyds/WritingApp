@@ -1,8 +1,9 @@
-﻿import { TemplateInfo, templateList } from '../model/TemplateModel';
+import { TemplateInfo, templateList } from '../model/TemplateModel';
 import { WorkItem, workManager, BookshelfFolder, ArchiveFolder, RecycleBinItem, InspirationItem } from '../model/WorkManager';
 import { OutlineManagementPanel } from '../components/OutlineManagementPanel';
 import { RectShape, promptAction } from '@kit.ArkUI';
 import { settingsManager } from '../model/SettingsManager';
+import { aiService } from '../model/AIService';
 import { speechRecognizer } from '@kit.CoreSpeechKit';
 import { audio } from '@kit.AudioKit';
 import { abilityAccessCtrl, common } from '@kit.AbilityKit';
@@ -67,6 +68,14 @@ struct Index {
   @State materialSubTab: number = 0;
   @State recycleBinItems: RecycleBinItem[] = [];
   @State inspirationItems: InspirationItem[] = [];
+
+  // ===== 数据快照：@Builder 中引用这些 @State 变量以实现响应式刷新 =====
+  // 根因：@Builder 中直接调用 workManager.getXxx() 返回普通数组，不被 ArkUI 依赖追踪，
+  //       数据变更后 UI 不刷新。改为在 onChange 回调中同步快照到 @State，触发重渲染。
+  @State bookshelfFolders: BookshelfFolder[] = [];
+  @State archiveFolders: ArchiveFolder[] = [];
+  @State bookshelfWorks: WorkItem[] = [];           // 所有书架作品（未归档）
+  @State archivedWorks: WorkItem[] = [];             // 所有旧档作品（已归档）
   @State editingInspirationId: string = '';
   @State editingInspirationContent: string = '';
   @State showInspirationEditor: boolean = false;
@@ -217,9 +226,11 @@ struct Index {
     this.unsubscribeWorkChange = workManager.onChange(() => {
       this.refreshKey++;
       this.refreshMaterialLibrary();
+      this.refreshBookshelfData();
     });
     // 初始加载素材库数据
     this.refreshMaterialLibrary();
+    this.refreshBookshelfData();
     // 兜底：消费持久化的卡片跳转目标（覆盖冷启动时 @Watch/onPageShow 都未捕获的场景）
     this.consumePersistedCardNavTarget();
   }
@@ -993,13 +1004,13 @@ struct Index {
 
   /** 获取书架文件夹名称 */
   getFolderName(folderId: string): string {
-    const folder = workManager.getFolders().find(f => f.id === folderId);
+    const folder = this.bookshelfFolders.find(f => f.id === folderId);
     return folder ? folder.name : '文件夹';
   }
 
   /** 获取旧档区文件夹名称 */
   getArchiveFolderName(folderId: string): string {
-    const folder = workManager.getArchiveFolders().find(f => f.id === folderId);
+    const folder = this.archiveFolders.find(f => f.id === folderId);
     return folder ? folder.name : '文件夹';
   }
 
@@ -1007,9 +1018,9 @@ struct Index {
   @Builder
   BookshelfRootView() {
     // 文件夹网格
-    if (workManager.getFolders().length > 0) {
+    if (this.bookshelfFolders.length > 0) {
       Flex({ wrap: FlexWrap.Wrap }) {
-        ForEach(workManager.getFolders(), (folder: BookshelfFolder) => {
+        ForEach(this.bookshelfFolders, (folder: BookshelfFolder) => {
           Column() {
             Column() {
               Text('📁')
@@ -1028,7 +1039,7 @@ struct Index {
             .justifyContent(FlexAlign.Center)
             .alignItems(HorizontalAlign.Center)
 
-            Text(`${workManager.getWorksByFolder(folder.id).length} 篇作品`)
+            Text(`${this.bookshelfWorks.filter(w => w.folderId === folder.id).length} 篇作品`)
               .fontSize(this.sf(11))
               .fontColor(this.subTextColor)
               .margin({ top: 6 })
@@ -1051,7 +1062,7 @@ struct Index {
     }
 
     // 未分类作品
-    if (workManager.getFolders().length > 0 && workManager.getUnfiledBookshelfWorks().length > 0) {
+    if (this.bookshelfFolders.length > 0 && this.bookshelfWorks.filter(w => !w.folderId).length > 0) {
       Text('未完成')
         .fontSize(this.sf(14))
         .fontWeight(FontWeight.Medium)
@@ -1060,12 +1071,12 @@ struct Index {
         .padding({ left: 16, top: 12, bottom: 8 })
     }
 
-    ForEach(workManager.getUnfiledBookshelfWorks(), (work: WorkItem) => {
+    ForEach(this.bookshelfWorks.filter(w => !w.folderId), (work: WorkItem) => {
       this.WorkItemRow(work, false)
     }, (work: WorkItem) => work.id)
 
     // 空状态
-    if (workManager.getFolders().length === 0 && workManager.getUnfiledBookshelfWorks().length === 0) {
+    if (this.bookshelfFolders.length === 0 && this.bookshelfWorks.filter(w => !w.folderId).length === 0) {
       Column() {
         Text('📖 书架空空如也')
           .fontSize(this.sf(16))
@@ -1085,8 +1096,8 @@ struct Index {
   /** 书架文件夹内视图：显示文件夹中的作品 */
   @Builder
   BookshelfFolderView() {
-    if (workManager.getWorksByFolder(this.currentFolderId).length > 0) {
-      ForEach(workManager.getWorksByFolder(this.currentFolderId), (work: WorkItem) => {
+    if (this.bookshelfWorks.filter(w => w.folderId === this.currentFolderId).length > 0) {
+      ForEach(this.bookshelfWorks.filter(w => w.folderId === this.currentFolderId), (work: WorkItem) => {
         this.WorkItemRow(work, false)
       }, (work: WorkItem) => work.id)
     } else {
@@ -1104,9 +1115,9 @@ struct Index {
   /** 旧档区根视图：显示文件夹和未分类作品 */
   @Builder
   ArchiveRootView() {
-    if (workManager.getArchiveFolders().length > 0) {
+    if (this.archiveFolders.length > 0) {
       Flex({ wrap: FlexWrap.Wrap }) {
-        ForEach(workManager.getArchiveFolders(), (folder: ArchiveFolder) => {
+        ForEach(this.archiveFolders, (folder: ArchiveFolder) => {
           Column() {
             Column() {
               Text('📦')
@@ -1125,7 +1136,7 @@ struct Index {
             .justifyContent(FlexAlign.Center)
             .alignItems(HorizontalAlign.Center)
 
-            Text(`${workManager.getArchivedWorksByFolder(folder.id).length} 篇作品`)
+            Text(`${this.archivedWorks.filter(w => w.folderId === folder.id).length} 篇作品`)
               .fontSize(this.sf(11))
               .fontColor(this.subTextColor)
               .margin({ top: 6 })
@@ -1147,7 +1158,7 @@ struct Index {
       .padding({ left: 16, right: 16 })
     }
 
-    if (workManager.getArchiveFolders().length > 0 && workManager.getUnfiledArchivedWorks().length > 0) {
+    if (this.archiveFolders.length > 0 && this.archivedWorks.filter(w => !w.folderId).length > 0) {
       Text('未完成')
         .fontSize(this.sf(14))
         .fontWeight(FontWeight.Medium)
@@ -1156,11 +1167,11 @@ struct Index {
         .padding({ left: 16, top: 12, bottom: 8 })
     }
 
-    ForEach(workManager.getUnfiledArchivedWorks(), (work: WorkItem) => {
+    ForEach(this.archivedWorks.filter(w => !w.folderId), (work: WorkItem) => {
       this.WorkItemRow(work, true)
     }, (work: WorkItem) => work.id)
 
-    if (workManager.getArchiveFolders().length === 0 && workManager.getUnfiledArchivedWorks().length === 0) {
+    if (this.archiveFolders.length === 0 && this.archivedWorks.filter(w => !w.folderId).length === 0) {
       Column() {
         Text('📦 暂无归档作品')
           .fontSize(this.sf(16))
@@ -1180,8 +1191,8 @@ struct Index {
   /** 旧档区文件夹内视图 */
   @Builder
   ArchiveFolderView() {
-    if (workManager.getArchivedWorksByFolder(this.currentArchiveFolderId).length > 0) {
-      ForEach(workManager.getArchivedWorksByFolder(this.currentArchiveFolderId), (work: WorkItem) => {
+    if (this.archivedWorks.filter(w => w.folderId === this.currentArchiveFolderId).length > 0) {
+      ForEach(this.archivedWorks.filter(w => w.folderId === this.currentArchiveFolderId), (work: WorkItem) => {
         this.WorkItemRow(work, true)
       }, (work: WorkItem) => work.id)
     } else {
@@ -1200,6 +1211,14 @@ struct Index {
   refreshMaterialLibrary(): void {
     this.recycleBinItems = workManager.getRecycleBinItems();
     this.inspirationItems = workManager.getInspirations();
+  }
+
+  /** 刷新书架/旧档区数据快照（@Builder 依赖 @State 触发重渲染） */
+  refreshBookshelfData(): void {
+    this.bookshelfFolders = workManager.getFolders();
+    this.archiveFolders = workManager.getArchiveFolders();
+    this.bookshelfWorks = workManager.getBookshelfWorks();
+    this.archivedWorks = workManager.getArchivedWorks();
   }
 
   /** 主动同步桌面原子卡片的灵感数据（保存/删除灵感后调用）：
@@ -2516,13 +2535,13 @@ struct Index {
             })
 
             // 已有文件夹列表
-            ForEach(workManager.getArchiveFolders(), (folder: ArchiveFolder) => {
+            ForEach(this.archiveFolders, (folder: ArchiveFolder) => {
               Row() {
                 Text('📦 ' + folder.name)
                   .fontSize(this.sf(14))
                   .fontColor(this.textColor)
                   .layoutWeight(1)
-                Text(`${workManager.getArchivedWorksByFolder(folder.id).length} 篇`)
+                Text(`${this.archivedWorks.filter(w => w.folderId === folder.id).length} 篇`)
                   .fontSize(this.sf(12))
                   .fontColor(this.subTextColor)
               }
@@ -3708,7 +3727,26 @@ struct SettingsTab {
         }
 
         ListItem() {
-          this.SettingRow('本地模型文件(GGUF)', this.localModelPath ? this.getFileName(this.localModelPath) : '未选择', true)
+          // 内联 SettingRow 以确保 @State localModelPath 变化时 ListItem 重渲染
+          Row() {
+            Column() {
+              Text('本地模型文件(GGUF)')
+                .fontSize(this.sf(15))
+                .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+              Text(this.localModelPath ? this.getFileName(this.localModelPath) : '未选择')
+                .fontSize(this.sf(12))
+                .fontColor('#9CA3AF')
+                .margin({ top: 2 })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            Text('›')
+              .fontSize(this.sf(20))
+              .fontColor('#D1D5DB')
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16, top: 16, bottom: 16 })
+          .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
         }
         .onClick(() => {
           this.showModelPicker = true;
@@ -3741,6 +3779,7 @@ struct SettingsTab {
                   this.ggufContextLength = value;
                   settingsManager.settings.ggufContextLength = value;
                   settingsManager.save();
+                  aiService.unloadModel(); // 卸载模型，下次推理自动用新ctx重新加载
                 })
             }
             .width('100%')
@@ -3775,6 +3814,7 @@ struct SettingsTab {
                   this.ggufThreads = value;
                   settingsManager.settings.ggufThreads = value;
                   settingsManager.save();
+                  aiService.unloadModel(); // 卸载模型，下次推理自动用新threads重新加载
                 })
             }
             .width('100%')
@@ -3863,7 +3903,26 @@ struct SettingsTab {
         })
 
         ListItem() {
-          this.SettingRow('自动保存间隔', `${this.autoSaveInterval}分钟`, true)
+          // 内联 SettingRow 以确保 @State autoSaveInterval 变化时 ListItem 重渲染
+          Row() {
+            Column() {
+              Text('自动保存间隔')
+                .fontSize(this.sf(15))
+                .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+              Text(`${this.autoSaveInterval}分钟`)
+                .fontSize(this.sf(12))
+                .fontColor('#9CA3AF')
+                .margin({ top: 2 })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            Text('›')
+              .fontSize(this.sf(20))
+              .fontColor('#D1D5DB')
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16, top: 16, bottom: 16 })
+          .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
         }
         .onClick(() => {
           this.editAutoSaveInterval();
@@ -3908,14 +3967,52 @@ struct SettingsTab {
         }
 
         ListItem() {
-          this.SettingRow('本地字体文件', this.localFontPath ? this.getFileName(this.localFontPath) : '未选择', true)
+          // 内联 SettingRow 以确保 @State localFontPath 变化时 ListItem 重渲染
+          Row() {
+            Column() {
+              Text('本地字体文件')
+                .fontSize(this.sf(15))
+                .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+              Text(this.localFontPath ? this.getFileName(this.localFontPath) : '未选择')
+                .fontSize(this.sf(12))
+                .fontColor('#9CA3AF')
+                .margin({ top: 2 })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            Text('›')
+              .fontSize(this.sf(20))
+              .fontColor('#D1D5DB')
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16, top: 16, bottom: 16 })
+          .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
         }
         .onClick(() => {
           this.showFontPicker = true;
         })
 
         ListItem() {
-          this.SettingRow('深色模式', this.followSystemDark ? '跟随系统' : (this.isDarkMode ? '开' : '关'), true)
+          // 内联 SettingRow 以确保 @State followSystemDark/isDarkMode 变化时 ListItem 重渲染
+          Row() {
+            Column() {
+              Text('深色模式')
+                .fontSize(this.sf(15))
+                .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+              Text(this.followSystemDark ? '跟随系统' : (this.isDarkMode ? '开' : '关'))
+                .fontSize(this.sf(12))
+                .fontColor('#9CA3AF')
+                .margin({ top: 2 })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            Text('›')
+              .fontSize(this.sf(20))
+              .fontColor('#D1D5DB')
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16, top: 16, bottom: 16 })
+          .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
         }
         .onClick(() => {
           this.selectDarkMode();
@@ -4395,7 +4492,9 @@ struct SettingsTab {
                       const sandboxDir = this.getUIContext().getHostContext()!.filesDir;
                       const destPath = `${sandboxDir}/${fileName}`;
                       const destFile = fileIo.openSync(destPath, fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
-                      fileIo.copyFileSync(srcFile.fd, destFile.fd);
+                      // 异步复制，避免大文件阻塞主线程导致 THREAD_BLOCK_6S
+                      this.getUIContext().getPromptAction().showToast({ message: '正在复制模型文件，请稍候...', duration: 5000 });
+                      await fileIo.copyFile(srcFile.fd, destFile.fd);
                       fileIo.closeSync(srcFile);
                       fileIo.closeSync(destFile);
                       this.localModelPath = destPath;

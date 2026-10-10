@@ -18,6 +18,19 @@ declare module 'libgguf.so' {
     onToken?: (token: string) => void
   ) => Promise<string>;
 
+  export interface ChatMessage {
+    role: string;
+    content: string;
+  }
+
+  export const generateChat: (
+    messages: ChatMessage[],
+    maxTokens?: number,
+    temperature?: number,
+    topP?: number,
+    onToken?: (token: string) => void
+  ) => Promise<string>;
+
   export const unloadModel: () => void;
   export const isModelLoaded: () => boolean;
   export const getModelInfo: () => string;

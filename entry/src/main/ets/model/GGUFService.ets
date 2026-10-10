@@ -2,6 +2,7 @@ import { settingsManager } from './SettingsManager';
 import fileIo from '@ohos.file.fs';
 import { systemResourceMonitor } from './SystemResourceMonitor';
 import { loadModel as nativeLoadModel, generate as nativeGenerate,
+  generateChat as nativeGenerateChat,
   unloadModel as nativeUnloadModel, isModelLoaded as nativeIsModelLoaded,
   getModelInfo as nativeGetModelInfo,
   abort as nativeAbort } from 'libgguf.so';
@@ -37,6 +38,21 @@ export interface GGUFGenerateResult {
 /** Generation parameters */
 export interface GGUFGenerateParams {
   prompt: string;
+  maxTokens?: number;
+  temperature?: number;
+  topP?: number;
+  onToken?: (token: string) => void;
+}
+
+/** Chat message for multi-turn conversations */
+export interface ChatMessage {
+  role: string;    // "system", "user", "assistant"
+  content: string;
+}
+
+/** Chat generation parameters */
+export interface GGUFChatParams {
+  messages: ChatMessage[];
   maxTokens?: number;
   temperature?: number;
   topP?: number;
@@ -147,6 +163,16 @@ class GGUFServiceClass {
     return !this.nativeAvailable;
   }
 
+  /** Check if a model is currently loaded. */
+  isModelLoaded(): boolean {
+    if (!this.nativeAvailable) return false;
+    try {
+      return nativeIsModelLoaded();
+    } catch (e) {
+      return false;
+    }
+  }
+
   /** Load a GGUF model from the device filesystem. */
   async loadModel(params: GGUFLoadParams): Promise<boolean> {
     if (!params.modelPath) {
@@ -166,11 +192,12 @@ class GGUFServiceClass {
       try {
         // eslint-disable-next-line @typescript-eslint/await-thenable
         const success = await nativeLoadModel(params.modelPath,
-          params.contextLength ?? 1024, params.threads ?? 2);
+          params.contextLength ?? 1024, params.threads ?? 0);  // 0 = native层自动检测核心数
         if (success) {
           this.loaded = true;
           this.currentModelPath = params.modelPath;
           console.info(`[GGUFService] Native model loaded: ${params.modelPath}`);
+          // warmup 已移除：经验证非不吐字根因，且会抢占 native runner
         }
         return success;
       } catch (e) {
@@ -232,6 +259,147 @@ class GGUFServiceClass {
     }
   }
 
+  /** Generate text using chat template with structured messages. */
+  async generateChat(params: GGUFChatParams): Promise<GGUFGenerateResult> {
+    if (systemResourceMonitor.shouldSkipAI()) {
+      return {
+        text: '',
+        success: false,
+        error: '电量过低，AI 推理已暂停。请连接充电器后再试。'
+      };
+    }
+
+    if (!this.nativeAvailable) {
+      // 桩模式：模拟回复
+      const lastUserMsg = params.messages.filter(m => m.role === 'user').pop()?.content || '';
+      return this.generateStubResponse(lastUserMsg, params.maxTokens, params.onToken);
+    }
+
+    if (!this.isModelLoaded()) {
+      return {
+        text: '',
+        success: false,
+        error: '未加载模型。请先在设置中选择 GGUF 模型文件。'
+      };
+    }
+
+    if (this.generateInFlight) {
+      console.warn('[GGUFService] 已有推理任务在执行，忽略本次并发请求');
+      return {
+        text: '',
+        success: false,
+        error: 'AI 正在生成中，请稍候再试'
+      };
+    }
+    this.generateInFlight = true;
+
+    try {
+      // 硬超时保护：Promise.race 确保 generateChat 总能在有限时间内返回，
+      // 防止 native generateChat 卡在 llama_decode 中导致 generateInFlight 永久锁死
+      const HARD_TIMEOUT_MS = 420000; // 7 分钟硬超时（prefill 可能需 5 分钟）
+      let hardTimeoutId: number = 0;
+      let hardTimedOut = false;
+      const result = await Promise.race<GGUFGenerateResult>([
+        this.generateChatInner(params),
+        new Promise<GGUFGenerateResult>((resolve) => {
+          hardTimeoutId = setTimeout(() => {
+            hardTimedOut = true;
+            console.error('[GGUFService] generateChat 硬超时(240s)，强制中断并释放 generateInFlight');
+            nativeAbort();
+            resolve({ text: '', success: false, error: '推理超时（420s无响应），请重试' });
+          }, HARD_TIMEOUT_MS);
+        })
+      ]);
+      if (!hardTimedOut) {
+        clearTimeout(hardTimeoutId); // generateChatInner 先完成，清理硬超时定时器避免误触发
+      }
+      return result;
+    } finally {
+      this.generateInFlight = false;
+    }
+  }
+
+  /** 强制重置推理状态（供 UI 重试按钮调用） */
+  forceReset(): void {
+    console.warn('[GGUFService] forceReset: 中断推理并重置 generateInFlight');
+    nativeAbort();
+    this.generateInFlight = false;
+  }
+
+  /** generateChat() 的实际执行体 */
+  private async generateChatInner(params: GGUFChatParams): Promise<GGUFGenerateResult> {
+    const maxTokens = params.maxTokens ?? 512;
+    const temperature = params.temperature ?? 0.8;
+    const topP = params.topP ?? 0.9;
+    const onToken = params.onToken;
+
+    // ── 内存压力检查：系统内存紧张时拒绝推理，避免 OOM 闪退 ──
+    const memLevel = AppStorage.get<number>('memoryPressureLevel') ?? 2;
+    if (memLevel <= 1) { // 0=CRITICAL, 1=LOW
+      console.warn('[GGUFService] Memory pressure detected (level=' + memLevel + '), aborting inference');
+      return { text: '', success: false, error: '系统内存不足，请关闭其他应用后重试。' };
+    }
+
+    // 超时保护：prefill 阶段不触发 onToken，需足够长的空闲超时
+    // 0.5B 模型 prefill 500+ tokens 在 CPU 上可能需 2-3 分钟
+    const totalTimeoutMs = Math.max(maxTokens * 500 + 180000, 180000);
+    const idleTimeoutMs = 180000; // 单 token 空闲超时 180s（prefill 期间无 token 回调）
+
+    let idleTimer: number = 0;
+    let totalTimer: number = 0;
+    let timedOut = false;
+
+    const armIdleTimer = () => {
+      if (idleTimer !== 0) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        timedOut = true;
+        console.error('[GGUFService] generateChat 空闲超时，中断');
+        nativeAbort();
+      }, idleTimeoutMs);
+    };
+
+    totalTimer = setTimeout(() => {
+      timedOut = true;
+      console.error('[GGUFService] generateChat 总超时，中断');
+      nativeAbort();
+    }, totalTimeoutMs);
+
+    try {
+      armIdleTimer();
+
+      const wrappedOnToken = (token: string) => {
+        // 收到 token 说明 prefill 已完成、生成循环正常工作
+        // 重置 timedOut（空闲超时可能在 prefill 期间误触发）
+        timedOut = false;
+        armIdleTimer();
+        console.info('[GGUFService] generateChat onToken recv: ' + token.length + 'chars');
+        if (onToken) {
+          onToken(token);
+        }
+      };
+
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      const text: string = await nativeGenerateChat(
+        params.messages,
+        maxTokens,
+        temperature,
+        topP,
+        wrappedOnToken
+      );
+
+      if (timedOut) {
+        return { text, success: text.length > 0, error: text.length > 0 ? undefined : '推理超时', tokensGenerated: 0 };
+      }
+      return { text, success: text.length > 0, tokensGenerated: 0, error: text.length > 0 ? undefined : '推理返回空结果（模型可能未生成任何内容）' };
+    } catch (e) {
+      console.error('[GGUFService] generateChat 异常: ' + e);
+      return { text: '', success: false, error: '推理异常: ' + e };
+    } finally {
+      if (idleTimer !== 0) clearTimeout(idleTimer);
+      if (totalTimer !== 0) clearTimeout(totalTimer);
+    }
+  }
+
   /** generate() 的实际执行体，由外层单飞守卫保护 */
   private async generateInner(params: GGUFGenerateParams): Promise<GGUFGenerateResult> {
     if (this.nativeAvailable) {
@@ -240,12 +408,15 @@ class GGUFServiceClass {
       const topP = params.topP ?? 0.9;
       const onToken = params.onToken ?? undefined;
 
+      // 安全日志：记录 prompt 长度，便于排查闪退
+      console.info(`[GGUFService] generateInner: prompt=${params.prompt.length}chars, maxTokens=${maxTokens}, temp=${temperature}`);
+
       try {
         // 空闲看门狗：只要 token 持续产出就重置计时器，仅"长时间无任何token"才判定超时。
         // 注意：prefill 阶段（喂入整个 prompt，含上下文/历史对话）onToken 不触发，
         // CPU 推理 7B 级别模型 prefill 2000+ tokens 可能耗时数分钟，故阈值需足够大。
-        const idleTimeoutMs = 60000;  // 空闲阈值 60s，覆盖 prefill + 首token
-        const totalTimeoutMs = 120000; // 总兜底上限 120s，防真正死锁永久挂起
+        const idleTimeoutMs = 180000;  // 空闲阈值 180s，prefill 阶段不触发onToken，0.8B模型prefill 500+tokens可能需数分钟
+        const totalTimeoutMs = 300000; // 总兜底上限 300s，防真正死锁永久挂起
         let idleTimer: number = 0;
         let totalTimer: number = 0;
         const clearTimers = () => {
@@ -340,6 +511,26 @@ class GGUFServiceClass {
     return { text: response, success: true, tokensGenerated: response.length };
   }
 
+  /** generateStubResponse: 桩模式模拟回复（供 generateChat 桩模式使用） */
+  private async generateStubResponse(prompt: string, maxTokens?: number, onToken?: (token: string) => void): Promise<GGUFGenerateResult> {
+    const mt = maxTokens ?? 512;
+    let response = getStubResponse(prompt);
+    if (response.length > mt * 2) {
+      response = response.substring(0, mt * 2) + '\n\n……（预览模式已截断）';
+    }
+    response += '\n\n[⚡ 预览模式 · 如需完整推理请编译 llama.cpp]';
+    if (onToken) {
+      const chars = response.split('');
+      const chunkSize = Math.max(1, Math.floor(chars.length / 20));
+      for (let i = 0; i < chars.length; i += chunkSize) {
+        const chunk = chars.slice(i, Math.min(i + chunkSize, chars.length)).join('');
+        onToken(chunk);
+        await new Promise<void>(resolve => setTimeout(resolve, 30 + Math.random() * 30));
+      }
+    }
+    return { text: response, success: true, tokensGenerated: response.length };
+  }
+
   /** Unload the current model and free resources. */
   unloadModel(): void {
     if (this.nativeAvailable && this.loaded) {
@@ -410,13 +601,14 @@ class GGUFServiceClass {
     }
 
     const contextLength = settings.ggufContextLength ?? 1024;
-    const threads = settings.ggufThreads ?? 2;
+    const threads = settings.ggufThreads ?? 0;  // 0 = native层自动检测
     return await this.loadModel({
       modelPath: settings.localModelPath,
       contextLength: contextLength,
       threads: threads
     });
   }
+
 }
 
 export const ggufService = new GGUFServiceClass();

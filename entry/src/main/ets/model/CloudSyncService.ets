@@ -320,6 +320,8 @@ export class CloudSyncService {
           resolve(false);
         }
       });
+      // 防止云同步服务意外断开(service died)导致 Promise 永不 resolve
+      // 超时兜底已在上方 5s setTimeout 中处理
     });
   }
 

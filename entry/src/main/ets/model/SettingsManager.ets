@@ -33,9 +33,9 @@ export class SettingsManager {
     localFontPath: '',
     localModelPath: '',
     ggufContextLength: 1024,
-    ggufThreads: 2,
-    ggufMaxTokens: 512,
-    ggufTemperature: 0.8
+    ggufThreads: 0,
+    ggufMaxTokens: 256,
+    ggufTemperature: 0.6
   };
   settings: SettingsData = this.defaultSettings;
   initPromise: Promise<void> | null = null;
@@ -65,10 +65,10 @@ export class SettingsManager {
           grantedPermissions: Array.isArray(parsed.grantedPermissions) ? parsed.grantedPermissions : [],
           localFontPath: parsed.localFontPath || '',
           localModelPath: parsed.localModelPath || '',
-          ggufContextLength: parsed.ggufContextLength ?? 1024,
-          ggufThreads: parsed.ggufThreads ?? 2,
-          ggufMaxTokens: parsed.ggufMaxTokens ?? 256,
-          ggufTemperature: parsed.ggufTemperature ?? 0.8
+          ggufContextLength: Math.max(512, Number(parsed.ggufContextLength) || 1024),
+          ggufThreads: Number(parsed.ggufThreads) ?? 0,
+          ggufMaxTokens: Math.max(256, Math.min(1024, Number(parsed.ggufMaxTokens) || 256)),
+          ggufTemperature: Math.max(0.4, Math.min(0.8, Number(parsed.ggufTemperature) || 0.6))
         };
       }
     } catch (e) {

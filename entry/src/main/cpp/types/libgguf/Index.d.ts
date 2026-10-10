@@ -22,6 +22,25 @@ export const generate: (
   onToken?: (token: string) => void
 ) => Promise<string>;
 
+/** Chat message for multi-turn conversations */
+export interface ChatMessage {
+  role: string;
+  content: string;
+}
+
+/**
+ * Run text generation using the model's built-in chat template.
+ * Automatically formats messages via llama_chat_apply_template.
+ * Resolves the full generated text.
+ */
+export const generateChat: (
+  messages: ChatMessage[],
+  maxTokens?: number,
+  temperature?: number,
+  topP?: number,
+  onToken?: (token: string) => void
+) => Promise<string>;
+
 /** Unload model and free all resources. */
 export const unloadModel: () => void;
 
