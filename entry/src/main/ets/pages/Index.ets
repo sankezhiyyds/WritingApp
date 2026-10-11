@@ -104,6 +104,7 @@ struct Index {
   @State searchInspirations: InspirationItem[] = [];
   @State showRecyclePreview: boolean = false;
   @State previewRecycleItem: RecycleBinItem | null = null;
+  @StorageProp('statusBarHeightVp') statusBarHeightVp: number = 0;
 
   sf(base: number): number {
     return Math.round(base * this.fontSize / 14);
@@ -400,6 +401,13 @@ struct Index {
         Row() {
           // 侧边导航栏
           Column() {
+            // 状态栏占位（仅非 2in1 且有实际高度时渲染）
+            if (this.statusBarHeightVp > 0) {
+              Column()
+                .width('100%')
+                .height(this.statusBarHeightVp)
+            }
+
             this.SideNavItem('短幕剧', '🎬', 0)
             this.SideNavItem('中长篇', '📚', 1)
             this.SideNavItem('书架', '📖', 2)
@@ -415,6 +423,13 @@ struct Index {
 
           // 内容区
           Column() {
+            // 状态栏占位（仅非 2in1 且有实际高度时渲染）
+            if (this.statusBarHeightVp > 0) {
+              Column()
+                .width('100%')
+                .height(this.statusBarHeightVp)
+            }
+
             if (this.currentIndex === 0) {
               ShortDramaTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColor, bgColor: this.bgColor })
             } else if (this.currentIndex === 1) {
@@ -439,7 +454,7 @@ struct Index {
         }
         .width('100%')
         .height('100%')
-        .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
+        .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
       } else {
         // 窄屏布局：底部悬浮玻璃Tab导航（手机/折叠屏折叠态）
         Stack() {
@@ -447,15 +462,15 @@ struct Index {
             // Tab内容区域
             Column() {
               if (this.currentIndex === 0) {
-                ShortDramaTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColor, bgColor: this.bgColor })
+                ShortDramaTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColor, bgColor: this.bgColor, statusBarHeight: this.statusBarHeightVp })
               } else if (this.currentIndex === 1) {
-                NovelTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColor, bgColor: this.bgColor })
+                NovelTab({ isDarkMode: this.isDarkMode, cardBg: this.cardBg, textColor: this.textColor, bgColor: this.bgColor, statusBarHeight: this.statusBarHeightVp })
               } else if (this.currentIndex === 2) {
                 this.BookshelfView()
               } else if (this.currentIndex === 3) {
                 this.ArchiveView()
               } else {
-                SettingsTab({ isDarkMode: this.isDarkMode })
+                SettingsTab({ isDarkMode: this.isDarkMode, statusBarHeight: this.statusBarHeightVp })
               }
             }
             .width('100%')
@@ -463,13 +478,14 @@ struct Index {
           }
           .width('100%')
           .height('100%')
+          .backgroundColor(this.bgColor)
+          .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
 
           // 悬浮玻璃底边栏
           this.FloatingTabBar()
         }
         .width('100%')
         .height('100%')
-        .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
         .alignContent(Alignment.Bottom)
       }
 
@@ -520,6 +536,8 @@ struct Index {
     }
     .width('100%')
     .height('100%')
+    .backgroundColor(this.bgColor)
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
   }
 
   @Builder
@@ -850,7 +868,25 @@ struct Index {
 
   @Builder
   BookshelfView() {
-    Column() {
+    Stack() {
+      Scroll() {
+        Column() {
+          // 顶部留白（状态栏 + header高度）
+          Column().width('100%').height(this.statusBarHeightVp + 60)
+
+          if (this.currentFolderId.length === 0) {
+            this.BookshelfRootView()
+          } else {
+            this.BookshelfFolderView()
+          }
+        }
+        .width('100%')
+        .padding({ bottom: 80 })
+      }
+      .width('100%')
+      .height('100%')
+
+      // 悬浮header（玻璃透视效果）
       Row() {
         if (this.currentFolderId.length > 0) {
           Text('←')
@@ -888,94 +924,23 @@ struct Index {
           })
       }
       .width('100%')
-      .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-      .backgroundColor(this.cardBg)
+      .padding({ left: 16, right: 16, top: this.statusBarHeightVp + 12, bottom: 12 })
 
-      Scroll() {
-        Column() {
-          if (this.currentFolderId.length === 0) {
-            this.BookshelfRootView()
-          } else {
-            this.BookshelfFolderView()
-          }
-        }
-        .width('100%')
-        .padding({ top: 12, bottom: 80 })
-      }
-      .layoutWeight(1)
-      .width('100%')
     }
     .width('100%')
     .height('100%')
+    .alignContent(Alignment.Top)
     .backgroundColor(this.bgColor)
   }
 
   @Builder
   ArchiveView() {
-    Column() {
-      Row() {
-        if (this.currentArchiveFolderId.length > 0) {
-          Text('←')
-            .fontSize(this.sf(20))
-            .fontColor('#FF2D55')
-            .onClick(() => { this.currentArchiveFolderId = ''; })
-            .padding({ left: 16, right: 12 })
-          Text(this.getArchiveFolderName(this.currentArchiveFolderId))
-            .fontSize(this.sf(18))
-            .fontWeight(FontWeight.Bold)
-            .fontColor(this.textColor)
-            .layoutWeight(1)
-        } else {
-          Text('📦 素材库')
-            .fontSize(this.sf(20))
-            .fontWeight(FontWeight.Bold)
-            .fontColor(this.textColor)
-            .layoutWeight(1)
-          Button('搜索')
-            .fontSize(this.sf(14))
-            .fontColor('#FFFFFF')
-            .backgroundColor('#FF2D55')
-            .borderRadius(20)
-            .height(36)
-            .padding({ left: 16, right: 16 })
-            .onClick(() => {
-              this.showSearchPage = true;
-              this.searchQuery = '';
-              this.searchBFolders = [];
-              this.searchBWorks = [];
-              this.searchAFolders = [];
-              this.searchAWorks = [];
-      this.searchInspirations = [];
-            })
-        }
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16, top: 12, bottom: 8 })
-      .backgroundColor(this.cardBg)
-
-      // 素材库子页签
-      Row() {
-        ForEach(['旧档', '回收站', '灵感池'], (tab: string, index: number) => {
-          Text(tab)
-            .fontSize(this.sf(13))
-            .fontWeight(this.materialSubTab === index ? FontWeight.Bold : FontWeight.Normal)
-            .fontColor(this.materialSubTab === index ? '#FF6B35' : '#9CA3AF')
-            .backgroundColor(this.materialSubTab === index ? '#FFF7ED' : this.cardBg)
-            .borderRadius(14)
-            .padding({ left: 14, right: 14, top: 6, bottom: 6 })
-            .margin({ right: 8 })
-            .onClick(() => {
-              this.materialSubTab = index;
-              this.refreshMaterialLibrary();
-            })
-        }, (tab: string) => tab)
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16, bottom: 8 })
-      .backgroundColor(this.cardBg)
-
+    Stack() {
       Scroll() {
         Column() {
+          // 顶部留白（状态栏 + header + 子页签高度）
+          Column().width('100%').height(this.statusBarHeightVp + 100)
+
           if (this.materialSubTab === 0) {
             // 旧档
             if (this.currentArchiveFolderId.length === 0) {
@@ -992,13 +957,80 @@ struct Index {
           }
         }
         .width('100%')
-        .padding({ top: 12, bottom: 80 })
+        .padding({ bottom: 80 })
       }
-      .layoutWeight(1)
       .width('100%')
+      .height('100%')
+      .scrollBar(BarState.Off)
+
+      // 悬浮header + 子页签（玻璃透视效果）
+      Column() {
+        Row() {
+          if (this.currentArchiveFolderId.length > 0) {
+            Text('←')
+              .fontSize(this.sf(20))
+              .fontColor('#FF2D55')
+              .onClick(() => { this.currentArchiveFolderId = ''; })
+              .padding({ left: 16, right: 12 })
+            Text(this.getArchiveFolderName(this.currentArchiveFolderId))
+              .fontSize(this.sf(18))
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this.textColor)
+              .layoutWeight(1)
+          } else {
+            Text('📦 素材库')
+              .fontSize(this.sf(20))
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this.textColor)
+              .layoutWeight(1)
+            Button('搜索')
+              .fontSize(this.sf(14))
+              .fontColor('#FFFFFF')
+              .backgroundColor('#FF2D55')
+              .borderRadius(20)
+              .height(36)
+              .padding({ left: 16, right: 16 })
+              .onClick(() => {
+                this.showSearchPage = true;
+                this.searchQuery = '';
+                this.searchBFolders = [];
+                this.searchBWorks = [];
+                this.searchAFolders = [];
+                this.searchAWorks = [];
+      this.searchInspirations = [];
+              })
+          }
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: this.statusBarHeightVp + 12, bottom: 8 })
+
+        // 素材库子页签
+        Row() {
+          ForEach(['旧档', '回收站', '灵感池'], (tab: string, index: number) => {
+            Text(tab)
+              .fontSize(this.sf(13))
+              .fontWeight(this.materialSubTab === index ? FontWeight.Bold : FontWeight.Normal)
+              .fontColor(this.materialSubTab === index ? '#FF6B35' : '#9CA3AF')
+              .backgroundColor(this.materialSubTab === index ? '#FFF7ED' : this.cardBg)
+              .borderRadius(14)
+              .padding({ left: 14, right: 14, top: 6, bottom: 6 })
+              .margin({ right: 8 })
+              .onClick(() => {
+                this.materialSubTab = index;
+                this.refreshMaterialLibrary();
+              })
+          }, (tab: string) => tab)
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, bottom: 8 })
+        .backgroundColor(this.cardBg)
+      }
+      .width('100%')
+
     }
     .width('100%')
     .height('100%')
+    .alignContent(Alignment.Top)
     .backgroundColor(this.bgColor)
   }
 
@@ -2961,9 +2993,10 @@ struct Index {
       .height(64)
     }
     .width('92%')
-    .position({ bottom: 0, left: '4%' })
+    .position({ bottom: 24, left: '4%' })
     .borderRadius(32)
-    .backgroundColor(this.isDarkMode ? 'rgba(45,45,58,0.78)' : 'rgba(255,255,255,0.82)')
+    .backgroundColor(this.isDarkMode ? 'rgba(45,45,58,0.55)' : 'rgba(255,255,255,0.55)')
+    .backdropBlur(20)
     .border({ width: 1, color: this.isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.5)' })
     .shadow({
       radius: 16,
@@ -2996,6 +3029,7 @@ struct ShortDramaTab {
   @Prop cardBg: string;
   @Prop textColor: string;
   @Prop bgColor: string;
+  @Prop statusBarHeight: number = 0;
   @StorageProp('appFontSize') fontSize: number = 14;
   @State templates: TemplateInfo[] = [];
   @State works: WorkItem[] = [];
@@ -3075,30 +3109,12 @@ struct ShortDramaTab {
   }
 
   build() {
-    Column() {
-      Row() {
-        Text('短幕剧工作台')
-          .fontSize(this.sf(18))
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.textColor)
-        Blank()
-        Button('新建')
-          .fontSize(this.sf(14))
-          .fontColor('#FFFFFF')
-          .backgroundColor('#FF2D55')
-          .borderRadius(20)
-          .height(36)
-          .padding({ left: 16, right: 16 })
-          .onClick(() => {
-            this.getUIContext().getRouter().pushUrl({ url: 'pages/PromptEditorPage', params: { mode: 'short_drama' } });
-          })
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-      .backgroundColor(this.cardBg)
-
+    Stack() {
       Scroll() {
         Column() {
+          // 顶部留白（状态栏 + header高度）
+          Column().width('100%').height(this.statusBarHeight + 60)
+
           ForEach(this.getCategories(), (category: string) => {
             Column() {
               // 分类标题
@@ -3139,11 +3155,35 @@ struct ShortDramaTab {
         }
         .width('100%')
       }
-      .layoutWeight(1)
+      .width('100%')
+      .height('100%')
       .scrollBar(BarState.Off)
+
+      // 悬浮header（玻璃透视效果）
+      Row() {
+        Text('短幕剧工作台')
+          .fontSize(this.sf(18))
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.textColor)
+        Blank()
+        Button('新建')
+          .fontSize(this.sf(14))
+          .fontColor('#FFFFFF')
+          .backgroundColor('#FF2D55')
+          .borderRadius(20)
+          .height(36)
+          .padding({ left: 16, right: 16 })
+          .onClick(() => {
+            this.getUIContext().getRouter().pushUrl({ url: 'pages/PromptEditorPage', params: { mode: 'short_drama' } });
+          })
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: this.statusBarHeight + 12, bottom: 12 })
+
     }
     .width('100%')
     .height('100%')
+    .alignContent(Alignment.Top)
     .backgroundColor(this.bgColor)
   }
 
@@ -3297,6 +3337,7 @@ struct NovelTab {
   @Prop cardBg: string;
   @Prop textColor: string;
   @Prop bgColor: string;
+  @Prop statusBarHeight: number = 0;
   @StorageProp('appFontSize') fontSize: number = 14;
   @State templates: TemplateInfo[] = [];
   @State works: WorkItem[] = [];
@@ -3386,30 +3427,12 @@ struct NovelTab {
 
   build() {
     Stack() {
-    Column() {
-      Row() {
-        Text('中长篇工作台')
-          .fontSize(this.sf(18))
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.textColor)
-        Blank()
-        Button('新建')
-          .fontSize(this.sf(14))
-          .fontColor('#FFFFFF')
-          .backgroundColor('#FF2D55')
-          .borderRadius(20)
-          .height(36)
-          .padding({ left: 16, right: 16 })
-          .onClick(() => {
-            this.getUIContext().getRouter().pushUrl({ url: 'pages/PromptEditorPage', params: { mode: 'novel' } });
-          })
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-      .backgroundColor(this.cardBg)
-
+    Stack() {
       Scroll() {
         Column() {
+          // 顶部留白（状态栏 + header高度）
+          Column().width('100%').height(this.statusBarHeight + 60)
+
           ForEach(this.getCategories(), (category: string) => {
             Column() {
               // 分类标题
@@ -3450,11 +3473,35 @@ struct NovelTab {
         }
         .width('100%')
       }
-      .layoutWeight(1)
+      .width('100%')
+      .height('100%')
       .scrollBar(BarState.Off)
+
+      // 悬浮header（玻璃透视效果）
+      Row() {
+        Text('中长篇工作台')
+          .fontSize(this.sf(18))
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.textColor)
+        Blank()
+        Button('新建')
+          .fontSize(this.sf(14))
+          .fontColor('#FFFFFF')
+          .backgroundColor('#FF2D55')
+          .borderRadius(20)
+          .height(36)
+          .padding({ left: 16, right: 16 })
+          .onClick(() => {
+            this.getUIContext().getRouter().pushUrl({ url: 'pages/PromptEditorPage', params: { mode: 'novel' } });
+          })
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: this.statusBarHeight + 12, bottom: 12 })
+
     }
     .width('100%')
     .height('100%')
+    .alignContent(Alignment.Top)
     .backgroundColor(this.bgColor)
 
     if (this.showOutlinePanel) {
@@ -3626,6 +3673,7 @@ struct NovelTab {
 @Component
 struct SettingsTab {
   @Link isDarkMode: boolean;
+  @Prop statusBarHeight: number = 0;
   
   @State followSystemDark: boolean = false;
   @State prevFollowSystemDark: boolean = false;
@@ -3651,6 +3699,8 @@ struct SettingsTab {
   @State ggufThreads: number = 4;
   @State ggufMaxTokens: number = 512;
   @State ggufTemperature: number = 0.8;
+  // 模型卸载防抖：slider 拖动时延迟卸载，避免连续触发
+  private modelUnloadTimer: number = 0;
 
   aboutToAppear() {
     if (settingsManager.initPromise) {
@@ -3712,15 +3762,13 @@ struct SettingsTab {
   }
 
   build() {
-    Column() {
-      Text('设置')
-        .fontSize(this.sf(20))
-        .fontWeight(FontWeight.Bold)
-        .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
-        .alignSelf(ItemAlign.Start)
-        .margin({ left: this._sidePadding, top: 16, bottom: 12 })
-
+    Stack() {
       List() {
+        // 顶部留白（状态栏 + header高度）
+        ListItem() {
+          Column().width('100%').height(this.statusBarHeight + 48)
+        }
+
         // ===== AI 配置 =====
         ListItem() {
           this.SectionTitle('AI 配置')
@@ -3779,7 +3827,9 @@ struct SettingsTab {
                   this.ggufContextLength = value;
                   settingsManager.settings.ggufContextLength = value;
                   settingsManager.save();
-                  aiService.unloadModel(); // 卸载模型，下次推理自动用新ctx重新加载
+                  // 防抖卸载：slider 拖动中连续触发，延迟 500ms 只卸载一次
+                  if (this.modelUnloadTimer) clearTimeout(this.modelUnloadTimer);
+                  this.modelUnloadTimer = setTimeout(() => { aiService.unloadModel(); }, 500);
                 })
             }
             .width('100%')
@@ -3814,7 +3864,8 @@ struct SettingsTab {
                   this.ggufThreads = value;
                   settingsManager.settings.ggufThreads = value;
                   settingsManager.save();
-                  aiService.unloadModel(); // 卸载模型，下次推理自动用新threads重新加载
+                  if (this.modelUnloadTimer) clearTimeout(this.modelUnloadTimer);
+                  this.modelUnloadTimer = setTimeout(() => { aiService.unloadModel(); }, 500);
                 })
             }
             .width('100%')
@@ -4246,10 +4297,29 @@ struct SettingsTab {
         .onClick(() => {
           this.showAboutPanel = true;
         })
+
+        // 底部留白（防止被tab bar遮挡）
+        ListItem() {
+          Column()
+            .width('100%')
+            .height(80)
+            .backgroundColor('#FFFFFF')
+        }
       }
       .width('100%')
-      .layoutWeight(1)
-      .padding({ bottom: 80 })
+      .height('100%')
+      .scrollBar(BarState.Off)
+
+      // 悬浮header（玻璃透视效果）
+      Row() {
+        Text('设置')
+          .fontSize(this.sf(20))
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+      }
+      .width('100%')
+      .padding({ left: 16, top: this.statusBarHeight + 16, bottom: 12 })
+
 
       // 隐私政策/用户协议面板
       if (this.showPrivacyPanel) {
@@ -4754,6 +4824,7 @@ struct SettingsTab {
     }
     .width('100%')
     .height('100%')
+    .alignContent(Alignment.Top)
     .backgroundColor(this.isDarkMode ? '#1A1A2E' : '#F5F6FA')
     .constraintSize({ maxWidth: this._contentMaxWidth })
   }

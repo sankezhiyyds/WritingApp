@@ -36,6 +36,14 @@ LlamaRunner::~LlamaRunner() {
 bool LlamaRunner::loadModel(const std::string& modelPath, int contextLength, int threads) {
     [[maybe_unused]] std::lock_guard<std::mutex> lock(mutex_);
     LOGI("loadModel begin: path=%{public}s ctx=%{public}d threads=%{public}d", modelPath.c_str(), contextLength, threads);
+    {
+        long availPages = sysconf(_SC_AVPHYS_PAGES);
+        long pageSize = sysconf(_SC_PAGE_SIZE);
+        if (availPages > 0 && pageSize > 0) {
+            long availMB = (availPages * pageSize) / (1024 * 1024);
+            LOGI("Available memory before model load: %{public}ldMB", availMB);
+        }
+    }
 
     if (loaded_) {
         unloadModel();
@@ -254,6 +262,20 @@ std::string LlamaRunner::generateChat(
     }
 
     // 5. Prefill（一次性喂入全部 prompt tokens，n_batch=n_ctx 无需分批）
+    // 内存预检：可用内存过低时拒绝 prefill，避免设备卡死
+    {
+        long availPages = sysconf(_SC_AVPHYS_PAGES);
+        long pageSize = sysconf(_SC_PAGE_SIZE);
+        if (availPages > 0 && pageSize > 0) {
+            long availMB = (availPages * pageSize) / (1024 * 1024);
+            LOGI("Available memory before prefill: %{public}ldMB", availMB);
+            if (availMB < 64) {
+                LOGE("Memory too low for prefill: %{public}ldMB, aborting to prevent device freeze", availMB);
+                delete[] promptTokens;
+                return "memory low";
+            }
+        }
+    }
     LOGI("Prefill start: %{public}d tokens, n_batch=%{public}d", promptLen, llama_n_batch(ctx));
     auto prefillStart = std::chrono::steady_clock::now();
 
@@ -303,6 +325,19 @@ std::string LlamaRunner::generateChat(
         if (abortFlag_.load()) {
             LOGI("Generation aborted at token %{public}d", i);
             break;
+        }
+
+        // 内存压力监控：每 16 token 检查可用内存，过低时主动中止防止设备卡死
+        if (i > 0 && i % 16 == 0) {
+            long availPages = sysconf(_SC_AVPHYS_PAGES);
+            long pageSize = sysconf(_SC_PAGE_SIZE);
+            if (availPages > 0 && pageSize > 0) {
+                long availMB = (availPages * pageSize) / (1024 * 1024);
+                if (availMB < 48) {
+                    LOGE("Memory critically low during generation: %{public}ldMB, aborting", availMB);
+                    break;
+                }
+            }
         }
 
         if (i > 0 && i % 8 == 0) {
@@ -469,6 +504,7 @@ std::string LlamaRunner::generate(
 }
 
 void LlamaRunner::unloadModel() {
+    std::lock_guard<std::mutex> lock(mutex_);
     if (context_) {
         llama_free(static_cast<llama_context*>(context_));
         context_ = nullptr;

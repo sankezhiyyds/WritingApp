@@ -24,6 +24,8 @@ export interface ConversationRound {
  */
 @Component
 export struct AiSidebar {
+  @StorageProp('statusBarHeightVp') statusBarHeightVp: number = 0;
+  @StorageProp('bottomAvoidHeightVp') bottomAvoidHeightVp: number = 0;
   /** 工作台内容（AI可读取用于辅助创作） */
   @Prop workbenchContent: string = '';
   /** 工作台标题 */
@@ -63,6 +65,8 @@ export struct AiSidebar {
   @State private tokenCount: number = 0;
   /** 节流定时器：流式输出期间延迟重建 cachedRounds，避免每个 token 触发 UI 全量重渲染 */
   private rebuildTimer: number = 0;
+  /** 对话区滚动控制器，用于新消息自动滚到底部 */
+  private convScroller: Scroller = new Scroller();
   /** 发送防抖定时器：连续点击发送时 250ms 内只执行最后一次 */
   private sendDebounceTimer: number = 0;
 
@@ -461,6 +465,10 @@ export struct AiSidebar {
       this.rebuildTimer = 0;
       try {
         this.cachedRounds = this.parseConversationRounds();
+        // 新内容到达后自动滚动到底部
+        setTimeout(() => {
+          this.convScroller.scrollEdge(Edge.Bottom);
+        }, 50);
       } catch (e) {
         console.error('[AiSidebar] rebuildRounds异常: ' + e);
         this.cachedRounds = [];
@@ -642,7 +650,7 @@ export struct AiSidebar {
     chatMessages.push({ role: 'user', content: userMessage });
 
     // 追加用户消息到AI对话窗口
-    this.aiConversation += (this.aiConversation.length > 0 ? '\n\n' : '') + '【用户】' + userMessage + '\n';
+    this.aiConversation += (this.aiConversation.length > 0 ? '\n\n' : '') + '【用户】' + userMessage + '\n【AI】';
     this.rebuildRounds();
 
     try {
@@ -657,7 +665,7 @@ export struct AiSidebar {
       const firstTokenTimeoutId = setTimeout(() => {
         if (!firstTokenReceived && this.isGenerating) {
           console.warn('[AiSidebar] 首token超时(360s)，重置生成状态');
-          this.aiConversation += '【AI】（AI回复超时，请重试）\n\n';
+          this.aiConversation += '（AI回复超时，请重试）\n\n';
           this.rebuildRounds();
           this.isGenerating = false;
           this.saveCache().catch((e: Error) => console.warn('[AiSidebar] saveCache失败: ' + e));
@@ -747,7 +755,7 @@ export struct AiSidebar {
           } else {
             // 非流式返回：native 返回了文本但未触发 onToken 回调，需手动追加完整响应
             console.warn('[AiSidebar] native返回文本但未触发onToken，手动追加完整响应');
-            this.aiConversation += '【AI】' + response.content + '\n\n';
+            this.aiConversation += response.content + '\n\n';
           }
 
           // 保存对话记录到 WorkManager
@@ -758,13 +766,13 @@ export struct AiSidebar {
             }
           }
         } else {
-          this.aiConversation += '【AI】（无内容）\n\n';
+          this.aiConversation += '（无内容）\n\n';
         }
       } else {
-        this.aiConversation += '【AI】生成失败：' + (response.error || '未知错误') + '\n\n';
+        this.aiConversation += '生成失败：' + (response.error || '未知错误') + '\n\n';
       }
     } catch (e) {
-      this.aiConversation += '【AI】发生异常：' + e + '\n\n';
+      this.aiConversation += '发生异常：' + e + '\n\n';
     } finally {
       this.isGenerating = false;
       // 生成完成后立即同步重建（取消节流定时器，确保最终状态正确）
@@ -835,6 +843,9 @@ export struct AiSidebar {
   @Builder
   SidebarContent() {
     Column() {
+      // 状态栏避让
+      Column().width('100%').height(this.statusBarHeightVp)
+
       // 顶部标题栏
       Row() {
         Text('✨ AI助手')
@@ -912,7 +923,7 @@ export struct AiSidebar {
       }
 
       // 对话内容区域
-      Scroll() {
+      Scroll(this.convScroller) {
         Column() {
           if (this.aiConversation.length === 0) {
             // 空状态提示
@@ -1177,6 +1188,9 @@ export struct AiSidebar {
       .width('100%')
       .padding({ left: 12, right: 12, top: 8, bottom: 12 })
       .backgroundColor(this.sidebarBgColor)
+
+      // 底部边距
+      Column().width('100%').height(24)
     }
     .width('100%')
     .height('100%')

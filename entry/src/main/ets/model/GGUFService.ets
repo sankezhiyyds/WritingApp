@@ -190,6 +190,17 @@ class GGUFServiceClass {
 
     if (this.nativeAvailable) {
       try {
+        // 内存预检：获取模型文件大小，估算加载后内存压力
+        try {
+          const stat = fileIo.statSync(params.modelPath);
+          const modelSizeMB = stat.size / (1024 * 1024);
+          console.info(`[GGUFService] Model file size: ${modelSizeMB.toFixed(1)} MB`);
+          if (modelSizeMB > 1500) {
+            console.warn(`[GGUFService] 大模型警告: ${modelSizeMB.toFixed(0)}MB，可能导致内存紧张`);
+          }
+        } catch (e) {
+          // stat 失败不阻止加载
+        }
         // eslint-disable-next-line @typescript-eslint/await-thenable
         const success = await nativeLoadModel(params.modelPath,
           params.contextLength ?? 1024, params.threads ?? 0);  // 0 = native层自动检测核心数
@@ -533,9 +544,14 @@ class GGUFServiceClass {
 
   /** Unload the current model and free resources. */
   unloadModel(): void {
+    // 推理进行中先发 abort，让 native 生成循环尽快退出释放 mutex
+    if (this.generateInFlight) {
+      console.warn('[GGUFService] unloadModel: 推理进行中，先 abort 再卸载');
+      try { nativeAbort(); } catch (e) { /* ignore */ }
+    }
     if (this.nativeAvailable && this.loaded) {
       try {
-        nativeUnloadModel();
+        nativeUnloadModel(); // native 层 mutex 会等待 generateChat 退出
       } catch (e) {
         console.error(`[GGUFService] Native unload failed: ${e}`);
       }

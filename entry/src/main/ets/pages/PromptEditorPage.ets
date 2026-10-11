@@ -19,6 +19,8 @@ interface TextRange {
 @Entry
 @Component
 struct PromptEditorPage {
+  @StorageProp('statusBarHeightVp') statusBarHeightVp: number = 0;
+  @StorageProp('bottomAvoidHeightVp') bottomAvoidHeightVp: number = 0;
   @State template: TemplateInfo | null = null;
   @State fieldValues: Record<string, string> = {};
   @State generatedContent: string = '';
@@ -338,6 +340,9 @@ struct PromptEditorPage {
       Row() {
         // 工作台主区域
         Column() {
+      // 状态栏避让
+      Column().width('100%').height(this.statusBarHeightVp)
+
       // 顶部导航
       Row() {
         Text('←')
@@ -528,6 +533,8 @@ struct PromptEditorPage {
           .clip(true)
         }
       }
+      // 底部边距
+      Column().width('100%').height(24)
     }
     .layoutWeight(1)
     .height('100%')
@@ -570,6 +577,7 @@ struct PromptEditorPage {
     }
     .width('100%')
     .height('100%')
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 
   @Builder

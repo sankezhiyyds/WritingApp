@@ -1,6 +1,7 @@
 import { UIAbility, Want, AbilityConstant } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { preferences } from '@kit.ArkData';
+import { deviceInfo } from '@kit.BasicServicesKit';
 import { workManager } from '../model/WorkManager';
 import { settingsManager } from '../model/SettingsManager';
 import { responsiveManager } from '../model/ResponsiveManager';
@@ -81,7 +82,8 @@ export default class EntryAbility extends UIAbility {
   onWindowStageCreate(windowStage: window.WindowStage): void {
     console.info('[EntryAbility] onWindowStageCreate');
 
-    // 配置窗口避免摄像头挖空遮挡（通过 ArkUI 组件属性 expandSafeArea 处理更安全）
+    // 配置窗口全屏模式：内容延伸到状态栏和导航栏区域
+    this.applyWindowExtensionBar(windowStage);
     // 键盘避让由 ArkUI 自动处理（RESIZE 模式）
     windowStage.loadContent('pages/Index', (err) => {
       if (err.code) {
@@ -90,6 +92,40 @@ export default class EntryAbility extends UIAbility {
       }
       console.info('[EntryAbility] loadContent succeeded');
     });
+  }
+
+  /**
+   * 配置窗口扩展区域，让页面内容铺满整个屏幕（覆盖状态栏和导航栏）
+   * 设置状态栏和导航栏透明，隐藏底部导航指示条，实现沉浸式全屏效果
+   */
+  private applyWindowExtensionBar(windowStage: window.WindowStage): void {
+    try {
+      const mainWin = windowStage.getMainWindowSync();
+      // 设置全屏布局，让内容延伸到状态栏和导航栏下方
+      mainWin.setWindowLayoutFullScreen(true);
+      // 设置状态栏和导航栏的属性（透明背景+深色内容）
+      mainWin.setWindowSystemBarProperties({
+        statusBarColor: '0x00000000',
+        statusBarContentColor: '0xFF000000',
+        navigationBarColor: '0x00000000',
+        navigationBarContentColor: '0xFF000000'
+      });
+      // 显示底部导航指示条
+      mainWin.setSpecificSystemBarEnabled('navigationIndicator', true);
+      // 获取状态栏高度（px→vp），存入 AppStorage 供 UI 层做顶部占位
+      const avoidArea = mainWin.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
+      const statusBarPx: number = avoidArea.topRect.height;
+      const statusBarVp: number = px2vp(statusBarPx);
+      const bottomBarPx: number = avoidArea.bottomRect.height;
+      const bottomBarVp: number = px2vp(bottomBarPx);
+      const is2in1 = deviceInfo.deviceType === '2in1';
+      AppStorage.setOrCreate('statusBarHeightVp', is2in1 ? 0 : statusBarVp);
+      AppStorage.setOrCreate('bottomAvoidHeightVp', is2in1 ? 0 : bottomBarVp);
+      AppStorage.setOrCreate('is2in1Device', is2in1);
+      console.info('[EntryAbility] applyWindowExtensionBar: fullscreen configured, statusBarVp=' + statusBarVp + ', bottomBarVp=' + bottomBarVp + ', is2in1=' + is2in1);
+    } catch (err) {
+      console.error('[EntryAbility] applyWindowExtensionBar error: ' + JSON.stringify(err));
+    }
   }
 
   onConfigurationUpdate(newConfig: Record<string, Object>): void {
