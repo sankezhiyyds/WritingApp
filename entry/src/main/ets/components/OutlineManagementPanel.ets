@@ -13,9 +13,9 @@ interface DialogResult {
 export struct OutlineManagementPanel {
   @Prop workId: string;
   @Prop workTitle: string;
-  @Prop cardBg: string;
-  @Prop bgColor: string;
-  @Prop textColor: string;
+  @Prop cardBg: ResourceColor;
+  @Prop bgColor: ResourceColor;
+  @Prop textColor: ResourceColor;
   onClose: () => void = () => {};
 
   @State outlineTab: number = 0;
@@ -39,6 +39,8 @@ export struct OutlineManagementPanel {
   @State newNodeName: string = '';
   @State showCharDialog: boolean = false;
   @State showSceneDialog: boolean = false;
+  /** 大纲节点操作错误信息（catch 块仅做赋值，避免 catch 内调用 console.error 被 ArkTSCheck 判定可抛异常） */
+  @State outlineOpErrorMsg: string = '';
 
   aboutToAppear() {
     this.refreshData();
@@ -92,7 +94,7 @@ export struct OutlineManagementPanel {
 
         Text('✕')
           .fontSize(20)
-          .fontColor('#9CA3AF')
+          .fontColor($r('app.color.text_tertiary'))
           .onClick(() => { this.onClose(); })
       }
       .width('100%')
@@ -100,7 +102,7 @@ export struct OutlineManagementPanel {
 
       Text(this.workTitle)
         .fontSize(13)
-        .fontColor('#6B7280')
+        .fontColor($r('app.color.text_secondary'))
         .width('100%')
         .padding({ left: 16, right: 16 })
         .margin({ bottom: 12 })
@@ -111,10 +113,10 @@ export struct OutlineManagementPanel {
           Text(tab)
             .fontSize(14)
             .fontWeight(this.outlineTab === index ? FontWeight.Bold : FontWeight.Normal)
-            .fontColor(this.outlineTab === index ? '#FF6B35' : '#6B7280')
+            .fontColor(this.outlineTab === index ? $r('app.color.accent_secondary') : $r('app.color.text_secondary'))
             .padding({ left: 16, right: 16, top: 8, bottom: 8 })
             .borderRadius(16)
-            .backgroundColor(this.outlineTab === index ? '#FFF7ED' : this.cardBg)
+            .backgroundColor(this.outlineTab === index ? $r('app.color.bg_tag') : this.cardBg)
             .margin({ right: 8 })
             .onClick(() => { this.outlineTab = index; })
         }, (tab: string) => tab)
@@ -150,7 +152,7 @@ export struct OutlineManagementPanel {
         if (this.getVisibleNodes().length === 0) {
           Text('暂无大纲，点击下方按钮添加')
             .fontSize(14)
-            .fontColor('#9CA3AF')
+            .fontColor($r('app.color.text_tertiary'))
             .margin({ top: 40 })
         }
 
@@ -160,7 +162,7 @@ export struct OutlineManagementPanel {
 
             if (this.hasChildren(node.id)) {
               Text(node.collapsed ? '▶' : '▼')
-                .fontSize(10).fontColor('#9CA3AF').width(20).textAlign(TextAlign.Center)
+                .fontSize(10).fontColor($r('app.color.text_tertiary')).width(20).textAlign(TextAlign.Center)
                 .onClick(() => {
                   workManager.toggleOutlineCollapsed(this.workId, node.id);
                   this.refreshData();
@@ -170,13 +172,13 @@ export struct OutlineManagementPanel {
             }
 
             Text(this.getLevelLabel(node.level))
-              .fontSize(11).fontColor('#FF6B35').width(20)
+              .fontSize(11).fontColor($r('app.color.accent_secondary')).width(20)
 
             Text(node.title)
               .fontSize(14).fontColor(this.textColor).layoutWeight(1)
               .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
 
-            Text('✏').fontSize(14).fontColor('#6B7280').margin({ left: 8 })
+            Text('✏').fontSize(14).fontColor($r('app.color.text_secondary')).margin({ left: 8 })
               .onClick(() => {
                 this.editingNodeId = node.id;
                 this.editingNodeTitle = node.title;
@@ -184,7 +186,7 @@ export struct OutlineManagementPanel {
               })
 
             if (node.level < 2) {
-              Text('＋').fontSize(14).fontColor('#FF6B35').margin({ left: 8 })
+              Text('＋').fontSize(14).fontColor($r('app.color.accent_secondary')).margin({ left: 8 })
                 .onClick(() => {
                   this.addNodeParentId = node.id;
                   this.addNodeLevel = node.level + 1;
@@ -193,42 +195,60 @@ export struct OutlineManagementPanel {
                 })
             }
 
-            Text('↑').fontSize(12).fontColor('#9CA3AF').margin({ left: 8 })
+            Text('↑').fontSize(12).fontColor($r('app.color.text_tertiary')).margin({ left: 8 })
               .onClick(() => {
-                workManager.moveOutlineNode(this.workId, node.id, 'up');
-                this.refreshData();
+                try {
+                  workManager.moveOutlineNode(this.workId, node.id, 'up');
+                  this.refreshData();
+                } catch {
+                  this.outlineOpErrorMsg = '[OutlinePanel] moveOutlineNode up 失败';
+                }
               })
 
-            Text('↓').fontSize(12).fontColor('#9CA3AF').margin({ left: 4 })
+            Text('↓').fontSize(12).fontColor($r('app.color.text_tertiary')).margin({ left: 4 })
               .onClick(() => {
-                workManager.moveOutlineNode(this.workId, node.id, 'down');
-                this.refreshData();
+                try {
+                  workManager.moveOutlineNode(this.workId, node.id, 'down');
+                  this.refreshData();
+                } catch {
+                  this.outlineOpErrorMsg = '[OutlinePanel] moveOutlineNode down 失败';
+                }
               })
 
-            Text('🗑').fontSize(12).fontColor('#EF4444').margin({ left: 8 })
+            Text('🗑').fontSize(12).fontColor($r('app.color.status_error')).margin({ left: 8 })
               .onClick(() => {
-                this.getUIContext().getPromptAction().showDialog({
-                  title: '确认删除',
-                  message: '删除该节点及其子节点？',
-                  buttons: [
-                    { text: '取消', color: '#666666' },
-                    { text: '删除', color: '#EF4444' }
-                  ]
-                }).then((res: DialogResult) => {
-                  if (res.index === 1) {
-                    workManager.deleteOutlineNode(this.workId, node.id);
-                    this.refreshData();
-                  }
-                });
+                try {
+                  this.getUIContext().getPromptAction().showDialog({
+                    title: '确认删除',
+                    message: '删除该节点及其子节点？',
+                    buttons: [
+                      { text: '取消', color: $r('app.color.text_secondary') },
+                      { text: '删除', color: $r('app.color.status_error') }
+                    ]
+                  }).then((res: DialogResult) => {
+                    try {
+                      if (res.index === 1) {
+                        workManager.deleteOutlineNode(this.workId, node.id);
+                        this.refreshData();
+                      }
+                    } catch {
+                      this.outlineOpErrorMsg = '[OutlinePanel] deleteOutlineNode 失败';
+                    }
+                  }).catch(() => {
+                    this.outlineOpErrorMsg = '[OutlinePanel] 删除节点弹窗 失败';
+                  });
+                } catch {
+                  this.outlineOpErrorMsg = '[OutlinePanel] 删除节点弹窗 失败';
+                }
               })
           }
           .width('100%')
           .padding({ top: 8, bottom: 8 })
-          .border({ width: { bottom: 0.5 }, color: '#E5E7EB' })
+          .border({ width: { bottom: 0.5 }, color: $r('app.color.divider') })
         }, (node: OutlineNode) => node.id)
 
         Button('＋ 添加卷')
-          .fontSize(14).fontColor('#FF6B35').backgroundColor('#FFF7ED')
+          .fontSize(14).fontColor($r('app.color.accent_secondary')).backgroundColor($r('app.color.bg_tag'))
           .borderRadius(8).height(36).width('100%').margin({ top: 16 })
           .onClick(() => {
             this.addNodeParentId = '';
@@ -259,17 +279,17 @@ export struct OutlineManagementPanel {
 
         TextInput({ placeholder: '请输入名称', text: this.newNodeName })
           .fontSize(14).width('80%').height(40).borderRadius(8)
-          .border({ width: 1, color: '#D1D5DB' })
+          .border({ width: 1, color: $r('app.color.border_button') })
           .onChange((v: string) => { this.newNodeName = v; })
 
         Row() {
           Button('取消')
-            .fontSize(14).fontColor('#666666').backgroundColor('#F3F4F6')
+            .fontSize(14).fontColor($r('app.color.text_secondary')).backgroundColor($r('app.color.bg_input'))
             .borderRadius(8).height(36).layoutWeight(1).margin({ right: 8 })
             .onClick(() => { this.showAddNodeDialog = false; })
 
           Button('添加')
-            .fontSize(14).fontColor('#FFFFFF').backgroundColor('#FF6B35')
+            .fontSize(14).fontColor($r('app.color.text_on_accent')).backgroundColor($r('app.color.accent_secondary'))
             .borderRadius(8).height(36).layoutWeight(1)
             .onClick(() => {
               if (this.newNodeName.trim()) {
@@ -281,7 +301,7 @@ export struct OutlineManagementPanel {
         }
         .width('80%').margin({ top: 12 })
       }
-      .width('85%').padding(20).backgroundColor('#FFFFFF').border({ width: 1, color: '#D1D5DB' }).borderRadius(16).clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 })).margin({ top: 40, bottom: 40 })
+      .width('85%').padding(20).backgroundColor($r('app.color.bg_card')).border({ width: 1, color: $r('app.color.border_button') }).borderRadius(16).clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 })).margin({ top: 40, bottom: 40 })
     }
     .width('100%').height('100%')
   }
@@ -293,7 +313,7 @@ export struct OutlineManagementPanel {
       Column() {
         if (this.characterList.length === 0) {
           Text('暂无角色，点击下方按钮添加')
-            .fontSize(14).fontColor('#9CA3AF').margin({ top: 40 })
+            .fontSize(14).fontColor($r('app.color.text_tertiary')).margin({ top: 40 })
         }
 
         ForEach(this.characterList, (char: CharacterInfo) => {
@@ -303,10 +323,10 @@ export struct OutlineManagementPanel {
                 .fontSize(15).fontWeight(FontWeight.Bold).fontColor(this.textColor).layoutWeight(1)
 
               Text(char.role)
-                .fontSize(11).fontColor('#FF6B35').backgroundColor('#FFF7ED')
+                .fontSize(11).fontColor($r('app.color.accent_secondary')).backgroundColor($r('app.color.bg_tag'))
                 .borderRadius(4).padding({ left: 6, right: 6, top: 2, bottom: 2 })
 
-              Text('🗑').fontSize(12).fontColor('#EF4444').margin({ left: 8 })
+              Text('🗑').fontSize(12).fontColor($r('app.color.status_error')).margin({ left: 8 })
                 .onClick(() => {
                   workManager.deleteCharacter(this.workId, char.id);
                   this.refreshData();
@@ -316,12 +336,12 @@ export struct OutlineManagementPanel {
 
             if (char.description) {
               Text(char.description)
-                .fontSize(12).fontColor('#6B7280').maxLines(2)
+                .fontSize(12).fontColor($r('app.color.text_secondary')).maxLines(2)
                 .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
             }
             if (char.personality) {
               Text('性格：' + char.personality)
-                .fontSize(11).fontColor('#9CA3AF').maxLines(1)
+                .fontSize(11).fontColor($r('app.color.text_tertiary')).maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%').margin({ top: 2 })
             }
           }
@@ -336,7 +356,7 @@ export struct OutlineManagementPanel {
         }, (char: CharacterInfo) => char.id)
 
         Button('＋ 添加角色')
-          .fontSize(14).fontColor('#FF6B35').backgroundColor('#FFF7ED')
+          .fontSize(14).fontColor($r('app.color.accent_secondary')).backgroundColor($r('app.color.bg_tag'))
           .borderRadius(8).height(36).width('100%').margin({ top: 16 })
           .onClick(() => {
             this.editingCharId = '';
@@ -363,15 +383,15 @@ export struct OutlineManagementPanel {
 
         TextInput({ placeholder: '角色名称', text: this.editingCharName })
           .fontSize(14).width('80%').height(40).borderRadius(8)
-          .border({ width: 1, color: '#D1D5DB' })
+          .border({ width: 1, color: $r('app.color.border_button') })
           .onChange((v: string) => { this.editingCharName = v; })
 
         Row() {
           ForEach(['主角', '配角', '反派', '路人'], (role: string) => {
             Text(role)
               .fontSize(13)
-              .fontColor(this.editingCharRole === role ? '#FFFFFF' : '#6B7280')
-              .backgroundColor(this.editingCharRole === role ? '#FF6B35' : '#F3F4F6')
+              .fontColor(this.editingCharRole === role ? $r('app.color.text_on_accent') : $r('app.color.text_secondary'))
+              .backgroundColor(this.editingCharRole === role ? $r('app.color.accent_secondary') : $r('app.color.bg_input'))
               .borderRadius(12).padding({ left: 12, right: 12, top: 6, bottom: 6 })
               .margin({ right: 8 })
               .onClick(() => { this.editingCharRole = role; })
@@ -381,12 +401,12 @@ export struct OutlineManagementPanel {
 
         Row() {
           Button('取消')
-            .fontSize(14).fontColor('#666666').backgroundColor('#F3F4F6')
+            .fontSize(14).fontColor($r('app.color.text_secondary')).backgroundColor($r('app.color.bg_input'))
             .borderRadius(8).height(36).layoutWeight(1).margin({ right: 8 })
             .onClick(() => { this.showCharDialog = false; })
 
           Button('保存')
-            .fontSize(14).fontColor('#FFFFFF').backgroundColor('#FF6B35')
+            .fontSize(14).fontColor($r('app.color.text_on_accent')).backgroundColor($r('app.color.accent_secondary'))
             .borderRadius(8).height(36).layoutWeight(1)
             .onClick(() => {
               if (this.editingCharName.trim()) {
@@ -404,7 +424,7 @@ export struct OutlineManagementPanel {
         }
         .width('80%').margin({ top: 12 })
       }
-      .width('85%').padding(20).backgroundColor('#FFFFFF').border({ width: 1, color: '#D1D5DB' }).borderRadius(16).clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 })).margin({ top: 40, bottom: 40 })
+      .width('85%').padding(20).backgroundColor($r('app.color.bg_card')).border({ width: 1, color: $r('app.color.border_button') }).borderRadius(16).clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 })).margin({ top: 40, bottom: 40 })
     }
     .width('100%').height('100%')
   }
@@ -418,22 +438,22 @@ export struct OutlineManagementPanel {
 
         TextInput({ placeholder: '标题', text: this.editingNodeTitle })
           .fontSize(14).width('80%').height(40).borderRadius(8)
-          .border({ width: 1, color: '#D1D5DB' })
+          .border({ width: 1, color: $r('app.color.border_button') })
           .onChange((v: string) => { this.editingNodeTitle = v; })
 
         TextArea({ placeholder: '描述（可选）', text: this.editingNodeContent })
           .fontSize(14).width('80%').height(80).borderRadius(8)
-          .border({ width: 1, color: '#D1D5DB' }).margin({ top: 8 })
+          .border({ width: 1, color: $r('app.color.border_button') }).margin({ top: 8 })
           .onChange((v: string) => { this.editingNodeContent = v; })
 
         Row() {
           Button('取消')
-            .fontSize(14).fontColor('#666666').backgroundColor('#F3F4F6')
+            .fontSize(14).fontColor($r('app.color.text_secondary')).backgroundColor($r('app.color.bg_input'))
             .borderRadius(8).height(36).layoutWeight(1).margin({ right: 8 })
             .onClick(() => { this.editingNodeId = ''; })
 
           Button('保存')
-            .fontSize(14).fontColor('#FFFFFF').backgroundColor('#FF6B35')
+            .fontSize(14).fontColor($r('app.color.text_on_accent')).backgroundColor($r('app.color.accent_secondary'))
             .borderRadius(8).height(36).layoutWeight(1)
             .onClick(() => {
               if (this.editingNodeTitle.trim()) {
@@ -445,7 +465,7 @@ export struct OutlineManagementPanel {
         }
         .width('80%').margin({ top: 12 })
       }
-      .width('85%').padding(20).backgroundColor('#FFFFFF').border({ width: 1, color: '#D1D5DB' }).borderRadius(16).clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 })).margin({ top: 40, bottom: 40 })
+      .width('85%').padding(20).backgroundColor($r('app.color.bg_card')).border({ width: 1, color: $r('app.color.border_button') }).borderRadius(16).clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 })).margin({ top: 40, bottom: 40 })
     }
     .width('100%').height('100%')
   }
@@ -457,7 +477,7 @@ export struct OutlineManagementPanel {
       Column() {
         if (this.sceneList.length === 0) {
           Text('暂无场景，点击下方按钮添加')
-            .fontSize(14).fontColor('#9CA3AF').margin({ top: 40 })
+            .fontSize(14).fontColor($r('app.color.text_tertiary')).margin({ top: 40 })
         }
 
         ForEach(this.sceneList, (scene: SceneInfo) => {
@@ -466,7 +486,7 @@ export struct OutlineManagementPanel {
               Text((scene.order + 1) + '. ' + scene.title)
                 .fontSize(15).fontWeight(FontWeight.Bold).fontColor(this.textColor).layoutWeight(1)
 
-              Text('🗑').fontSize(12).fontColor('#EF4444')
+              Text('🗑').fontSize(12).fontColor($r('app.color.status_error'))
                 .onClick(() => {
                   workManager.deleteScene(this.workId, scene.id);
                   this.refreshData();
@@ -476,15 +496,15 @@ export struct OutlineManagementPanel {
 
             if (scene.location) {
               Text('📍 ' + scene.location)
-                .fontSize(12).fontColor('#6B7280').width('100%').margin({ top: 2 })
+                .fontSize(12).fontColor($r('app.color.text_secondary')).width('100%').margin({ top: 2 })
             }
             if (scene.time) {
               Text('🕐 ' + scene.time)
-                .fontSize(12).fontColor('#6B7280').width('100%').margin({ top: 2 })
+                .fontSize(12).fontColor($r('app.color.text_secondary')).width('100%').margin({ top: 2 })
             }
             if (scene.summary) {
               Text(scene.summary)
-                .fontSize(12).fontColor('#9CA3AF').maxLines(2)
+                .fontSize(12).fontColor($r('app.color.text_tertiary')).maxLines(2)
                 .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%').margin({ top: 4 })
             }
           }
@@ -501,7 +521,7 @@ export struct OutlineManagementPanel {
         }, (scene: SceneInfo) => scene.id)
 
         Button('＋ 添加场景')
-          .fontSize(14).fontColor('#FF6B35').backgroundColor('#FFF7ED')
+          .fontSize(14).fontColor($r('app.color.accent_secondary')).backgroundColor($r('app.color.bg_tag'))
           .borderRadius(8).height(36).width('100%').margin({ top: 16 })
           .onClick(() => {
             this.editingSceneId = '';
@@ -530,32 +550,32 @@ export struct OutlineManagementPanel {
 
         TextInput({ placeholder: '场景标题', text: this.editingSceneTitle })
           .fontSize(14).width('80%').height(40).borderRadius(8)
-          .border({ width: 1, color: '#D1D5DB' }).margin({ bottom: 8 })
+          .border({ width: 1, color: $r('app.color.border_button') }).margin({ bottom: 8 })
           .onChange((v: string) => { this.editingSceneTitle = v; })
 
         TextInput({ placeholder: '地点', text: this.editingSceneLocation })
           .fontSize(14).width('80%').height(40).borderRadius(8)
-          .border({ width: 1, color: '#D1D5DB' }).margin({ bottom: 8 })
+          .border({ width: 1, color: $r('app.color.border_button') }).margin({ bottom: 8 })
           .onChange((v: string) => { this.editingSceneLocation = v; })
 
         TextInput({ placeholder: '时间', text: this.editingSceneTime })
           .fontSize(14).width('80%').height(40).borderRadius(8)
-          .border({ width: 1, color: '#D1D5DB' }).margin({ bottom: 8 })
+          .border({ width: 1, color: $r('app.color.border_button') }).margin({ bottom: 8 })
           .onChange((v: string) => { this.editingSceneTime = v; })
 
         TextArea({ placeholder: '场景摘要', text: this.editingSceneSummary })
           .fontSize(14).width('80%').height(80).borderRadius(8)
-          .border({ width: 1, color: '#D1D5DB' })
+          .border({ width: 1, color: $r('app.color.border_button') })
           .onChange((v: string) => { this.editingSceneSummary = v; })
 
         Row() {
           Button('取消')
-            .fontSize(14).fontColor('#666666').backgroundColor('#F3F4F6')
+            .fontSize(14).fontColor($r('app.color.text_secondary')).backgroundColor($r('app.color.bg_input'))
             .borderRadius(8).height(36).layoutWeight(1).margin({ right: 8 })
             .onClick(() => { this.showSceneDialog = false; })
 
           Button('保存')
-            .fontSize(14).fontColor('#FFFFFF').backgroundColor('#FF6B35')
+            .fontSize(14).fontColor($r('app.color.text_on_accent')).backgroundColor($r('app.color.accent_secondary'))
             .borderRadius(8).height(36).layoutWeight(1)
             .onClick(() => {
               if (this.editingSceneTitle.trim()) {
@@ -583,7 +603,7 @@ export struct OutlineManagementPanel {
         }
         .width('80%').margin({ top: 12 })
       }
-      .width('85%').padding(20).backgroundColor('#FFFFFF').border({ width: 1, color: '#D1D5DB' }).borderRadius(16).clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 })).margin({ top: 40, bottom: 40 })
+      .width('85%').padding(20).backgroundColor($r('app.color.bg_card')).border({ width: 1, color: $r('app.color.border_button') }).borderRadius(16).clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 })).margin({ top: 40, bottom: 40 })
     }
     .width('100%').height('100%')
   }
