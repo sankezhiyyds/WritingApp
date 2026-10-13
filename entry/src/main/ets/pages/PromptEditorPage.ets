@@ -904,8 +904,8 @@ struct PromptEditorPage {
                     ForEach(field.options || [], (option: string) => {
                       Button(option)
                         .fontSize(this.sf(12))
-                        .fontColor(this.fieldValues[field.key] === option ? '#FFFFFF' : this.subTextColor)
-                        .backgroundColor(this.fieldValues[field.key] === option ? '#FF2D55' : '#E5E7EB')
+                        .fontColor(this.fieldValues[field.key] === option ? '#FFFFFF' : this.textColor)
+                        .backgroundColor(this.fieldValues[field.key] === option ? '#FF2D55' : $r('app.color.border_button'))
                         .borderRadius(16)
                         .height(32)
                         .padding({ left: 12, right: 12 })
@@ -1323,8 +1323,8 @@ struct PromptEditorPage {
           ForEach(['全部', '大纲', '人设', '场景', '章节', '时间线', '世界观', '思维链路', '最终方案'], (category: string) => {
             Button(category)
               .fontSize(this.sf(13))
-              .fontColor(this.selectedCategory === category ? '#FFFFFF' : this.subTextColor)
-              .backgroundColor(this.selectedCategory === category ? $r('app.color.accent_primary') : $r('app.color.bg_input'))
+              .fontColor(this.selectedCategory === category ? '#FFFFFF' : this.textColor)
+              .backgroundColor(this.selectedCategory === category ? $r('app.color.accent_primary') : $r('app.color.border_button'))
               .borderRadius(16)
               .height(32)
               .padding({ left: 12, right: 12 })
@@ -1445,8 +1445,8 @@ struct PromptEditorPage {
           ForEach(['大纲', '人设', '场景', '章节', '时间线', '世界观', '思维链路', '最终方案'], (category: string) => {
             Button(category)
               .fontSize(this.sf(13))
-              .fontColor(this.newChapterCategory === category ? '#FFFFFF' : this.subTextColor)
-              .backgroundColor(this.newChapterCategory === category ? '#FF2D55' : this.bgColor)
+              .fontColor(this.newChapterCategory === category ? '#FFFFFF' : this.textColor)
+              .backgroundColor(this.newChapterCategory === category ? '#FF2D55' : $r('app.color.border_button'))
               .borderRadius(16)
               .height(32)
               .padding({ left: 12, right: 12 })

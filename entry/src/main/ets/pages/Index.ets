@@ -17,7 +17,7 @@ import fileIo from '@ohos.file.fs';
 import { util } from '@kit.ArkTS';
 import formProvider from '@ohos.app.form.formProvider';
 import formBindingData from '@ohos.app.form.formBindingData';
-import { updateManager, commentManager } from '@kit.AppGalleryKit';
+import { updateManager } from '@kit.AppGalleryKit';
 import { preferences } from '@kit.ArkData';
 
 /** 卡片所需的灵感统计数据 */
@@ -104,6 +104,7 @@ struct Index {
   @State searchAFolders: ArchiveFolder[] = [];
   @State searchAWorks: WorkItem[] = [];
   @State searchInspirations: InspirationItem[] = [];
+  @State searchRecycleItems: RecycleBinItem[] = [];
   @State showRecyclePreview: boolean = false;
   @State previewRecycleItem: RecycleBinItem | null = null;
   @StorageProp('statusBarHeightVp') statusBarHeightVp: number = 0;
@@ -176,6 +177,7 @@ struct Index {
       this.searchAFolders = [];
       this.searchAWorks = [];
       this.searchInspirations = [];
+      this.searchRecycleItems = [];
       return;
     }
     const folders = (workManager.getFolders() || []).filter(
@@ -193,11 +195,15 @@ struct Index {
     const inspirations = (workManager.getInspirations() || []).filter(
       insp => (insp.content || '').toLowerCase().includes(q)
     );
+    const recycleItems = (workManager.getRecycleBinItems() || []).filter(
+      r => (r.title || '').toLowerCase().includes(q)
+    );
     this.searchBFolders = folders;
     this.searchBWorks = works;
     this.searchAFolders = aFolders;
     this.searchAWorks = aWorks;
     this.searchInspirations = inspirations;
+    this.searchRecycleItems = recycleItems;
   }
 
   aboutToAppear() {
@@ -1300,7 +1306,7 @@ struct Index {
             .justifyContent(FlexAlign.Center)
             .alignItems(HorizontalAlign.Center)
 
-            Text(`${this.archivedWorks.filter(w => w.folderId === folder.id).length} 篇作品`)
+            Text(`${this.archivedWorks.filter(w => w.archiveFolderId === folder.id).length} 篇作品`)
               .fontSize(this.sf(11))
               .fontColor(this.subTextColor)
               .margin({ top: 6 })
@@ -1322,7 +1328,7 @@ struct Index {
       .padding({ left: 16, right: 16 })
     }
 
-    if (this.archiveFolders.length > 0 && this.archivedWorks.filter(w => !w.folderId).length > 0) {
+    if (this.archiveFolders.length > 0 && this.archivedWorks.filter(w => !w.archiveFolderId).length > 0) {
       Text('未完成')
         .fontSize(this.sf(14))
         .fontWeight(FontWeight.Medium)
@@ -1331,11 +1337,11 @@ struct Index {
         .padding({ left: 16, top: 12, bottom: 8 })
     }
 
-    ForEach(this.archivedWorks.filter(w => !w.folderId), (work: WorkItem) => {
+    ForEach(this.archivedWorks.filter(w => !w.archiveFolderId), (work: WorkItem) => {
       this.WorkItemRow(work, true)
     }, (work: WorkItem) => work.id)
 
-    if (this.archiveFolders.length === 0 && this.archivedWorks.filter(w => !w.folderId).length === 0) {
+    if (this.archiveFolders.length === 0 && this.archivedWorks.filter(w => !w.archiveFolderId).length === 0) {
       Column() {
         Text('📦 暂无归档作品')
           .fontSize(this.sf(16))
@@ -1355,8 +1361,8 @@ struct Index {
   /** 旧档区文件夹内视图 */
   @Builder
   ArchiveFolderView() {
-    if (this.archivedWorks.filter(w => w.folderId === this.currentArchiveFolderId).length > 0) {
-      ForEach(this.archivedWorks.filter(w => w.folderId === this.currentArchiveFolderId), (work: WorkItem) => {
+    if (this.archivedWorks.filter(w => w.archiveFolderId === this.currentArchiveFolderId).length > 0) {
+      ForEach(this.archivedWorks.filter(w => w.archiveFolderId === this.currentArchiveFolderId), (work: WorkItem) => {
         this.WorkItemRow(work, true)
       }, (work: WorkItem) => work.id)
     } else {
@@ -1375,6 +1381,17 @@ struct Index {
   refreshMaterialLibrary(): void {
     this.recycleBinItems = workManager.getRecycleBinItems();
     this.inspirationItems = workManager.getInspirations();
+  }
+
+  /** 计算回收站文件夹条目的描述（篇数+字数） */
+  getRecycleFolderDesc(item: RecycleBinItem): string {
+    const works = item.folderWorks || [];
+    const count = works.length;
+    let totalChars = 0;
+    for (const w of works) {
+      totalChars += w.content.length;
+    }
+    return `${count}篇 · ${totalChars}字`;
   }
 
   /** 刷新书架/旧档区数据快照（@Builder 依赖 @State 触发重渲染） */
@@ -1471,14 +1488,14 @@ struct Index {
       ForEach(this.recycleBinItems, (item: RecycleBinItem) => {
         Row() {
           Column() {
-            Text(item.itemType === 'inspiration' ? '💡' : '📄')
+            Text(item.itemType === 'inspiration' ? '💡' : (item.itemType === 'folder' ? '📁' : '📄'))
               .fontSize(this.sf(18))
               .fontColor($r('app.color.text_on_accent'))
           }
           .width(40)
           .height(40)
           .borderRadius(8)
-          .backgroundColor(item.itemType === 'inspiration' ? '#F59E0B' : '#EF4444')
+          .backgroundColor(item.itemType === 'inspiration' ? '#F59E0B' : (item.itemType === 'folder' ? '#6B7280' : '#EF4444'))
           .justifyContent(FlexAlign.Center)
           .alignItems(HorizontalAlign.Center)
 
@@ -1489,7 +1506,7 @@ struct Index {
               .fontColor(this.textColor)
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
-            Text((item.itemType === 'inspiration' ? '灵感 · ' : '作品 · ') + item.deleteTime)
+            Text((item.itemType === 'inspiration' ? '灵感 · ' : (item.itemType === 'folder' ? `文件夹 · ${this.getRecycleFolderDesc(item)} · ` : '作品 · ')) + item.deleteTime)
               .fontSize(this.sf(11))
               .fontColor($r('app.color.text_tertiary'))
               .margin({ top: 2 })
@@ -1513,9 +1530,11 @@ struct Index {
             .margin({ right: 8 })
             .onClick(() => {
               if (workManager.restoreFromRecycleBin(item.id)) {
-                const restoreMsg = item.itemType === 'inspiration' ? '已恢复到素材区' : '已恢复到书架';
+                const restoreMsg = item.itemType === 'inspiration' ? '已恢复到素材区' : (item.itemType === 'folder' ? '已恢复文件夹' : '已恢复到书架');
                 this.getUIContext().getPromptAction().showToast({ message: restoreMsg, duration: 2000 });
                 this.refreshMaterialLibrary();
+                this.refreshBookshelfData();
+                this.refreshKey++;
               }
             })
 
@@ -1834,7 +1853,7 @@ struct Index {
 
         Row() {
           Button('取消')
-            .fontColor($r('app.color.text_tertiary'))
+            .fontColor($r('app.color.text_on_accent'))
             .backgroundColor(this.cardBg)
             .border({ width: 1, color: '#D1D5DB' })
             .borderRadius(8)
@@ -2338,10 +2357,59 @@ struct Index {
                 }, (insp: InspirationItem) => insp.id)
               }
 
+              // 回收站搜索结果
+              if (this.searchRecycleItems.length > 0) {
+                Text('🗑️ 回收站')
+                  .fontSize(this.sf(16))
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(this.textColor)
+                  .width('100%')
+                  .margin({ top: 16, bottom: 8 })
+
+                ForEach(this.searchRecycleItems, (item: RecycleBinItem) => {
+                  Row() {
+                    Column() {
+                      Text(item.itemType === 'inspiration' ? '💡' : (item.itemType === 'folder' ? '📁' : '📄'))
+                        .fontSize(this.sf(18))
+                    }
+                    .width(36)
+                    .height(36)
+                    .backgroundColor(item.itemType === 'inspiration' ? '#F59E0B' : (item.itemType === 'folder' ? '#6B7280' : '#EF4444'))
+                    .borderRadius(8)
+                    .justifyContent(FlexAlign.Center)
+                    .margin({ right: 10 })
+
+                    Column() {
+                      Text(item.title)
+                        .fontSize(this.sf(14))
+                        .fontColor(this.textColor)
+                        .maxLines(1)
+                        .textOverflow({ overflow: TextOverflow.Ellipsis })
+                      Text((item.itemType === 'inspiration' ? '灵感' : (item.itemType === 'folder' ? '文件夹' : '作品')) + ' · ' + item.deleteTime)
+                        .fontSize(this.sf(12))
+                        .fontColor($r('app.color.text_tertiary'))
+                    }
+                    .layoutWeight(1)
+                    .alignItems(HorizontalAlign.Start)
+                  }
+                  .width('100%')
+                  .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+                  .backgroundColor(this.cardBg)
+                  .borderRadius(10)
+                  .margin({ bottom: 6 })
+                  .onClick(() => {
+                    this.showSearchPage = false;
+                    this.searchQuery = '';
+                    this.previewRecycleItem = item;
+                    this.showRecyclePreview = true;
+                  })
+                }, (item: RecycleBinItem) => item.id)
+              }
+
               // 无结果提示
               if (this.searchBFolders.length === 0 && this.searchBWorks.length === 0 &&
                   this.searchAFolders.length === 0 && this.searchAWorks.length === 0 &&
-                  this.searchInspirations.length === 0) {
+                  this.searchInspirations.length === 0 && this.searchRecycleItems.length === 0) {
                 Text('未找到匹配的文件夹或作品')
                   .fontSize(this.sf(15))
                   .fontColor($r('app.color.text_tertiary'))
@@ -2394,7 +2462,7 @@ struct Index {
             .margin({ bottom: 12 })
 
           Scroll() {
-            Text(this.previewRecycleItem.content || '（无内容）')
+            Text(this.previewRecycleItem.itemType === 'folder' ? '文件夹内作品请在恢复后查看' : (this.previewRecycleItem.content || '（无内容）'))
               .fontSize(this.sf(14))
               .fontColor('#555555')
               .width('100%')
@@ -2406,7 +2474,7 @@ struct Index {
           .backgroundColor('#F5F5F5')
           .borderRadius(8)
 
-          Text('模板: ' + (this.previewRecycleItem.templateName || '自由创作'))
+          Text('模板: ' + (this.previewRecycleItem.itemType === 'folder' ? '文件夹' : (this.previewRecycleItem.templateName || '自由创作')))
             .fontSize(this.sf(12))
             .fontColor($r('app.color.text_tertiary'))
             .width('100%')
@@ -2705,7 +2773,7 @@ struct Index {
                   .fontSize(this.sf(14))
                   .fontColor(this.textColor)
                   .layoutWeight(1)
-                Text(`${this.archivedWorks.filter(w => w.folderId === folder.id).length} 篇`)
+                Text(`${this.archivedWorks.filter(w => w.archiveFolderId === folder.id).length} 篇`)
                   .fontSize(this.sf(12))
                   .fontColor(this.subTextColor)
               }
@@ -2844,6 +2912,33 @@ struct Index {
               this.selectedFolder = null;
               this.showFolderMenu = false;
               this.refreshKey++;
+            }
+          })
+        }
+
+        // 恢复到书架（仅旧档文件夹可用）
+        if (this.folderMenuType === 'archive') {
+          Row() {
+            Text('📦 恢复到书架')
+              .fontSize(this.sf(15))
+              .fontColor(this.textColor)
+              .layoutWeight(1)
+          }
+          .width('100%')
+          .height(48)
+          .backgroundColor(this.bgColor)
+          .borderRadius(8)
+          .padding({ left: 16, right: 16 })
+          .margin({ bottom: 8 })
+          .onClick(() => {
+            if (this.selectedArchiveFolder) {
+              workManager.unarchiveFolder(this.selectedArchiveFolder.id);
+              this.showFolderMenu = false;
+              this.currentArchiveFolderId = '';
+              this.selectedArchiveFolder = null;
+              this.refreshBookshelfData();
+              this.refreshKey++;
+              this.getUIContext().getPromptAction().showToast({ message: '已恢复到书架', duration: 2000 });
             }
           })
         }
@@ -3886,9 +3981,16 @@ struct SettingsTab {
   /** 根据当前设置计算并应用暗色模式 */
   applyDarkMode(): void {
     if (settingsManager.settings.followSystemDark) {
-      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
-      if (ctx.config && ctx.config.colorMode !== undefined) {
-        this.isDarkMode = ctx.config.colorMode === 0;
+      // 跟随系统：优先使用 sysDarkMode（系统真实暗色状态），而非 ctx.config.colorMode
+      // 因为此时 setColorMode 可能尚未执行，ctx.config 仍反映旧的 app 颜色模式
+      const sysDark = AppStorage.get<boolean>('sysDarkMode');
+      if (sysDark !== undefined) {
+        this.isDarkMode = sysDark;
+      } else {
+        const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+        if (ctx.config && ctx.config.colorMode !== undefined) {
+          this.isDarkMode = ctx.config.colorMode === 0;
+        }
       }
     } else {
       this.isDarkMode = settingsManager.settings.isDarkMode;
@@ -4380,18 +4482,19 @@ struct SettingsTab {
         }
 
         ListItem() {
-          this.SettingRow('应用评分', '⭐⭐⭐⭐⭐', false)
+          this.SettingRow('应用评分', '前往应用市场评分', true)
         }
         .onClick(() => {
-          // 调用 AppGallery Kit 应用内评论弹窗
           const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
           try {
-            commentManager.showCommentDialog(context)
-              .catch(() => {
-                this.getUIContext().getPromptAction().showToast({ message: '请前往应用市场评分', duration: 2000 });
-              });
+            context.startAbility({
+              action: 'ohos.want.action.appdetail',
+              uri: 'store://appgallery.huawei.com/app/detail?id=com.creativewriting.ai'
+            }).catch(() => {
+              this.getUIContext().getPromptAction().showToast({ message: '请前往应用市场搜索"创意写作"评分', duration: 3000 });
+            });
           } catch (e) {
-            this.getUIContext().getPromptAction().showToast({ message: '请前往应用市场评分', duration: 2000 });
+            this.getUIContext().getPromptAction().showToast({ message: '请前往应用市场搜索"创意写作"评分', duration: 3000 });
           }
         })
 
@@ -4906,12 +5009,32 @@ struct SettingsTab {
       // 联系反馈面板
       if (this.showFeedbackPanel) {
         Stack({ alignContent: Alignment.Center }) {
+          // 半透明遮罩，点击关闭
+          Column()
+            .width('100%')
+            .height('100%')
+            .backgroundColor('rgba(0,0,0,0.4)')
+            .onClick(() => {
+              this.showFeedbackPanel = false;
+            })
+
           Column() {
-            Text('联系反馈')
-              .fontSize(this.sf(16))
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this._textPrimary)
-              .margin({ bottom: 8 })
+            Row() {
+              Text('联系反馈')
+                .fontSize(this.sf(16))
+                .fontWeight(FontWeight.Bold)
+                .fontColor(this._textPrimary)
+              Blank()
+              Text('✕')
+                .fontSize(this.sf(18))
+                .fontColor($r('app.color.text_tertiary'))
+                .onClick(() => {
+                  this.showFeedbackPanel = false;
+                })
+            }
+            .width('100%')
+            .margin({ bottom: 8 })
+
             Text('点击下方按钮，可打开系统反馈页面提交问题、截图和日志。反馈内容将在应用市场的用户反馈管理中查看。')
               .fontSize(this.sf(12))
               .fontColor($r('app.color.text_tertiary'))
@@ -4937,7 +5060,6 @@ struct SettingsTab {
           .backgroundColor($r('app.color.bg_card'))
           .border({ width: 1, color: this.cardBorder })
           .borderRadius(16)
-          .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
           .margin({ left: 24, right: 24, top: 40, bottom: 40 })
         }
         .width('100%')

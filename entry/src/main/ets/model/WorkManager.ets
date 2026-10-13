@@ -109,10 +109,17 @@ export interface RecycleBinItem {
   deleteTime: string;
   source: string; // bookshelf | archive | inspiration
   originalFolderId?: string;
-  itemType?: string; // work | inspiration，默认 work
+  itemType?: string; // work | inspiration | folder，默认 work
   category?: string; // 灵感分类（itemType=inspiration 时使用）
   fromWidget?: boolean; // 灵感是否来自桌面卡片
   aiContent?: string; // AI侧栏对话数据（删除时保留，恢复时还原）
+  // 文件夹相关（itemType=folder 时使用）
+  folderName?: string; // 文件夹名称
+  coverColor?: string; // 文件夹封面颜色
+  folderSource?: string; // bookshelf | archive，文件夹来源
+  folderWorks?: WorkItem[]; // 文件夹内全部作品快照（恢复时一并还原）
+  // 作品完整数据备份（itemType=work 时使用）
+  workData?: WorkItem; // 完整作品数据快照
 }
 
 /** 灵感池条目（原子化服务卡片快速记录） */
@@ -234,8 +241,29 @@ export class WorkManager {
       this.loadFromFiles();
       // preferences 作为补充：仅填补 filesDir 中缺失的数据集
       await this.loadFromStorage();
+      // 清理孤儿数据：folderId/archiveFolderId 指向已删文件夹的作品
+      this.cleanupOrphanWorks();
     } catch (e) {
       console.error('[WorkManager] 初始化失败: ' + JSON.stringify(e));
+    }
+  }
+
+  /** 清理孤儿数据：folderId/archiveFolderId 指向已删文件夹的作品，清空归属使其归入未分类 */
+  private cleanupOrphanWorks(): void {
+    let changed = false;
+    for (const work of this.works) {
+      if (work.folderId && !this.folders.some(f => f.id === work.folderId)) {
+        work.folderId = '';
+        changed = true;
+      }
+      if (work.archiveFolderId && !this.archiveFolders.some(f => f.id === work.archiveFolderId)) {
+        work.archiveFolderId = undefined;
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.scheduleSave();
+      console.info('[WorkManager] 孤儿数据已清理');
     }
   }
 
@@ -726,6 +754,7 @@ export class WorkManager {
     if (work) {
       work.archived = true;
       work.archiveFolderId = archiveFolderId;
+      work.folderId = '';
       work.updateTime = this.formatDate(new Date());
       this.scheduleSave();
       return true;
@@ -791,15 +820,30 @@ export class WorkManager {
     return false;
   }
 
-  /** 删除书架文件夹（文件夹内作品移入回收站） */
+  /** 删除书架文件夹（文件夹及内作品作为整体移入回收站，一键恢复） */
   deleteFolder(folderId: string): boolean {
     const index = this.folders.findIndex(f => f.id === folderId);
     if (index !== -1) {
-      // 将文件夹内的作品移入回收站，而非留在书架变成未分类
+      const folder = this.folders[index];
       const worksToMove = this.works.filter(w => w.folderId === folderId);
-      for (const work of worksToMove) {
-        this.moveToRecycleBin(work.id, 'bookshelf');
-      }
+      // 文件夹+内部作品合并为一条回收站记录
+      const folderItem: RecycleBinItem = {
+        id: this.generateId(),
+        originalWorkId: folderId,
+        title: folder.name,
+        content: '',
+        templateName: '',
+        deleteTime: this.formatDate(new Date()),
+        source: 'bookshelf',
+        itemType: 'folder',
+        folderName: folder.name,
+        coverColor: folder.coverColor,
+        folderSource: 'bookshelf',
+        folderWorks: worksToMove
+      };
+      this.recycleBinItems.push(folderItem);
+      // 从 works 中移除这些作品
+      this.works = this.works.filter(w => w.folderId !== folderId);
       this.folders.splice(index, 1);
       this.scheduleSave();
       return true;
@@ -842,6 +886,29 @@ export class WorkManager {
       return true;
     }
     return false;
+  }
+
+  /** 恢复旧档文件夹到书架：创建同名书架文件夹，将全部作品移回，删除旧档文件夹 */
+  unarchiveFolder(archiveFolderId: string): boolean {
+    const folder = this.archiveFolders.find(f => f.id === archiveFolderId);
+    if (!folder) return false;
+    // 创建同名书架文件夹
+    const bookshelfFolder = this.createFolder(folder.name, folder.coverColor);
+    // 将旧档文件夹内全部作品移回书架文件夹
+    const works = this.works.filter(w => w.archived && w.archiveFolderId === archiveFolderId);
+    for (const work of works) {
+      work.archived = false;
+      work.archiveFolderId = undefined;
+      work.folderId = bookshelfFolder.id;
+      work.updateTime = this.formatDate(new Date());
+    }
+    // 删除旧档文件夹
+    const idx = this.archiveFolders.findIndex(f => f.id === archiveFolderId);
+    if (idx !== -1) {
+      this.archiveFolders.splice(idx, 1);
+    }
+    this.scheduleSave();
+    return true;
   }
 
   // ===== 旧档区文件夹管理 =====
@@ -889,15 +956,30 @@ export class WorkManager {
     return false;
   }
 
-  /** 删除旧档区文件夹（文件夹内作品移入回收站） */
+  /** 删除旧档区文件夹（文件夹及内作品作为整体移入回收站，一键恢复） */
   deleteArchiveFolder(folderId: string): boolean {
     const index = this.archiveFolders.findIndex(f => f.id === folderId);
     if (index !== -1) {
-      // 将文件夹内的作品移入回收站
+      const folder = this.archiveFolders[index];
       const worksToMove = this.works.filter(w => w.archiveFolderId === folderId);
-      for (const work of worksToMove) {
-        this.moveToRecycleBin(work.id, 'archive');
-      }
+      // 文件夹+内部作品合并为一条回收站记录
+      const folderItem: RecycleBinItem = {
+        id: this.generateId(),
+        originalWorkId: folderId,
+        title: folder.name,
+        content: '',
+        templateName: '',
+        deleteTime: this.formatDate(new Date()),
+        source: 'archive',
+        itemType: 'folder',
+        folderName: folder.name,
+        coverColor: folder.coverColor,
+        folderSource: 'archive',
+        folderWorks: worksToMove
+      };
+      this.recycleBinItems.push(folderItem);
+      // 从 works 中移除这些作品
+      this.works = this.works.filter(w => w.archiveFolderId !== folderId);
       this.archiveFolders.splice(index, 1);
       this.scheduleSave();
       return true;
@@ -1287,7 +1369,8 @@ export class WorkManager {
       source: source,
       originalFolderId: work.folderId,
       itemType: 'work',
-      aiContent: work.aiContent
+      aiContent: work.aiContent,
+      workData: work
     };
     this.recycleBinItems.push(item);
     // 从works中移除并清理缓存
@@ -1315,19 +1398,91 @@ export class WorkManager {
       this.scheduleSave();
       return true;
     }
-    // 恢复为works
-    const restoredWork: WorkItem = {
-      id: item.originalWorkId,
-      title: item.title,
-      templateId: '',
-      templateName: item.templateName,
-      content: item.content,
-      createTime: this.formatDate(new Date()),
-      updateTime: this.formatDate(new Date()),
-      folderId: item.originalFolderId || '',
-      aiContent: item.aiContent
-    };
+    // 恢复文件夹（连同内部全部作品一并恢复）
+    if (item.itemType === 'folder') {
+      const folderId = item.originalWorkId;
+      if (item.folderSource === 'archive') {
+        const folder: ArchiveFolder = {
+          id: folderId,
+          name: item.folderName || '未命名文件夹',
+          coverColor: item.coverColor || '#6B7280',
+          createTime: this.formatDate(new Date()),
+          updateTime: this.formatDate(new Date())
+        };
+        this.archiveFolders.push(folder);
+      } else {
+        const folder: BookshelfFolder = {
+          id: folderId,
+          name: item.folderName || '未命名文件夹',
+          coverColor: item.coverColor || '#FF2D55',
+          createTime: this.formatDate(new Date()),
+          updateTime: this.formatDate(new Date())
+        };
+        this.folders.push(folder);
+      }
+      // 恢复文件夹内全部作品
+      if (item.folderWorks) {
+        for (const work of item.folderWorks) {
+          if (!this.works.some(w => w.id === work.id)) {
+            this.works.push(work);
+            this.workCache.set(work.id, work);
+          }
+        }
+      }
+      this.recycleBinItems = this.recycleBinItems.filter(r => r.id !== recycleId);
+      this.scheduleSave();
+      return true;
+    }
+    // 恢复作品：优先使用完整快照，兼容旧数据
+    let restoredWork: WorkItem;
+    if (item.workData) {
+      const snap = item.workData;
+      restoredWork = {
+        id: snap.id,
+        title: snap.title,
+        templateId: snap.templateId,
+        templateName: snap.templateName,
+        content: snap.content,
+        createTime: snap.createTime,
+        updateTime: snap.updateTime,
+        archived: snap.archived,
+        workshop: snap.workshop,
+        versions: snap.versions,
+        chapters: snap.chapters,
+        conversations: snap.conversations,
+        outline: snap.outline,
+        characters: snap.characters,
+        scenes: snap.scenes,
+        coverColor: snap.coverColor,
+        bgTheme: snap.bgTheme,
+        folderId: snap.folderId,
+        archiveFolderId: snap.archiveFolderId,
+        aiContent: snap.aiContent
+      };
+    } else {
+      restoredWork = {
+        id: item.originalWorkId,
+        title: item.title,
+        templateId: '',
+        templateName: item.templateName,
+        content: item.content,
+        createTime: this.formatDate(new Date()),
+        updateTime: this.formatDate(new Date()),
+        folderId: item.originalFolderId || '',
+        aiContent: item.aiContent
+      };
+    }
+    restoredWork.updateTime = this.formatDate(new Date());
+    // 检查 folderId 是否指向已删除的文件夹，若是则清空避免孤儿数据
+    if (restoredWork.folderId && !this.folders.some(f => f.id === restoredWork.folderId)) {
+      restoredWork.folderId = '';
+    }
+    // 检查 archiveFolderId 是否指向已删除的旧档文件夹，若是则清空
+    if (restoredWork.archiveFolderId && !this.archiveFolders.some(f => f.id === restoredWork.archiveFolderId)) {
+      restoredWork.archiveFolderId = undefined;
+    }
     this.works.push(restoredWork);
+    this.workCache.set(restoredWork.id, restoredWork);
     this.recycleBinItems = this.recycleBinItems.filter(r => r.id !== recycleId);
     this.scheduleSave();
     return true;
