@@ -6,7 +6,7 @@ import { settingsManager } from '../model/SettingsManager';
 import { aiService } from '../model/AIService';
 import { speechRecognizer } from '@kit.CoreSpeechKit';
 import { audio } from '@kit.AudioKit';
-import { abilityAccessCtrl, common } from '@kit.AbilityKit';
+import { abilityAccessCtrl, common, ConfigurationConstant } from '@kit.AbilityKit';
 import { BusinessError, pasteboard } from '@kit.BasicServicesKit';
 import { huaweiAuthService, HuaweiUserInfo } from '../model/HuaweiAuthService';
 import { cloudSyncService, SyncStatus } from '../model/CloudSyncService';
@@ -17,6 +17,7 @@ import fileIo from '@ohos.file.fs';
 import { util } from '@kit.ArkTS';
 import formProvider from '@ohos.app.form.formProvider';
 import formBindingData from '@ohos.app.form.formBindingData';
+import { updateManager, commentManager } from '@kit.AppGalleryKit';
 import { preferences } from '@kit.ArkData';
 
 /** 卡片所需的灵感统计数据 */
@@ -42,6 +43,7 @@ struct Index {
   @StorageLink('appDarkMode') isDarkMode: boolean = false;
   @State showOnboarding: boolean = false;
   @State onboardingPage: number = 0;
+  @State hasReadAndAgreed: boolean = false;
   @State currentBreakpoint: BreakpointType = 'sm';
   @State refreshKey: number = 0;
   @StorageProp('sysDarkMode') @Watch('onSysDarkModeChange') sysDarkMode: boolean = false;
@@ -141,29 +143,28 @@ struct Index {
     return 10000;
   }
 
-  get bgColor(): string {
-    return this.isDarkMode ? '#1A1A2E' : '#F5F6FA';
+  get bgColor(): ResourceColor {
+    return $r('app.color.bg_page');
   }
 
-  get cardBg(): string {
-    return this.isDarkMode ? '#24243A' : '#FFFFFF';
+  get cardBg(): ResourceColor {
+    return $r('app.color.bg_card');
   }
 
-  get panelBg(): string {
-    return this.isDarkMode ? '#212138' : '#FFFFFF';
+  get panelBg(): ResourceColor {
+    return $r('app.color.bg_panel');
   }
 
-  /** 弹窗卡片结构边框：浅色浅灰 / 深色中灰，与 cardBg 协调 */
-  get cardBorder(): string {
-    return this.isDarkMode ? '#3A3A55' : '#E5E7EB';
+  get cardBorder(): ResourceColor {
+    return $r('app.color.border_default');
   }
 
-  get textColor(): string {
-    return this.isDarkMode ? '#F5F5FA' : '#1A1A2E';
+  get textColor(): ResourceColor {
+    return $r('app.color.text_primary');
   }
 
-  get subTextColor(): string {
-    return this.isDarkMode ? '#B7BACB' : '#6B7280';
+  get subTextColor(): ResourceColor {
+    return $r('app.color.text_secondary');
   }
 
   /** 执行搜索，更新搜索结果 @State 数组 */
@@ -271,10 +272,8 @@ struct Index {
         console.info('[Index] 静默登录成功，userInfo=' + JSON.stringify(userInfo));
         AppStorage.setOrCreate('huaweiLoggedIn', true);
         AppStorage.setOrCreate('huaweiUserInfo', userInfo);
-        // 登录成功且开启自动同步 → 执行同步
-        if (cloudSyncService.isAutoSyncEnabled()) {
-          cloudSyncService.sync();
-        }
+        // 登录成功后自动触发端云同步
+        cloudSyncService.sync();
       } else {
         // 静默登录未成功（未授权/token过期/设备未登录华为账号）→ 清除stale状态，防止伪登录
         AppStorage.setOrCreate('huaweiLoggedIn', false);
@@ -447,7 +446,7 @@ struct Index {
           .linearGradient({
             direction: GradientDirection.Bottom,
             colors: [
-              [this.isDarkMode ? 'rgba(28,28,46,0)' : 'rgba(255,255,255,0)', 0.0],
+              ['rgba(0,0,0,0)', 0.0],
               [this.bgColor, 0.08]
             ]
           })
@@ -548,13 +547,13 @@ struct Index {
         .margin({ right: 12 })
       Text(label)
         .fontSize(this.sf(15))
-        .fontColor(this.currentIndex === index ? '#FF6B35' : this.textColor)
+        .fontColor(this.currentIndex === index ? $r('app.color.accent_secondary') : this.textColor)
         .fontWeight(this.currentIndex === index ? FontWeight.Bold : FontWeight.Normal)
     }
     .width('100%')
     .height(48)
     .padding({ left: 20 })
-    .backgroundColor(this.currentIndex === index ? (this.isDarkMode ? '#3D3D4A' : '#FFF0E5') : this.bgColor)
+    .backgroundColor(this.currentIndex === index ? $r('app.color.bg_tab_active') : this.bgColor)
     .onClick(() => {
       this.currentIndex = index;
     })
@@ -566,12 +565,12 @@ struct Index {
       Column() {
         // 页面指示器
         Row() {
-          ForEach([0, 1, 2, 3, 4], (index: number) => {
+          ForEach([0, 1, 2, 3, 4, 5, 6], (index: number) => {
             Column()
               .width(8)
               .height(8)
               .borderRadius(4)
-              .backgroundColor(this.onboardingPage === index ? '#FF2D55' : (this.isDarkMode ? '#4B4B5B' : '#E5E7EB'))
+              .backgroundColor(this.onboardingPage === index ? $r('app.color.dot_active') : $r('app.color.dot_inactive'))
               .margin({ left: 4, right: 4 })
           }, (index: number) => index.toString())
         }
@@ -593,7 +592,7 @@ struct Index {
 
           Text('AI赋能，创意无限')
             .fontSize(this.sf(16))
-            .fontColor('#FF2D55')
+            .fontColor($r('app.color.accent_primary'))
             .margin({ bottom: 24 })
 
           Text('这是一款专为创作者打造的AI写作助手，帮助您从灵感迸发到完整作品的全流程创作。')
@@ -686,13 +685,13 @@ struct Index {
 
           Text('  - 运行本地 GGUF 格式大模型，离线可用')
             .fontSize(this.sf(13))
-            .fontColor('#9CA3AF')
+            .fontColor($r('app.color.text_tertiary'))
             .margin({ bottom: 16 })
             .alignSelf(ItemAlign.Start)
 
           Text('💡 提示：在设置中选择GGUF模型即可使用AI功能')
             .fontSize(this.sf(13))
-            .fontColor('#FF2D55')
+            .fontColor($r('app.color.accent_primary'))
             .alignSelf(ItemAlign.Start)
         }
 
@@ -771,19 +770,19 @@ struct Index {
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
-          Text('• 作品数据完全保存在您的设备上')
+          Text('• 作品数据本地存储，登录后多设备自动同步')
             .fontSize(this.sf(14))
             .fontColor(this.subTextColor)
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
-          Text('• 不会上传任何用户内容到服务器')
+          Text('• 未登录时数据仅存于本机，不会上传')
             .fontSize(this.sf(14))
             .fontColor(this.subTextColor)
             .margin({ bottom: 20 })
             .alignSelf(ItemAlign.Start)
 
-          Text('华为账号登录（同步到云盘）')
+          Text('华为账号登录（多设备同步）')
             .fontSize(this.sf(16))
             .fontWeight(FontWeight.Medium)
             .fontColor(this.textColor)
@@ -796,11 +795,142 @@ struct Index {
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
-          Text('• 数据同步至华为云盘，多设备随时访问')
+          Text('• 登录后自动同步，多设备协同创作')
             .fontSize(this.sf(14))
             .fontColor(this.subTextColor)
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
+        }
+
+        // 第5页：使用说明
+        if (this.onboardingPage === 5) {
+          Text('📖')
+            .fontSize(this.sf(60))
+            .margin({ bottom: 16 })
+
+          Text('使用说明')
+            .fontSize(this.sf(24))
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.textColor)
+            .margin({ bottom: 12 })
+
+          Scroll() {
+            Column() {
+              Text('• 本应用内置AI模型，需在设置中选择模型文件后使用。')
+                .fontSize(this.sf(13))
+                .fontColor(this.subTextColor)
+                .margin({ bottom: 6 })
+                .alignSelf(ItemAlign.Start)
+
+              Text('• AI生成内容仅供参考，请自行审校后再行使用。')
+                .fontSize(this.sf(13))
+                .fontColor(this.subTextColor)
+                .margin({ bottom: 6 })
+                .alignSelf(ItemAlign.Start)
+
+              Text('• 推理线程数建议保持默认（自动检测），手动设置不应超过设备逻辑核数。')
+                .fontSize(this.sf(13))
+                .fontColor(this.subTextColor)
+                .margin({ bottom: 6 })
+                .alignSelf(ItemAlign.Start)
+
+              Text('• 上下文长度越大占用内存越多，设备内存不足时请适当调小。')
+                .fontSize(this.sf(13))
+                .fontColor(this.subTextColor)
+                .margin({ bottom: 6 })
+                .alignSelf(ItemAlign.Start)
+
+              Text('• 所有作品数据保存在本地，建议定期导出备份。')
+                .fontSize(this.sf(13))
+                .fontColor(this.subTextColor)
+                .margin({ bottom: 6 })
+                .alignSelf(ItemAlign.Start)
+
+              Text('• 如遇设备卡顿，请降低线程数或上下文长度后重试。')
+                .fontSize(this.sf(13))
+                .fontColor(this.subTextColor)
+                .margin({ bottom: 6 })
+                .alignSelf(ItemAlign.Start)
+            }
+            .width('100%')
+          }
+          .layoutWeight(1)
+          .width('100%')
+        }
+
+        // 第6页：免责协议
+        if (this.onboardingPage === 6) {
+          Text('📋')
+            .fontSize(this.sf(60))
+            .margin({ bottom: 16 })
+
+          Text('免责协议')
+            .fontSize(this.sf(24))
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.textColor)
+            .margin({ bottom: 12 })
+
+          Scroll() {
+            Column() {
+              Text('【用户协议】')
+                .fontSize(this.sf(13))
+                .fontWeight(FontWeight.Bold)
+                .fontColor(this.textColor)
+                .margin({ bottom: 6 })
+                .alignSelf(ItemAlign.Start)
+
+              Text('1. 本应用仅供个人学习和创作使用，不得用于商业侵权用途。\n2. 用户需遵守相关法律法规，不得利用本应用生成违法违规内容。\n3. AI生成的内容版权归用户所有，用户需自行承担使用风险。\n4. 用户在使用AI功能时应遵守相关法律法规。\n5. 本应用不对AI生成内容的准确性和合法性负责。')
+                .fontSize(this.sf(12))
+                .fontColor(this.subTextColor)
+                .margin({ bottom: 10 })
+                .alignSelf(ItemAlign.Start)
+
+              Text('【隐私政策】')
+                .fontSize(this.sf(13))
+                .fontWeight(FontWeight.Bold)
+                .fontColor(this.textColor)
+                .margin({ bottom: 6 })
+                .alignSelf(ItemAlign.Start)
+
+              Text('1. 所有作品数据仅保存在您的设备上，我们不会收集您的创作内容。\n2. 本应用不会收集您的个人信息、位置、通讯录等隐私数据。\n3. 当您使用华为账号登录时，我们仅会获取必要的用户标识用于登录验证。\n4. 我们不会将您的任何数据分享给第三方。')
+                .fontSize(this.sf(12))
+                .fontColor(this.subTextColor)
+                .margin({ bottom: 10 })
+                .alignSelf(ItemAlign.Start)
+
+              Text('【免责声明】')
+                .fontSize(this.sf(13))
+                .fontWeight(FontWeight.Bold)
+                .fontColor(this.textColor)
+                .margin({ bottom: 6 })
+                .alignSelf(ItemAlign.Start)
+
+              Text('1. AI生成内容可能存在错误、偏见或不准确之处，本应用不对生成内容的准确性、完整性作任何担保。\n2. 因设备性能差异，推理过程中可能出现卡顿或中断，本应用不承担由此造成的任何损失。\n3. 用户因不当设置（如线程数超过物理核数）导致的设备问题，由用户自行承担。\n4. 本应用不承担因不可抗力导致的数据丢失责任，建议定期导出备份。')
+                .fontSize(this.sf(12))
+                .fontColor(this.subTextColor)
+                .margin({ bottom: 10 })
+                .alignSelf(ItemAlign.Start)
+            }
+            .width('100%')
+          }
+          .layoutWeight(1)
+          .width('100%')
+
+          // 勾选框
+          Row() {
+            Checkbox()
+              .select(this.hasReadAndAgreed)
+              .onChange((value: boolean) => {
+                this.hasReadAndAgreed = value;
+              })
+            Text('我已阅读并同意上述用户协议、隐私政策及免责声明')
+              .fontSize(this.sf(12))
+              .fontColor(this.subTextColor)
+              .margin({ left: 8 })
+              .layoutWeight(1)
+          }
+          .width('100%')
+          .margin({ top: 8, bottom: 4 })
         }
 
         // 底部按钮
@@ -809,7 +939,7 @@ struct Index {
             Button('上一步')
               .fontSize(this.sf(14))
               .fontColor(this.subTextColor)
-              .backgroundColor(this.isDarkMode ? '#353547' : '#F3F4F6')
+              .backgroundColor($r('app.color.bg_input'))
               .borderRadius(20)
               .height(40)
               .layoutWeight(1)
@@ -819,11 +949,11 @@ struct Index {
               })
           }
 
-          if (this.onboardingPage < 4) {
+          if (this.onboardingPage < 6) {
             Button('下一步')
               .fontSize(this.sf(14))
-              .fontColor('#FFFFFF')
-              .backgroundColor('#FF2D55')
+              .fontColor($r('app.color.text_on_accent'))
+              .backgroundColor($r('app.color.accent_primary'))
               .borderRadius(20)
               .height(40)
               .layoutWeight(1)
@@ -834,12 +964,13 @@ struct Index {
           } else {
             Button('开始使用')
               .fontSize(this.sf(14))
-              .fontColor('#FFFFFF')
-              .backgroundColor('#FF2D55')
+              .fontColor(this.hasReadAndAgreed ? $r('app.color.text_on_accent') : $r('app.color.text_tertiary'))
+              .backgroundColor(this.hasReadAndAgreed ? $r('app.color.accent_primary') : $r('app.color.bg_input'))
               .borderRadius(20)
               .height(40)
               .layoutWeight(1)
               .margin({ left: 8 })
+              .enabled(this.hasReadAndAgreed)
               .onClick(() => {
                 settingsManager.settings.isFirstLaunch = false;
                 settingsManager.settings.hasAgreedToTerms = true;
@@ -854,7 +985,7 @@ struct Index {
       }
       .width('90%')
       .padding(24)
-      .backgroundColor('#FFFFFF')
+      .backgroundColor($r('app.color.bg_card'))
       .border({ width: 1, color: this.cardBorder })
       .borderRadius(16)
       .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
@@ -885,13 +1016,14 @@ struct Index {
       }
       .width('100%')
       .height('100%')
+      .scrollBar(BarState.Off)
 
       // 悬浮header（玻璃透视效果）
       Row() {
         if (this.currentFolderId.length > 0) {
           Text('←')
             .fontSize(this.sf(20))
-            .fontColor('#FF2D55')
+            .fontColor($r('app.color.accent_primary'))
             .onClick(() => { this.currentFolderId = ''; })
             .padding({ left: 16, right: 12 })
           Text(this.getFolderName(this.currentFolderId))
@@ -908,8 +1040,8 @@ struct Index {
         }
         Button('搜索')
           .fontSize(this.sf(14))
-          .fontColor('#FFFFFF')
-          .backgroundColor('#FF2D55')
+          .fontColor($r('app.color.text_on_accent'))
+          .backgroundColor($r('app.color.accent_primary'))
           .borderRadius(20)
           .height(36)
           .padding({ left: 16, right: 16 })
@@ -969,7 +1101,7 @@ struct Index {
           if (this.currentArchiveFolderId.length > 0) {
             Text('←')
               .fontSize(this.sf(20))
-              .fontColor('#FF2D55')
+              .fontColor($r('app.color.accent_primary'))
               .onClick(() => { this.currentArchiveFolderId = ''; })
               .padding({ left: 16, right: 12 })
             Text(this.getArchiveFolderName(this.currentArchiveFolderId))
@@ -985,8 +1117,8 @@ struct Index {
               .layoutWeight(1)
             Button('搜索')
               .fontSize(this.sf(14))
-              .fontColor('#FFFFFF')
-              .backgroundColor('#FF2D55')
+              .fontColor($r('app.color.text_on_accent'))
+              .backgroundColor($r('app.color.accent_primary'))
               .borderRadius(20)
               .height(36)
               .padding({ left: 16, right: 16 })
@@ -1059,7 +1191,7 @@ struct Index {
                 .fontSize(this.sf(28))
               Text(folder.name)
                 .fontSize(this.sf(12))
-                .fontColor('#FFFFFF')
+                .fontColor($r('app.color.text_on_accent'))
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
                 .margin({ top: 4 })
@@ -1112,7 +1244,7 @@ struct Index {
       Column() {
         Text('📖 书架空空如也')
           .fontSize(this.sf(16))
-          .fontColor('#9CA3AF')
+          .fontColor($r('app.color.text_tertiary'))
           .margin({ bottom: 8 })
         Text('点击右上角「新建」开始创作')
           .fontSize(this.sf(13))
@@ -1136,7 +1268,7 @@ struct Index {
       Column() {
         Text('📁 文件夹为空')
           .fontSize(this.sf(16))
-          .fontColor('#9CA3AF')
+          .fontColor($r('app.color.text_tertiary'))
       }
       .width('100%')
       .height(200)
@@ -1156,7 +1288,7 @@ struct Index {
                 .fontSize(this.sf(28))
               Text(folder.name)
                 .fontSize(this.sf(12))
-                .fontColor('#FFFFFF')
+                .fontColor($r('app.color.text_on_accent'))
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
                 .margin({ top: 4 })
@@ -1207,7 +1339,7 @@ struct Index {
       Column() {
         Text('📦 暂无归档作品')
           .fontSize(this.sf(16))
-          .fontColor('#9CA3AF')
+          .fontColor($r('app.color.text_tertiary'))
           .margin({ bottom: 8 })
         Text('在书架中归档作品后将显示在此')
           .fontSize(this.sf(13))
@@ -1231,7 +1363,7 @@ struct Index {
       Column() {
         Text('📦 文件夹为空')
           .fontSize(this.sf(16))
-          .fontColor('#9CA3AF')
+          .fontColor($r('app.color.text_tertiary'))
       }
       .width('100%')
       .height(200)
@@ -1341,7 +1473,7 @@ struct Index {
           Column() {
             Text(item.itemType === 'inspiration' ? '💡' : '📄')
               .fontSize(this.sf(18))
-              .fontColor('#FFFFFF')
+              .fontColor($r('app.color.text_on_accent'))
           }
           .width(40)
           .height(40)
@@ -1359,7 +1491,7 @@ struct Index {
               .textOverflow({ overflow: TextOverflow.Ellipsis })
             Text((item.itemType === 'inspiration' ? '灵感 · ' : '作品 · ') + item.deleteTime)
               .fontSize(this.sf(11))
-              .fontColor('#9CA3AF')
+              .fontColor($r('app.color.text_tertiary'))
               .margin({ top: 2 })
           }
           .layoutWeight(1)
@@ -1374,7 +1506,7 @@ struct Index {
           // 恢复按钮
           Text('恢复')
             .fontSize(this.sf(12))
-            .fontColor('#FF6B35')
+            .fontColor($r('app.color.accent_secondary'))
             .padding({ left: 10, right: 10, top: 5, bottom: 5 })
             .border({ width: 1, color: '#FF6B35' })
             .borderRadius(12)
@@ -1449,7 +1581,7 @@ struct Index {
       Column() {
         Text('🗑 回收站为空')
           .fontSize(this.sf(16))
-          .fontColor('#9CA3AF')
+          .fontColor($r('app.color.text_tertiary'))
       }
       .width('100%')
       .height(200)
@@ -1466,7 +1598,7 @@ struct Index {
           Column() {
             Text('💡')
               .fontSize(this.sf(18))
-              .fontColor('#FFFFFF')
+              .fontColor($r('app.color.text_on_accent'))
           }
           .width(40)
           .height(40)
@@ -1490,7 +1622,7 @@ struct Index {
               }
               Text(item.createTime)
                 .fontSize(this.sf(10))
-                .fontColor('#9CA3AF')
+                .fontColor($r('app.color.text_tertiary'))
             }
             .margin({ top: 2 })
           }
@@ -1540,7 +1672,7 @@ struct Index {
       // 手动添加灵感
       Button('＋ 添加灵感')
         .fontSize(this.sf(14))
-        .fontColor('#FF6B35')
+        .fontColor($r('app.color.accent_secondary'))
         .backgroundColor('#FFF7ED')
         .borderRadius(8)
         .height(36)
@@ -1558,14 +1690,14 @@ struct Index {
       Column() {
         Text('💡 灵感池为空')
           .fontSize(this.sf(16))
-          .fontColor('#9CA3AF')
+          .fontColor($r('app.color.text_tertiary'))
         Text('点击下方按钮添加灵感，或在桌面卡片速记')
           .fontSize(this.sf(12))
-          .fontColor('#9CA3AF')
+          .fontColor($r('app.color.text_tertiary'))
           .margin({ top: 4 })
         Button('＋ 添加灵感')
           .fontSize(this.sf(14))
-          .fontColor('#FF6B35')
+          .fontColor($r('app.color.accent_secondary'))
           .backgroundColor('#FFF7ED')
           .borderRadius(8)
           .height(36)
@@ -1685,7 +1817,7 @@ struct Index {
               .margin({ right: 6 })
             Text(this.voiceInterimText.length > 0 ? this.voiceInterimText : '正在聆听...')
               .fontSize(this.sf(13))
-              .fontColor('#FF6B35')
+              .fontColor($r('app.color.accent_secondary'))
               .fontWeight(FontWeight.Medium)
               .lineHeight(18)
               .maxLines(3)
@@ -1702,7 +1834,7 @@ struct Index {
 
         Row() {
           Button('取消')
-            .fontColor('#9CA3AF')
+            .fontColor($r('app.color.text_tertiary'))
             .backgroundColor(this.cardBg)
             .border({ width: 1, color: '#D1D5DB' })
             .borderRadius(8)
@@ -1715,7 +1847,7 @@ struct Index {
             })
 
           Button('保存')
-            .fontColor('#FFFFFF')
+            .fontColor($r('app.color.text_on_accent'))
             .backgroundColor('#FF6B35')
             .borderRadius(8)
             .height(40)
@@ -1753,7 +1885,7 @@ struct Index {
       }
       .width('85%')
       .padding(24)
-      .backgroundColor('#FFFFFF')
+      .backgroundColor($r('app.color.bg_card'))
       .border({ width: 1, color: this.cardBorder })
       .borderRadius(16)
       .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
@@ -1971,7 +2103,7 @@ struct Index {
             })
           Button('取消')
             .fontSize(this.sf(15))
-            .fontColor('#FF2D55')
+            .fontColor($r('app.color.accent_primary'))
             .backgroundColor(Color.Transparent)
             .onClick(() => {
               this.showSearchPage = false;
@@ -2011,7 +2143,7 @@ struct Index {
                       .fontColor(this.textColor)
                     Text('文件夹')
                       .fontSize(this.sf(12))
-                      .fontColor('#9CA3AF')
+                      .fontColor($r('app.color.text_tertiary'))
                       .margin({ left: 8 })
                   }
                   .width('100%')
@@ -2032,7 +2164,7 @@ struct Index {
                     Column() {
                       Text((work.title || '未命名').charAt(0))
                         .fontSize(this.sf(16))
-                        .fontColor('#FFFFFF')
+                        .fontColor($r('app.color.text_on_accent'))
                         .fontWeight(FontWeight.Bold)
                     }
                     .width(36)
@@ -2051,7 +2183,7 @@ struct Index {
                         .textOverflow({ overflow: TextOverflow.Ellipsis })
                       Text(work.templateName || '作品')
                         .fontSize(this.sf(12))
-                        .fontColor('#9CA3AF')
+                        .fontColor($r('app.color.text_tertiary'))
                         .maxLines(1)
                     }
                     .layoutWeight(1)
@@ -2093,7 +2225,7 @@ struct Index {
                       .fontColor(this.textColor)
                     Text('文件夹')
                       .fontSize(this.sf(12))
-                      .fontColor('#9CA3AF')
+                      .fontColor($r('app.color.text_tertiary'))
                       .margin({ left: 8 })
                   }
                   .width('100%')
@@ -2114,7 +2246,7 @@ struct Index {
                     Column() {
                       Text((work.title || '未命名').charAt(0))
                         .fontSize(this.sf(16))
-                        .fontColor('#FFFFFF')
+                        .fontColor($r('app.color.text_on_accent'))
                         .fontWeight(FontWeight.Bold)
                     }
                     .width(36)
@@ -2133,7 +2265,7 @@ struct Index {
                         .textOverflow({ overflow: TextOverflow.Ellipsis })
                       Text(work.templateName || '作品')
                         .fontSize(this.sf(12))
-                        .fontColor('#9CA3AF')
+                        .fontColor($r('app.color.text_tertiary'))
                         .maxLines(1)
                     }
                     .layoutWeight(1)
@@ -2185,7 +2317,7 @@ struct Index {
                         .textOverflow({ overflow: TextOverflow.Ellipsis })
                       Text(insp.category === 'idea' ? '灵感' : insp.category === 'snippet' ? '片段' : '笔记')
                         .fontSize(this.sf(12))
-                        .fontColor('#9CA3AF')
+                        .fontColor($r('app.color.text_tertiary'))
                     }
                     .layoutWeight(1)
                     .alignItems(HorizontalAlign.Start)
@@ -2212,7 +2344,7 @@ struct Index {
                   this.searchInspirations.length === 0) {
                 Text('未找到匹配的文件夹或作品')
                   .fontSize(this.sf(15))
-                  .fontColor('#9CA3AF')
+                  .fontColor($r('app.color.text_tertiary'))
                   .margin({ top: 40 })
                   .width('100%')
                   .textAlign(TextAlign.Center)
@@ -2220,7 +2352,7 @@ struct Index {
             } else {
               Text('输入关键词搜索书架和素材库中的文件夹与作品')
                 .fontSize(this.sf(15))
-                .fontColor('#9CA3AF')
+                .fontColor($r('app.color.text_tertiary'))
                 .margin({ top: 40 })
                 .width('100%')
                 .textAlign(TextAlign.Center)
@@ -2234,7 +2366,7 @@ struct Index {
       }
       .width('100%')
       .height('100%')
-      .backgroundColor('#FFFFFF')
+      .backgroundColor($r('app.color.bg_card'))
     }
     .width('100%')
     .height('100%')
@@ -2276,18 +2408,18 @@ struct Index {
 
           Text('模板: ' + (this.previewRecycleItem.templateName || '自由创作'))
             .fontSize(this.sf(12))
-            .fontColor('#9CA3AF')
+            .fontColor($r('app.color.text_tertiary'))
             .width('100%')
             .margin({ top: 8 })
 
           Text('删除时间: ' + this.previewRecycleItem.deleteTime)
             .fontSize(this.sf(12))
-            .fontColor('#9CA3AF')
+            .fontColor($r('app.color.text_tertiary'))
             .width('100%')
         }
 
         Button('关闭')
-          .fontColor('#FFFFFF')
+          .fontColor($r('app.color.text_on_accent'))
           .backgroundColor('#3B82F6')
           .borderRadius(8)
           .height(40)
@@ -2299,7 +2431,7 @@ struct Index {
       }
       .width('85%')
       .padding(24)
-      .backgroundColor('#FFFFFF')
+      .backgroundColor($r('app.color.bg_card'))
       .border({ width: 1, color: this.cardBorder })
       .borderRadius(16)
       .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
@@ -2318,7 +2450,7 @@ struct Index {
       Column() {
         Text((work.title || '未命名').charAt(0))
           .fontSize(this.sf(18))
-          .fontColor('#FFFFFF')
+          .fontColor($r('app.color.text_on_accent'))
           .fontWeight(FontWeight.Bold)
       }
       .width(40)
@@ -2337,11 +2469,11 @@ struct Index {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
         Text(work.templateName)
           .fontSize(this.sf(11))
-          .fontColor('#FF2D55')
+          .fontColor($r('app.color.accent_primary'))
           .margin({ top: 2 })
         Text(work.updateTime)
           .fontSize(this.sf(10))
-          .fontColor('#9CA3AF')
+          .fontColor($r('app.color.text_tertiary'))
           .margin({ top: 2 })
       }
       .alignItems(HorizontalAlign.Start)
@@ -2359,7 +2491,7 @@ struct Index {
       } else {
         Text('归档')
           .fontSize(this.sf(12))
-          .fontColor('#6B7280')
+          .fontColor($r('app.color.text_secondary'))
           .padding({ left: 8, right: 8 })
           .onClick(() => {
             this.workToArchive = work.id;
@@ -2429,8 +2561,8 @@ struct Index {
 
           Button('确定')
             .fontSize(this.sf(14))
-            .fontColor('#FFFFFF')
-            .backgroundColor('#FF2D55')
+            .fontColor($r('app.color.text_on_accent'))
+            .backgroundColor($r('app.color.accent_primary'))
             .borderRadius(8)
             .height(40)
             .layoutWeight(1)
@@ -2456,7 +2588,7 @@ struct Index {
       }
       .width('80%')
       .padding(24)
-      .backgroundColor('#FFFFFF')
+      .backgroundColor($r('app.color.bg_card'))
       .border({ width: 1, color: this.cardBorder })
       .borderRadius(16)
       .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
@@ -2518,7 +2650,7 @@ struct Index {
       }
       .width('80%')
       .padding(24)
-      .backgroundColor('#FFFFFF')
+      .backgroundColor($r('app.color.bg_card'))
       .border({ width: 1, color: this.cardBorder })
       .borderRadius(16)
       .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
@@ -2547,11 +2679,11 @@ struct Index {
             Row() {
               Text('📁 新建文件夹')
                 .fontSize(this.sf(14))
-                .fontColor('#FF2D55')
+                .fontColor($r('app.color.accent_primary'))
                 .layoutWeight(1)
               Text('+')
                 .fontSize(this.sf(18))
-                .fontColor('#FF2D55')
+                .fontColor($r('app.color.accent_primary'))
             }
             .width('100%')
             .height(48)
@@ -2628,7 +2760,7 @@ struct Index {
       }
       .width('80%')
       .padding(24)
-      .backgroundColor('#FFFFFF')
+      .backgroundColor($r('app.color.bg_card'))
       .border({ width: 1, color: this.cardBorder })
       .borderRadius(16)
       .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
@@ -2772,7 +2904,7 @@ struct Index {
       }
       .width('75%')
       .padding(24)
-      .backgroundColor('#FFFFFF')
+      .backgroundColor($r('app.color.bg_card'))
       .border({ width: 1, color: this.cardBorder })
       .borderRadius(16)
       .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
@@ -2861,7 +2993,7 @@ struct Index {
         Row() {
           Text('🗑️ 删除')
             .fontSize(this.sf(15))
-            .fontColor('#FF2D55')
+            .fontColor($r('app.color.accent_primary'))
             .layoutWeight(1)
         }
         .width('100%')
@@ -2898,7 +3030,7 @@ struct Index {
       }
       .width('70%')
       .padding(20)
-      .backgroundColor('#FFFFFF')
+      .backgroundColor($r('app.color.bg_card'))
       .border({ width: 1, color: this.cardBorder })
       .borderRadius(16)
       .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
@@ -2920,7 +3052,7 @@ struct Index {
           .fontSize(this.sf(26))
         Text('短幕剧')
           .fontSize(this.sf(12))
-          .fontColor(this.currentIndex === 0 ? '#FF2D55' : (this.isDarkMode ? '#E5E7EB' : '#374151'))
+          .fontColor(this.currentIndex === 0 ? $r('app.color.accent_primary') : $r('app.color.text_secondary'))
           .margin({ top: 3 })
       }
       .layoutWeight(1)
@@ -2935,7 +3067,7 @@ struct Index {
           .fontSize(this.sf(26))
         Text('中长篇')
           .fontSize(this.sf(12))
-          .fontColor(this.currentIndex === 1 ? '#FF2D55' : (this.isDarkMode ? '#E5E7EB' : '#374151'))
+          .fontColor(this.currentIndex === 1 ? $r('app.color.accent_primary') : $r('app.color.text_secondary'))
           .margin({ top: 3 })
       }
       .layoutWeight(1)
@@ -2950,7 +3082,7 @@ struct Index {
           .fontSize(this.sf(26))
         Text('书架')
           .fontSize(this.sf(12))
-          .fontColor(this.currentIndex === 2 ? '#FF2D55' : (this.isDarkMode ? '#E5E7EB' : '#374151'))
+          .fontColor(this.currentIndex === 2 ? $r('app.color.accent_primary') : $r('app.color.text_secondary'))
           .margin({ top: 3 })
       }
       .layoutWeight(1)
@@ -2965,7 +3097,7 @@ struct Index {
           .fontSize(this.sf(26))
         Text('素材库')
           .fontSize(this.sf(12))
-          .fontColor(this.currentIndex === 3 ? '#FF2D55' : (this.isDarkMode ? '#E5E7EB' : '#374151'))
+          .fontColor(this.currentIndex === 3 ? $r('app.color.accent_primary') : $r('app.color.text_secondary'))
           .margin({ top: 3 })
       }
       .layoutWeight(1)
@@ -2980,7 +3112,7 @@ struct Index {
           .fontSize(this.sf(26))
         Text('设置')
           .fontSize(this.sf(12))
-          .fontColor(this.currentIndex === 4 ? '#FF2D55' : (this.isDarkMode ? '#E5E7EB' : '#374151'))
+          .fontColor(this.currentIndex === 4 ? $r('app.color.accent_primary') : $r('app.color.text_secondary'))
           .margin({ top: 3 })
       }
       .layoutWeight(1)
@@ -3012,7 +3144,7 @@ struct Index {
         .fontSize(this.sf(20))
       Text(title)
         .fontSize(this.sf(10))
-        .fontColor(this.currentIndex === index ? '#FF2D55' : (this.isDarkMode ? '#B7BACB' : '#9CA3AF'))
+        .fontColor(this.currentIndex === index ? $r('app.color.accent_primary') : $r('app.color.text_secondary'))
         .margin({ top: 2 })
     }
     .width('100%')
@@ -3026,9 +3158,9 @@ struct Index {
 @Component
 struct ShortDramaTab {
   @Prop isDarkMode: boolean;
-  @Prop cardBg: string;
-  @Prop textColor: string;
-  @Prop bgColor: string;
+  @Prop cardBg: ResourceColor;
+  @Prop textColor: ResourceColor;
+  @Prop bgColor: ResourceColor;
   @Prop statusBarHeight: number = 0;
   @StorageProp('appFontSize') fontSize: number = 14;
   @State templates: TemplateInfo[] = [];
@@ -3129,7 +3261,7 @@ struct ShortDramaTab {
                 Blank()
                 Text(`${this.templates.filter(t => t.category === category).length}个模板`)
                   .fontSize(this.sf(11))
-                  .fontColor('#9CA3AF')
+                  .fontColor($r('app.color.text_tertiary'))
               }
               .width('100%')
               .padding({ left: 16, right: 16, top: 12, bottom: 8 })
@@ -3151,7 +3283,7 @@ struct ShortDramaTab {
           }, (category: string) => category)
 
           // 底部留白（防止被tab bar遮挡）
-          Column().width('100%').height(80)
+          Column().width('100%').height(85)
         }
         .width('100%')
       }
@@ -3168,8 +3300,8 @@ struct ShortDramaTab {
         Blank()
         Button('新建')
           .fontSize(this.sf(14))
-          .fontColor('#FFFFFF')
-          .backgroundColor('#FF2D55')
+          .fontColor($r('app.color.text_on_accent'))
+          .backgroundColor($r('app.color.accent_primary'))
           .borderRadius(20)
           .height(36)
           .padding({ left: 16, right: 16 })
@@ -3199,7 +3331,7 @@ struct ShortDramaTab {
         if (typeof template.icon === 'string') {
           Text(template.icon)
             .fontSize(this.sf(16))
-            .fontColor('#FFFFFF')
+            .fontColor($r('app.color.text_on_accent'))
         } else {
           Image(template.icon)
             .width(20)
@@ -3221,7 +3353,7 @@ struct ShortDramaTab {
 
       Text('›')
         .fontSize(this.sf(18))
-        .fontColor('#9CA3AF')
+        .fontColor($r('app.color.text_tertiary'))
     }
     .width('100%')
     .height(52)
@@ -3244,7 +3376,7 @@ struct ShortDramaTab {
       Column() {
         Text((work.title || '未命名').charAt(0))
           .fontSize(this.sf(20))
-          .fontColor('#FFFFFF')
+          .fontColor($r('app.color.text_on_accent'))
           .fontWeight(FontWeight.Bold)
       }
       .width(44)
@@ -3263,11 +3395,11 @@ struct ShortDramaTab {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
         Text(work.templateName)
           .fontSize(this.sf(11))
-          .fontColor('#FF2D55')
+          .fontColor($r('app.color.accent_primary'))
           .margin({ top: 2 })
         Text(work.updateTime)
           .fontSize(this.sf(10))
-          .fontColor('#9CA3AF')
+          .fontColor($r('app.color.text_tertiary'))
           .margin({ top: 2 })
       }
       .alignItems(HorizontalAlign.Start)
@@ -3334,9 +3466,9 @@ struct ShortDramaTab {
 @Component
 struct NovelTab {
   @Prop isDarkMode: boolean;
-  @Prop cardBg: string;
-  @Prop textColor: string;
-  @Prop bgColor: string;
+  @Prop cardBg: ResourceColor;
+  @Prop textColor: ResourceColor;
+  @Prop bgColor: ResourceColor;
   @Prop statusBarHeight: number = 0;
   @StorageProp('appFontSize') fontSize: number = 14;
   @State templates: TemplateInfo[] = [];
@@ -3447,7 +3579,7 @@ struct NovelTab {
                 Blank()
                 Text(`${this.templates.filter(t => t.category === category).length}个模板`)
                   .fontSize(this.sf(11))
-                  .fontColor('#9CA3AF')
+                  .fontColor($r('app.color.text_tertiary'))
               }
               .width('100%')
               .padding({ left: 16, right: 16, top: 12, bottom: 8 })
@@ -3469,7 +3601,7 @@ struct NovelTab {
           }, (category: string) => category)
 
           // 底部留白（防止被tab bar遮挡）
-          Column().width('100%').height(80)
+          Column().width('100%').height(85)
         }
         .width('100%')
       }
@@ -3486,8 +3618,8 @@ struct NovelTab {
         Blank()
         Button('新建')
           .fontSize(this.sf(14))
-          .fontColor('#FFFFFF')
-          .backgroundColor('#FF2D55')
+          .fontColor($r('app.color.text_on_accent'))
+          .backgroundColor($r('app.color.accent_primary'))
           .borderRadius(20)
           .height(36)
           .padding({ left: 16, right: 16 })
@@ -3531,7 +3663,7 @@ struct NovelTab {
         if (typeof template.icon === 'string') {
           Text(template.icon)
             .fontSize(this.sf(16))
-            .fontColor('#FFFFFF')
+            .fontColor($r('app.color.text_on_accent'))
         } else {
           Image(template.icon)
             .width(20)
@@ -3553,7 +3685,7 @@ struct NovelTab {
 
       Text('›')
         .fontSize(this.sf(18))
-        .fontColor('#9CA3AF')
+        .fontColor($r('app.color.text_tertiary'))
     }
     .width('100%')
     .height(52)
@@ -3576,7 +3708,7 @@ struct NovelTab {
       Column() {
         Text((work.title || '未命名').charAt(0))
           .fontSize(this.sf(20))
-          .fontColor('#FFFFFF')
+          .fontColor($r('app.color.text_on_accent'))
           .fontWeight(FontWeight.Bold)
       }
       .width(44)
@@ -3595,11 +3727,11 @@ struct NovelTab {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
         Text(work.templateName)
           .fontSize(this.sf(11))
-          .fontColor('#FF2D55')
+          .fontColor($r('app.color.accent_primary'))
           .margin({ top: 2 })
         Text(work.updateTime)
           .fontSize(this.sf(10))
-          .fontColor('#9CA3AF')
+          .fontColor($r('app.color.text_tertiary'))
           .margin({ top: 2 })
       }
       .alignItems(HorizontalAlign.Start)
@@ -3678,6 +3810,7 @@ struct SettingsTab {
   @State followSystemDark: boolean = false;
   @State prevFollowSystemDark: boolean = false;
   @State showPrivacyPanel: boolean = false;
+  @State privacyPanelMode: number = 0; // 0=用户协议 1=隐私政策 2=免责声明
   @State showAboutPanel: boolean = false;
   @State autoSaveInterval: number = 5;
   @StorageProp('appFontSize') fontSize: number = 14;
@@ -3690,7 +3823,6 @@ struct SettingsTab {
   @State feedbackText: string = '';
   @StorageLink('huaweiLoggedIn') isHuaweiLoggedIn: boolean = false;
   @StorageLink('huaweiUserInfo') huaweiUserInfo: HuaweiUserInfo | null = null;
-  @State syncStatusText: string = '';
   @State localFontPath: string = '';
   @State showFontPicker: boolean = false;
   @State localModelPath: string = '';
@@ -3701,6 +3833,10 @@ struct SettingsTab {
   @State ggufTemperature: number = 0.8;
   // 模型卸载防抖：slider 拖动时延迟卸载，避免连续触发
   private modelUnloadTimer: number = 0;
+
+  get cardBorder(): ResourceColor {
+    return $r('app.color.border_default');
+  }
 
   aboutToAppear() {
     if (settingsManager.initPromise) {
@@ -3720,12 +3856,10 @@ struct SettingsTab {
     }
   }
 
-  // 暗色模式辅助颜色属性
-  get _cardBg(): string { return this.isDarkMode ? '#2D2D3A' : '#FFFFFF'; }
-  /** 弹窗卡片结构边框：深色中灰 / 浅色浅灰，与 _cardBg 协调 */
-  get cardBorder(): string { return this.isDarkMode ? '#44455E' : '#E5E7EB'; }
-  get _textPrimary(): string { return this.isDarkMode ? '#FFFFFF' : '#1A1A2E'; }
-  get _textSecondary(): string { return this.isDarkMode ? '#9CA3AF' : '#6B7280'; }
+  // 暗色模式辅助颜色属性（统一使用资源引用，系统自动切换深浅色）
+  get _cardBg(): ResourceColor { return $r('app.color.bg_card'); }
+  get _textPrimary(): ResourceColor { return $r('app.color.text_primary'); }
+  get _textSecondary(): ResourceColor { return $r('app.color.text_secondary'); }
 
   get _contentMaxWidth(): number {
     if (this.appBreakpoint === 'lg') return 800;
@@ -3739,9 +3873,9 @@ struct SettingsTab {
     return 16;
   }
 
-  get _inputBg(): string { return this.isDarkMode ? '#3A3A4A' : '#F9FAFB'; }
-  get _cancelBg(): string { return this.isDarkMode ? '#3A3A4A' : '#F3F4F6'; }
-  get _cancelText(): string { return this.isDarkMode ? '#9CA3AF' : '#6B7280'; }
+  get _inputBg(): ResourceColor { return $r('app.color.bg_input'); }
+  get _cancelBg(): ResourceColor { return $r('app.color.bg_input'); }
+  get _cancelText(): ResourceColor { return $r('app.color.text_secondary'); }
 
   /** 从完整路径中提取文件名 */
   getFileName(fullPath: string): string {
@@ -3780,10 +3914,10 @@ struct SettingsTab {
             Column() {
               Text('本地模型文件(GGUF)')
                 .fontSize(this.sf(15))
-                .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+                .fontColor($r('app.color.text_primary'))
               Text(this.localModelPath ? this.getFileName(this.localModelPath) : '未选择')
                 .fontSize(this.sf(12))
-                .fontColor('#9CA3AF')
+                .fontColor($r('app.color.text_tertiary'))
                 .margin({ top: 2 })
             }
             .alignItems(HorizontalAlign.Start)
@@ -3794,7 +3928,7 @@ struct SettingsTab {
           }
           .width('100%')
           .padding({ left: 16, right: 16, top: 16, bottom: 16 })
-          .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
+          .backgroundColor($r('app.color.bg_card'))
         }
         .onClick(() => {
           this.showModelPicker = true;
@@ -3805,11 +3939,11 @@ struct SettingsTab {
             Row() {
               Text('上下文长度')
                 .fontSize(this.sf(14))
-                .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+                .fontColor($r('app.color.text_primary'))
                 Blank()
                 Text(`${this.ggufContextLength}`)
                   .fontSize(this.sf(14))
-                  .fontColor('#9CA3AF')
+                  .fontColor($r('app.color.text_tertiary'))
               }
               .width('100%')
               .padding({ top: 8, bottom: 4 })
@@ -3821,8 +3955,8 @@ struct SettingsTab {
                 step: 512
               })
                 .width('100%')
-                .trackColor(this.isDarkMode ? '#3A3A3A' : '#E0E0E0')
-                .selectedColor('#007DFF')
+                .trackColor($r('app.color.toggle_track'))
+                .selectedColor($r('app.color.toggle_selected'))
                 .onChange((value: number) => {
                   this.ggufContextLength = value;
                   settingsManager.settings.ggufContextLength = value;
@@ -3834,7 +3968,7 @@ struct SettingsTab {
             }
             .width('100%')
             .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-            .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
+            .backgroundColor($r('app.color.bg_card'))
           }
 
           ListItem() {
@@ -3842,11 +3976,11 @@ struct SettingsTab {
               Row() {
                 Text('推理线程数')
                   .fontSize(this.sf(14))
-                  .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+                  .fontColor($r('app.color.text_primary'))
                 Blank()
                 Text(`${this.ggufThreads}`)
                   .fontSize(this.sf(14))
-                  .fontColor('#9CA3AF')
+                  .fontColor($r('app.color.text_tertiary'))
               }
               .width('100%')
               .padding({ top: 8, bottom: 4 })
@@ -3854,12 +3988,12 @@ struct SettingsTab {
               Slider({
                 value: this.ggufThreads,
                 min: 1,
-                max: 8,
+                max: 20,
                 step: 1
               })
                 .width('100%')
-                .trackColor(this.isDarkMode ? '#3A3A3A' : '#E0E0E0')
-                .selectedColor('#007DFF')
+                .trackColor($r('app.color.toggle_track'))
+                .selectedColor($r('app.color.toggle_selected'))
                 .onChange((value: number) => {
                   this.ggufThreads = value;
                   settingsManager.settings.ggufThreads = value;
@@ -3870,7 +4004,7 @@ struct SettingsTab {
             }
             .width('100%')
             .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-            .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
+            .backgroundColor($r('app.color.bg_card'))
           }
 
           ListItem() {
@@ -3878,11 +4012,11 @@ struct SettingsTab {
               Row() {
                 Text('最大生成Token')
                   .fontSize(this.sf(14))
-                  .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+                  .fontColor($r('app.color.text_primary'))
                 Blank()
                 Text(`${this.ggufMaxTokens}`)
                   .fontSize(this.sf(14))
-                  .fontColor('#9CA3AF')
+                  .fontColor($r('app.color.text_tertiary'))
               }
               .width('100%')
               .padding({ top: 8, bottom: 4 })
@@ -3894,8 +4028,8 @@ struct SettingsTab {
                 step: 128
               })
                 .width('100%')
-                .trackColor(this.isDarkMode ? '#3A3A3A' : '#E0E0E0')
-                .selectedColor('#007DFF')
+                .trackColor($r('app.color.toggle_track'))
+                .selectedColor($r('app.color.toggle_selected'))
                 .onChange((value: number) => {
                   this.ggufMaxTokens = value;
                   settingsManager.settings.ggufMaxTokens = value;
@@ -3904,7 +4038,7 @@ struct SettingsTab {
             }
             .width('100%')
             .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-            .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
+            .backgroundColor($r('app.color.bg_card'))
           }
 
           ListItem() {
@@ -3912,11 +4046,11 @@ struct SettingsTab {
               Row() {
                 Text('采样温度')
                   .fontSize(this.sf(14))
-                  .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+                  .fontColor($r('app.color.text_primary'))
                 Blank()
                 Text(`${this.ggufTemperature.toFixed(1)}`)
                   .fontSize(this.sf(14))
-                  .fontColor('#9CA3AF')
+                  .fontColor($r('app.color.text_tertiary'))
               }
               .width('100%')
               .padding({ top: 8, bottom: 4 })
@@ -3928,8 +4062,8 @@ struct SettingsTab {
                 step: 1
               })
                 .width('100%')
-                .trackColor(this.isDarkMode ? '#3A3A3A' : '#E0E0E0')
-                .selectedColor('#007DFF')
+                .trackColor($r('app.color.toggle_track'))
+                .selectedColor($r('app.color.toggle_selected'))
                 .onChange((value: number) => {
                   this.ggufTemperature = value / 10;
                   settingsManager.settings.ggufTemperature = value / 10;
@@ -3938,7 +4072,7 @@ struct SettingsTab {
             }
             .width('100%')
             .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-            .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
+            .backgroundColor($r('app.color.bg_card'))
           }
 
         // ===== 写作设置 =====
@@ -3959,10 +4093,10 @@ struct SettingsTab {
             Column() {
               Text('自动保存间隔')
                 .fontSize(this.sf(15))
-                .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+                .fontColor($r('app.color.text_primary'))
               Text(`${this.autoSaveInterval}分钟`)
                 .fontSize(this.sf(12))
-                .fontColor('#9CA3AF')
+                .fontColor($r('app.color.text_tertiary'))
                 .margin({ top: 2 })
             }
             .alignItems(HorizontalAlign.Start)
@@ -3973,7 +4107,7 @@ struct SettingsTab {
           }
           .width('100%')
           .padding({ left: 16, right: 16, top: 16, bottom: 16 })
-          .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
+          .backgroundColor($r('app.color.bg_card'))
         }
         .onClick(() => {
           this.editAutoSaveInterval();
@@ -3996,8 +4130,8 @@ struct SettingsTab {
               .layoutWeight(1)
               .margin({ left: 12, right: 12 })
               .trackThickness(6)
-              .selectedColor(this.isDarkMode ? '#0A84FF' : '#007AFF')
-              .blockColor(this.isDarkMode ? '#0A84FF' : '#007AFF')
+              .selectedColor($r('app.color.toggle_selected'))
+              .blockColor($r('app.color.toggle_selected'))
               .onChange((value: number) => {
                 this.fontSize = value;
                 AppStorage.setOrCreate('appFontSize', value);
@@ -4014,7 +4148,7 @@ struct SettingsTab {
           .width('100%')
           .padding({ left: 16, right: 16 })
           .height(56)
-          .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
+          .backgroundColor($r('app.color.bg_card'))
         }
 
         ListItem() {
@@ -4023,10 +4157,10 @@ struct SettingsTab {
             Column() {
               Text('本地字体文件')
                 .fontSize(this.sf(15))
-                .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+                .fontColor($r('app.color.text_primary'))
               Text(this.localFontPath ? this.getFileName(this.localFontPath) : '未选择')
                 .fontSize(this.sf(12))
-                .fontColor('#9CA3AF')
+                .fontColor($r('app.color.text_tertiary'))
                 .margin({ top: 2 })
             }
             .alignItems(HorizontalAlign.Start)
@@ -4037,7 +4171,7 @@ struct SettingsTab {
           }
           .width('100%')
           .padding({ left: 16, right: 16, top: 16, bottom: 16 })
-          .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
+          .backgroundColor($r('app.color.bg_card'))
         }
         .onClick(() => {
           this.showFontPicker = true;
@@ -4049,10 +4183,10 @@ struct SettingsTab {
             Column() {
               Text('深色模式')
                 .fontSize(this.sf(15))
-                .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+                .fontColor($r('app.color.text_primary'))
               Text(this.followSystemDark ? '跟随系统' : (this.isDarkMode ? '开' : '关'))
                 .fontSize(this.sf(12))
-                .fontColor('#9CA3AF')
+                .fontColor($r('app.color.text_tertiary'))
                 .margin({ top: 2 })
             }
             .alignItems(HorizontalAlign.Start)
@@ -4063,15 +4197,15 @@ struct SettingsTab {
           }
           .width('100%')
           .padding({ left: 16, right: 16, top: 16, bottom: 16 })
-          .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
+          .backgroundColor($r('app.color.bg_card'))
         }
         .onClick(() => {
           this.selectDarkMode();
         })
 
-        // ===== 华为账号与云盘同步 =====
+        // ===== 华为账号与多设备同步 =====
         ListItem() {
-          this.SectionTitle('华为账号与云盘同步')
+          this.SectionTitle('华为账号与多设备同步')
         }
 
         ListItem() {
@@ -4088,7 +4222,7 @@ struct SettingsTab {
               Row() {
                 Text((this.huaweiUserInfo?.displayName || 'H').charAt(0).toUpperCase())
                   .fontSize(this.sf(18))
-                  .fontColor('#FFFFFF')
+                  .fontColor($r('app.color.text_on_accent'))
               }
               .width(40)
               .height(40)
@@ -4107,13 +4241,13 @@ struct SettingsTab {
                     : '华为账号已登录'))
                 : '登录华为账号')
                 .fontSize(this.sf(15))
-                .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+                .fontColor($r('app.color.text_primary'))
 
               Text(this.isHuaweiLoggedIn
                 ? '点击退出登录'
-                : '登录后可将作品同步至华为云盘')
+                : '登录后多设备自动同步作品数据')
                 .fontSize(this.sf(12))
-                .fontColor('#9CA3AF')
+                .fontColor($r('app.color.text_tertiary'))
                 .margin({ top: 2 })
             }
             .alignItems(HorizontalAlign.Start)
@@ -4121,18 +4255,18 @@ struct SettingsTab {
 
             Text('›')
               .fontSize(this.sf(18))
-              .fontColor('#9CA3AF')
+              .fontColor($r('app.color.text_tertiary'))
           }
           .padding(16)
           .borderRadius(12)
-          .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
+          .backgroundColor($r('app.color.bg_card'))
         }
         .onClick(async () => {
           if (this.isHuaweiLoggedIn) {
             // 已登录 → 弹出确认退出对话框
             this.getUIContext().getPromptAction().showDialog({
               title: '退出登录',
-              message: '退出后云盘同步将不可用，确定退出华为账号登录吗？',
+              message: '退出后多设备同步将不可用，确定退出华为账号登录吗？',
               buttons: [
                 { text: '取消', color: '#6B7280' },
                 { text: '退出', color: '#EF4444' }
@@ -4142,7 +4276,6 @@ struct SettingsTab {
                 huaweiAuthService.logout().then(() => {
                   this.isHuaweiLoggedIn = false;
                   this.huaweiUserInfo = null;
-                  this.syncStatusText = '';
                   this.getUIContext().getPromptAction().showToast({ message: '已退出登录', duration: 2000 });
                 }).catch((e: Error) => {
                   this.getUIContext().getPromptAction().showToast({ message: `退出失败: ${e.message}`, duration: 2000 });
@@ -4161,10 +4294,8 @@ struct SettingsTab {
                   message: '登录成功: ' + (userInfo.displayName || '已登录'),
                   duration: 5000
                 });
-                // 登录成功后自动触发一次同步
-                if (cloudSyncService.isAutoSyncEnabled()) {
-                  cloudSyncService.sync();
-                }
+                // 登录成功后自动触发端云同步
+                cloudSyncService.sync();
               } else {
                 this.isHuaweiLoggedIn = false;
                 this.getUIContext().getPromptAction().showToast({ message: '登录返回数据无效', duration: 3000 });
@@ -4185,31 +4316,7 @@ struct SettingsTab {
           }
         })
 
-        ListItem() {
-          this.SettingRow(
-            '同步到云盘',
-            this.syncStatusText || '点击手动同步至华为云盘',
-            true
-          )
-        }
-        .onClick(async () => {
-          try {
-            this.syncStatusText = '同步中...';
-            const success = await cloudSyncService.sync();
-            if (success) {
-              this.syncStatusText = cloudSyncService.getLastSyncMessage() || '同步完成';
-            } else {
-              const errMsg = cloudSyncService.getLastErrorMessage();
-              this.syncStatusText = cloudSyncService.getLastSyncMessage() || (errMsg || '同步失败');
-              console.error('[Index] 同步失败详情: ' + errMsg);
-            }
-            this.getUIContext().getPromptAction().showToast({ message: this.syncStatusText, duration: 3000 });
-          } catch (e) {
-            const errDetail = (e as Error).message || JSON.stringify(e);
-            this.syncStatusText = `同步失败: ${errDetail}`;
-            this.getUIContext().getPromptAction().showToast({ message: this.syncStatusText, duration: 3000 });
-          }
-        })
+
 
 
         // ===== 数据管理 =====
@@ -4238,15 +4345,16 @@ struct SettingsTab {
           this.clearCache();
         })
 
-        // ===== 隐私与权限 =====
+        // ===== 协议与声明 =====
         ListItem() {
-          this.SectionTitle('隐私与权限')
+          this.SectionTitle('协议与声明')
         }
 
         ListItem() {
           this.SettingRow('用户协议', '', true)
         }
         .onClick(() => {
+          this.privacyPanelMode = 0;
           this.showPrivacyPanel = true;
         })
 
@@ -4254,6 +4362,15 @@ struct SettingsTab {
           this.SettingRow('隐私政策', '', true)
         }
         .onClick(() => {
+          this.privacyPanelMode = 1;
+          this.showPrivacyPanel = true;
+        })
+
+        ListItem() {
+          this.SettingRow('免责声明', '', true)
+        }
+        .onClick(() => {
+          this.privacyPanelMode = 2;
           this.showPrivacyPanel = true;
         })
 
@@ -4266,14 +4383,43 @@ struct SettingsTab {
           this.SettingRow('应用评分', '⭐⭐⭐⭐⭐', false)
         }
         .onClick(() => {
-          this.getUIContext().getPromptAction().showToast({ message: '感谢您的五星好评！', duration: 2000 });
+          // 调用 AppGallery Kit 应用内评论弹窗
+          const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+          try {
+            commentManager.showCommentDialog(context)
+              .catch(() => {
+                this.getUIContext().getPromptAction().showToast({ message: '请前往应用市场评分', duration: 2000 });
+              });
+          } catch (e) {
+            this.getUIContext().getPromptAction().showToast({ message: '请前往应用市场评分', duration: 2000 });
+          }
         })
 
         ListItem() {
-          this.SettingRow('检查更新', 'v1.2.0', true)
+          this.SettingRow('检查更新', 'v1.2.1', true)
         }
         .onClick(() => {
-          this.getUIContext().getPromptAction().showToast({ message: '当前已是最新版本', duration: 2000 });
+          // 调用 AppGallery Kit 检查更新
+          const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+          try {
+            updateManager.checkAppUpdate(context)
+              .then((checkResult: updateManager.CheckUpdateResult) => {
+                if (checkResult.updateAvailable === updateManager.UpdateAvailableCode.LATER_VERSION_EXIST) {
+                  // 有新版本，弹出系统升级对话框
+                  updateManager.showUpdateDialog(context)
+                    .catch(() => {
+                      this.getUIContext().getPromptAction().showToast({ message: '请前往应用市场更新', duration: 2000 });
+                    });
+                } else {
+                  this.getUIContext().getPromptAction().showToast({ message: '当前已是最新版本', duration: 2000 });
+                }
+              })
+              .catch(() => {
+                this.getUIContext().getPromptAction().showToast({ message: '检查更新失败，请稍后重试', duration: 2000 });
+              });
+          } catch (e) {
+            this.getUIContext().getPromptAction().showToast({ message: '检查更新失败，请稍后重试', duration: 2000 });
+          }
         })
 
         ListItem() {
@@ -4292,7 +4438,7 @@ struct SettingsTab {
         })
 
         ListItem() {
-          this.SettingRow('关于', '创意写作 v1.2.0', true)
+          this.SettingRow('关于', '创意写作 v1.2.1', true)
         }
         .onClick(() => {
           this.showAboutPanel = true;
@@ -4303,7 +4449,7 @@ struct SettingsTab {
           Column()
             .width('100%')
             .height(80)
-            .backgroundColor('#FFFFFF')
+            .backgroundColor($r('app.color.bg_card'))
         }
       }
       .width('100%')
@@ -4315,7 +4461,7 @@ struct SettingsTab {
         Text('设置')
           .fontSize(this.sf(20))
           .fontWeight(FontWeight.Bold)
-          .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+          .fontColor($r('app.color.text_primary'))
       }
       .width('100%')
       .padding({ left: 16, top: this.statusBarHeight + 16, bottom: 12 })
@@ -4325,42 +4471,40 @@ struct SettingsTab {
       if (this.showPrivacyPanel) {
         Stack({ alignContent: Alignment.Center }) {
           Column() {
-            Text('用户协议与隐私政策')
+            Text(this.privacyPanelMode === 0 ? '用户协议' : (this.privacyPanelMode === 1 ? '隐私政策' : '免责声明'))
               .fontSize(this.sf(16))
               .fontWeight(FontWeight.Bold)
               .fontColor(this._textPrimary)
               .margin({ bottom: 12 })
 
-            Text('【用户协议】')
-              .fontSize(this.sf(14))
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this._textPrimary)
-              .margin({ bottom: 8 })
-              .alignSelf(ItemAlign.Start)
+            if (this.privacyPanelMode === 0) {
+              Text('1. 本应用仅供个人学习和创作使用，不得用于商业侵权用途。\n2. 用户需遵守相关法律法规，不得利用本应用生成违法违规内容。\n3. AI生成的内容版权归用户所有，用户需自行承担使用风险。\n4. 用户在使用AI功能时应遵守相关法律法规。\n5. 本应用不对AI生成内容的准确性和合法性负责。')
+                .fontSize(this.sf(12))
+                .fontColor(this._textSecondary)
+                .margin({ bottom: 16 })
+                .alignSelf(ItemAlign.Start)
+            }
 
-            Text('1. 本应用仅供个人学习和创作使用，不得用于商业侵权用途。\n2. 用户需遵守相关法律法规，不得利用本应用生成违法违规内容。\n3. AI生成的内容版权归用户所有，用户需自行承担使用风险。\n4. 用户在使用AI功能时应遵守相关法律法规。\n5. 本应用不对AI生成内容的准确性和合法性负责。')
-              .fontSize(this.sf(12))
-              .fontColor(this._textSecondary)
-              .margin({ bottom: 16 })
-              .alignSelf(ItemAlign.Start)
+            if (this.privacyPanelMode === 1) {
+              Text('1. 所有作品数据仅保存在您的设备上，我们不会收集您的创作内容。\n2. 本应用不会收集您的个人信息、位置、通讯录等隐私数据。\n3. 当您使用华为账号登录时，我们仅会获取必要的用户标识用于登录验证。\n4. 我们不会将您的任何数据分享给第三方。')
+                .fontSize(this.sf(12))
+                .fontColor(this._textSecondary)
+                .margin({ bottom: 16 })
+                .alignSelf(ItemAlign.Start)
+            }
 
-            Text('【隐私政策】')
-              .fontSize(this.sf(14))
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this._textPrimary)
-              .margin({ bottom: 8 })
-              .alignSelf(ItemAlign.Start)
-
-            Text('1. 所有作品数据仅保存在您的设备上，我们不会收集您的创作内容。\n2. 本应用不会收集您的个人信息、位置、通讯录等隐私数据。\n3. 当您使用华为账号登录时，我们仅会获取必要的用户标识用于登录验证。\n4. 我们不会将您的任何数据分享给第三方。')
-              .fontSize(this.sf(12))
-              .fontColor(this._textSecondary)
-              .margin({ bottom: 16 })
-              .alignSelf(ItemAlign.Start)
+            if (this.privacyPanelMode === 2) {
+              Text('1. AI生成内容可能存在错误、偏见或不准确之处，本应用不对生成内容的准确性、完整性作任何担保。\n2. 因设备性能差异，推理过程中可能出现卡顿或中断，本应用不承担由此造成的任何损失。\n3. 用户因不当设置（如线程数超过物理核数）导致的设备问题，由用户自行承担。\n4. 本应用不承担因不可抗力导致的数据丢失责任，建议定期导出备份。')
+                .fontSize(this.sf(12))
+                .fontColor(this._textSecondary)
+                .margin({ bottom: 16 })
+                .alignSelf(ItemAlign.Start)
+            }
 
             Button('我知道了')
               .fontSize(this.sf(14))
-              .fontColor('#FFFFFF')
-              .backgroundColor('#FF2D55')
+              .fontColor($r('app.color.text_on_accent'))
+              .backgroundColor($r('app.color.accent_primary'))
               .borderRadius(20)
               .height(40)
               .width('100%')
@@ -4370,7 +4514,7 @@ struct SettingsTab {
           }
           .width('100%')
           .padding(20)
-          .backgroundColor('#FFFFFF')
+          .backgroundColor($r('app.color.bg_card'))
           .border({ width: 1, color: this.cardBorder })
           .borderRadius(16)
           .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
@@ -4392,10 +4536,10 @@ struct SettingsTab {
               .fontColor(this._textPrimary)
               .margin({ bottom: 12 })
 
-            Text('创意写作 v1.2.0')
+            Text('创意写作 v1.2.1')
               .fontSize(this.sf(16))
               .fontWeight(FontWeight.Bold)
-              .fontColor('#FF2D55')
+              .fontColor($r('app.color.accent_primary'))
               .margin({ bottom: 8 })
 
             Text('AI驱动的写作助手')
@@ -4410,7 +4554,7 @@ struct SettingsTab {
               .margin({ bottom: 8 })
               .alignSelf(ItemAlign.Start)
 
-            Text('• 短幕剧/中长篇双工作台，独立管理\n• AI对话生成，一键保存思维链路\n• 自动版本归档，修改历史可追溯\n• 书架与旧档区，作品归档一目了然\n• 支持本地GGUF模型\n• 丰富的模板库，支持自定义提示词\n• 深色模式，保护您的视力')
+            Text('• 短幕剧/中长篇双工作台，独立管理\n• AI对话生成，一键保存思维链路\n• 自动版本归档，修改历史可追溯\n• 书架与旧档区，作品归档一目了然\n• 本地GGUF模型离线推理，无需联网\n• 设备防卡死保护（线程优先级/CPU让出/内存监控）\n• 丰富的模板库，支持自定义提示词\n• 深色模式，保护您的视力')
               .fontSize(this.sf(12))
               .fontColor(this._textSecondary)
               .margin({ bottom: 16 })
@@ -4418,8 +4562,8 @@ struct SettingsTab {
 
             Button('关闭')
               .fontSize(this.sf(14))
-              .fontColor('#FFFFFF')
-              .backgroundColor('#FF2D55')
+              .fontColor($r('app.color.text_on_accent'))
+              .backgroundColor($r('app.color.accent_primary'))
               .borderRadius(20)
               .height(40)
               .width('100%')
@@ -4429,7 +4573,7 @@ struct SettingsTab {
           }
           .width('100%')
           .padding(20)
-          .backgroundColor('#FFFFFF')
+          .backgroundColor($r('app.color.bg_card'))
           .border({ width: 1, color: this.cardBorder })
           .borderRadius(16)
           .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
@@ -4465,8 +4609,8 @@ struct SettingsTab {
 
             Button('从文件管理器选择')
               .fontSize(this.sf(14))
-              .fontColor('#FFFFFF')
-              .backgroundColor('#FF2D55')
+              .fontColor($r('app.color.text_on_accent'))
+              .backgroundColor($r('app.color.accent_primary'))
               .borderRadius(20)
               .height(40)
               .width('100%')
@@ -4505,7 +4649,7 @@ struct SettingsTab {
           }
           .width('85%')
           .padding(20)
-          .backgroundColor(this.isDarkMode ? '#2D2D44' : '#FFFFFF')
+          .backgroundColor($r('app.color.bg_card'))
           .border({ width: 1, color: this.cardBorder })
           .borderRadius(16)
           .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
@@ -4543,8 +4687,8 @@ struct SettingsTab {
 
             Button('从文件管理器选择')
               .fontSize(this.sf(14))
-              .fontColor('#FFFFFF')
-              .backgroundColor('#FF2D55')
+              .fontColor($r('app.color.text_on_accent'))
+              .backgroundColor($r('app.color.accent_primary'))
               .borderRadius(20)
               .height(40)
               .width('100%')
@@ -4599,7 +4743,7 @@ struct SettingsTab {
           }
           .width('85%')
           .padding(20)
-          .backgroundColor(this.isDarkMode ? '#2D2D44' : '#FFFFFF')
+          .backgroundColor($r('app.color.bg_card'))
           .border({ width: 1, color: this.cardBorder })
           .borderRadius(16)
           .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
@@ -4632,7 +4776,7 @@ struct SettingsTab {
                     .fontColor(this._textPrimary)
                   Text(item.reason)
                     .fontSize(this.sf(12))
-                    .fontColor('#9CA3AF')
+                    .fontColor($r('app.color.text_tertiary'))
                     .margin({ top: 2 })
                 }
                 .alignItems(HorizontalAlign.Start)
@@ -4645,8 +4789,8 @@ struct SettingsTab {
                 } else {
                   Button('申请')
                     .fontSize(this.sf(12))
-                    .fontColor('#FFFFFF')
-                    .backgroundColor('#FF2D55')
+                    .fontColor($r('app.color.text_on_accent'))
+                    .backgroundColor($r('app.color.accent_primary'))
                     .borderRadius(14)
                     .height(28)
                     .padding({ left: 12, right: 12 })
@@ -4661,14 +4805,14 @@ struct SettingsTab {
 
             Text('提示：网络相关权限为系统级授权，安装时自动授予；如被拒绝可在此重新申请。')
               .fontSize(this.sf(11))
-              .fontColor('#9CA3AF')
+              .fontColor($r('app.color.text_tertiary'))
               .margin({ top: 8, bottom: 12 })
               .alignSelf(ItemAlign.Start)
 
             Button('关闭')
               .fontSize(this.sf(14))
-              .fontColor('#FFFFFF')
-              .backgroundColor('#FF2D55')
+              .fontColor($r('app.color.text_on_accent'))
+              .backgroundColor($r('app.color.accent_primary'))
               .borderRadius(20)
               .height(40)
               .width('100%')
@@ -4678,7 +4822,7 @@ struct SettingsTab {
           }
           .width('100%')
           .padding(20)
-          .backgroundColor('#FFFFFF')
+          .backgroundColor($r('app.color.bg_card'))
           .border({ width: 1, color: this.cardBorder })
           .borderRadius(16)
           .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
@@ -4733,8 +4877,8 @@ struct SettingsTab {
 
             Button('关闭')
               .fontSize(this.sf(14))
-              .fontColor('#FFFFFF')
-              .backgroundColor('#FF2D55')
+              .fontColor($r('app.color.text_on_accent'))
+              .backgroundColor($r('app.color.accent_primary'))
               .borderRadius(20)
               .height(40)
               .width('100%')
@@ -4745,7 +4889,7 @@ struct SettingsTab {
           }
           .width('100%')
           .padding(20)
-          .backgroundColor('#FFFFFF')
+          .backgroundColor($r('app.color.bg_card'))
           .border({ width: 1, color: this.cardBorder })
           .borderRadius(16)
           .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
@@ -4768,49 +4912,29 @@ struct SettingsTab {
               .fontWeight(FontWeight.Bold)
               .fontColor(this._textPrimary)
               .margin({ bottom: 8 })
-            Text('描述您遇到的问题或建议，提交后会复制到剪贴板，可发送至支持邮箱 support@creativewriting.app')
+            Text('点击下方按钮，可打开系统反馈页面提交问题、截图和日志。反馈内容将在应用市场的用户反馈管理中查看。')
               .fontSize(this.sf(12))
-              .fontColor('#9CA3AF')
-              .margin({ bottom: 12 })
-            TextArea({ placeholder: '请输入反馈内容...' })
+              .fontColor($r('app.color.text_tertiary'))
+              .margin({ bottom: 16 })
+            Button('打开反馈页面')
+              .fontSize(this.sf(14))
+              .fontColor($r('app.color.text_on_accent'))
+              .backgroundColor($r('app.color.accent_primary'))
+              .borderRadius(20)
+              .height(44)
               .width('100%')
-              .height(140)
-              .fontSize(this.sf(13))
-              .backgroundColor(this._inputBg)
-              .borderRadius(8)
-              .padding(12)
-              .onChange((value: string) => {
-                this.feedbackText = value;
+              .onClick(() => {
+                this.submitFeedback();
               })
-            Row() {
-              Button('取消')
-                .fontSize(this.sf(14))
-                .fontColor(this._cancelText)
-                .backgroundColor(this._cancelBg)
-                .borderRadius(20)
-                .height(40)
-                .layoutWeight(1)
-                .margin({ right: 12 })
-                .onClick(() => {
-                  this.showFeedbackPanel = false;
-                })
-              Button('提交')
-                .fontSize(this.sf(14))
-                .fontColor('#FFFFFF')
-                .backgroundColor('#FF2D55')
-                .borderRadius(20)
-                .height(40)
-                .layoutWeight(1)
-                .onClick(() => {
-                  this.submitFeedback();
-                })
-            }
-            .width('100%')
-            .margin({ top: 16 })
+            Text('提示：反馈服务需应用上架后生效，上架前可发送邮件至 support@creativewriting.app')
+              .fontSize(this.sf(11))
+              .fontColor($r('app.color.text_tertiary'))
+              .margin({ top: 12 })
+              .textAlign(TextAlign.Center)
           }
           .width('100%')
           .padding(20)
-          .backgroundColor('#FFFFFF')
+          .backgroundColor($r('app.color.bg_card'))
           .border({ width: 1, color: this.cardBorder })
           .borderRadius(16)
           .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
@@ -4825,7 +4949,7 @@ struct SettingsTab {
     .width('100%')
     .height('100%')
     .alignContent(Alignment.Top)
-    .backgroundColor(this.isDarkMode ? '#1A1A2E' : '#F5F6FA')
+    .backgroundColor($r('app.color.bg_page'))
     .constraintSize({ maxWidth: this._contentMaxWidth })
   }
 
@@ -4835,11 +4959,11 @@ struct SettingsTab {
       Column() {
         Text(title)
           .fontSize(this.sf(15))
-          .fontColor(this.isDarkMode ? '#FFFFFF' : '#1A1A2E')
+          .fontColor($r('app.color.text_primary'))
         if (subtitle) {
           Text(subtitle)
             .fontSize(this.sf(12))
-            .fontColor('#9CA3AF')
+            .fontColor($r('app.color.text_tertiary'))
             .margin({ top: 2 })
         }
       }
@@ -4854,7 +4978,7 @@ struct SettingsTab {
     }
     .width('100%')
     .padding({ left: 16, right: 16, top: 16, bottom: 16 })
-    .backgroundColor(this.isDarkMode ? '#2D2D3A' : '#FFFFFF')
+    .backgroundColor($r('app.color.bg_card'))
   }
 
   @Builder
@@ -4862,7 +4986,7 @@ struct SettingsTab {
     Text(title)
       .fontSize(this.sf(12))
       .fontWeight(FontWeight.Bold)
-      .fontColor('#9CA3AF')
+      .fontColor($r('app.color.text_tertiary'))
       .margin({ top: 8, bottom: 4 })
       .padding({ left: 16 })
       .width('100%')
@@ -4885,6 +5009,7 @@ struct SettingsTab {
         this.prevFollowSystemDark = false;
         this.applyDarkMode();
         settingsManager.save();
+        this.applyAppColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT);
         this.getUIContext().getPromptAction().showToast({ message: '已关闭深色模式', duration: 2000 });
       } else if (result.index === 1) {
         // 开
@@ -4894,6 +5019,7 @@ struct SettingsTab {
         this.prevFollowSystemDark = false;
         this.applyDarkMode();
         settingsManager.save();
+        this.applyAppColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_DARK);
         this.getUIContext().getPromptAction().showToast({ message: '已开启深色模式', duration: 2000 });
       } else if (result.index === 2) {
         // 跟随系统
@@ -4902,9 +5028,21 @@ struct SettingsTab {
         this.prevFollowSystemDark = true;
         this.applyDarkMode();
         settingsManager.save();
+        this.applyAppColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
         this.getUIContext().getPromptAction().showToast({ message: '已跟随系统深色模式', duration: 2000 });
       }
     }).catch(() => {});
+  }
+
+  /** 将 App 颜色模式设置应用到 ApplicationContext（全局级，与 EntryAbility 对齐），驱动 $r 资源限定符色板全局联动 */
+  private applyAppColorMode(mode: ConfigurationConstant.ColorMode): void {
+    try {
+      const appCtx = this.getUIContext().getHostContext()!.getApplicationContext();
+      appCtx.setColorMode(mode);
+      console.info('[Index] 应用颜色模式: ' + mode);
+    } catch (e) {
+      console.error('[Index] setColorMode 失败: ' + JSON.stringify(e));
+    }
   }
 
   editAutoSaveInterval() {
@@ -5000,20 +5138,31 @@ struct SettingsTab {
   }
 
   submitFeedback() {
-    const text = this.feedbackText.trim();
-    if (!text) {
-      this.getUIContext().getPromptAction().showToast({ message: '请输入反馈内容', duration: 2000 });
-      return;
+    // 调用系统反馈服务（AGC用户反馈管理）
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    try {
+      context.startAbility({
+        bundleName: 'com.huawei.hmos.floatingwindow',
+        abilityName: 'FeedbackAbility'
+      }).then(() => {
+        this.showFeedbackPanel = false;
+      }).catch(() => {
+        // 系统反馈不可用，兜底：复制联系方式到剪贴板
+        const contactInfo = '创意写作App用户反馈\n请发送邮件至: support@creativewriting.app';
+        const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, contactInfo);
+        const systemPasteboard = pasteboard.getSystemPasteboard();
+        systemPasteboard.setData(pasteData).then(() => {
+          this.showFeedbackPanel = false;
+          this.getUIContext().getPromptAction().showToast({ message: '反馈服务暂不可用，联系方式已复制到剪贴板', duration: 3000 });
+        }).catch(() => {
+          this.showFeedbackPanel = false;
+          this.getUIContext().getPromptAction().showToast({ message: '反馈服务暂不可用，请发送邮件至 support@creativewriting.app', duration: 3000 });
+        });
+      });
+    } catch (e) {
+      this.showFeedbackPanel = false;
+      this.getUIContext().getPromptAction().showToast({ message: '反馈服务暂不可用，请发送邮件至 support@creativewriting.app', duration: 3000 });
     }
-    const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text);
-    const systemPasteboard = pasteboard.getSystemPasteboard();
-    systemPasteboard.setData(pasteData).then(() => {
-      this.showFeedbackPanel = false;
-      this.getUIContext().getPromptAction().showToast({ message: '反馈已复制到剪贴板，感谢支持', duration: 2000 });
-    }).catch(() => {
-      this.showFeedbackPanel = false;
-      this.getUIContext().getPromptAction().showToast({ message: '反馈已记录，感谢支持', duration: 2000 });
-    });
   }
 
   clearCache() {

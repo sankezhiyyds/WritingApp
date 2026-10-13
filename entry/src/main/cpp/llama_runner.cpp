@@ -8,6 +8,7 @@
 #include <chrono>
 #include <unistd.h>  // sysconf
 #include <sys/resource.h>  // setpriority, PRIO_PROCESS
+#include <sched.h>  // sched_yield
 
 #ifdef LOG_TAG
 #undef LOG_TAG
@@ -56,10 +57,18 @@ bool LlamaRunner::loadModel(const std::string& modelPath, int contextLength, int
     if (threads <= 0) {
         long nprocs = sysconf(_SC_NPROCESSORS_ONLN);
         if (nprocs > 0) {
-            effectiveThreads = (int)(nprocs / 2);
+            // 75% 逻辑核（向下取整，最小1），适配手机(8核→6)和PC/2in1(16+核→12+)
+            effectiveThreads = (int)(nprocs * 3 / 4);
             if (effectiveThreads < 1) effectiveThreads = 1;
         } else {
             effectiveThreads = 2;  // fallback
+        }
+    } else {
+        // 保护：用户手动设置的线程数不得超过逻辑核数，防止过度上下文切换导致设备卡死
+        long nprocs = sysconf(_SC_NPROCESSORS_ONLN);
+        if (nprocs > 0 && effectiveThreads > nprocs) {
+            LOGI("Requested threads=%{public}d exceeds nprocs=%{public}ld, clamping", effectiveThreads, nprocs);
+            effectiveThreads = (int)nprocs;
         }
     }
     LOGI("Loading model: %{public}s, ctx=%{public}d, threads=%{public}d (effective=%{public}d)",
@@ -126,12 +135,11 @@ bool LlamaRunner::loadModel(const std::string& modelPath, int contextLength, int
     contextLength_ = effectiveCtxLen;
     threads_ = effectiveThreads;
 
-    // ── QoS 优先级提升：让系统调度器优先将推理线程分配到大核 ──
-    // HarmonyOS 提供 FFRT QoS API（ffrt_this_task_update_qos），
-    // 但该 API 需在 FFRT 线程上下文中调用。此处用 nice() 降 nice 值提升优先级，
-    // 配合系统调度器决策，不强制绑核（避免干扰系统负载均衡）。
-    if (setpriority(PRIO_PROCESS, 0, -5) == 0) {
-        LOGI("Inference thread priority raised (nice=-5)");
+    // ── QoS 优先级降低：让系统调度器可随时抢占推理线程，避免设备卡死 ──
+    // nice 值越高优先级越低。设为 +5 降低优先级，使系统关键线程（UI、watchdog）
+    // 能优先获得 CPU 时间，避免推理线程独占大核导致系统无响应重启。
+    if (setpriority(PRIO_PROCESS, 0, 5) == 0) {
+        LOGI("Inference thread priority lowered (nice=+5) to prevent device freeze");
     } else {
         LOGI("setpriority failed (errno=%{public}d), using default priority", errno);
     }
@@ -279,11 +287,19 @@ std::string LlamaRunner::generateChat(
     LOGI("Prefill start: %{public}d tokens, n_batch=%{public}d", promptLen, llama_n_batch(ctx));
     auto prefillStart = std::chrono::steady_clock::now();
 
-    llama_batch promptBatch = llama_batch_get_one(promptTokens, promptLen);
-    if (llama_decode(ctx, promptBatch) != 0) {
-        LOGE("Prefill decode failed, promptLen=%{public}d", promptLen);
-        delete[] promptTokens;
-        return "";
+    // 分批 prefill：每批最多 64 tokens，每批后 yield CPU 2ms 防止设备卡死
+    const int prefillChunk = 64;
+    for (int off = 0; off < promptLen; off += prefillChunk) {
+        int chunkLen = (off + prefillChunk < promptLen) ? prefillChunk : (promptLen - off);
+        llama_batch promptBatch = llama_batch_get_one(promptTokens + off, chunkLen);
+        if (llama_decode(ctx, promptBatch) != 0) {
+            LOGE("Prefill decode failed at offset %{public}d, chunkLen=%{public}d", off, chunkLen);
+            delete[] promptTokens;
+            return "";
+        }
+        // 每批后 yield CPU，让系统调度器有机会运行关键线程
+        sched_yield();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     auto prefillEnd = std::chrono::steady_clock::now();
     int prefillMs = (int)std::chrono::duration_cast<std::chrono::milliseconds>(prefillEnd - prefillStart).count();
@@ -340,7 +356,8 @@ std::string LlamaRunner::generateChat(
             }
         }
 
-        if (i > 0 && i % 8 == 0) {
+        if (i > 0 && i % 4 == 0) {
+            sched_yield();
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
 
@@ -437,13 +454,12 @@ std::string LlamaRunner::generate(
     }
 
     // 一次性喂入全部 prompt tokens（n_batch=n_ctx，无需分批）
-    // 之前 batchSize=224 是 n_batch=256 时的遗留，现在 n_batch=n_ctx=2048
-    // 分批 decode 效率极低：每批都需重新计算 KV cache
-    const int batchSize = promptLen;  // 一次性喂入
-    LOGI("Prefill start: %{public}d prompt tokens, batchSize=%{public}d", promptLen, batchSize);
+    // 分批 prefill，每批最多 64 tokens，每批后 yield CPU 2ms
+    const int prefillChunk = 64;
+    LOGI("Prefill start: %{public}d prompt tokens, chunkSize=%{public}d", promptLen, prefillChunk);
     auto prefillStart = std::chrono::steady_clock::now();
-    for (int off = 0; off < promptLen; off += batchSize) {
-        int chunkLen = (off + batchSize < promptLen) ? batchSize : (promptLen - off);
+    for (int off = 0; off < promptLen; off += prefillChunk) {
+        int chunkLen = (off + prefillChunk < promptLen) ? prefillChunk : (promptLen - off);
         llama_batch promptBatch = llama_batch_get_one(promptTokens + off, chunkLen);
         if (llama_decode(ctx, promptBatch) != 0) {
             LOGE("Failed to decode prompt batch at offset %d", off);
@@ -451,6 +467,8 @@ std::string LlamaRunner::generate(
             llama_sampler_free(sampler);
             return "";
         }
+        sched_yield();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     auto prefillEnd = std::chrono::steady_clock::now();
     int prefillMs = (int)std::chrono::duration_cast<std::chrono::milliseconds>(prefillEnd - prefillStart).count();
@@ -463,9 +481,21 @@ std::string LlamaRunner::generate(
     // Generation loop
     LOGI("Generation loop start, maxTokens=%{public}d", maxTokens);
     for (int i = 0; i < maxTokens && !abortFlag_; i++) {
-        // Yield CPU every 8 tokens to prevent device freeze/restart
-        if (i > 0 && i % 8 == 0) {
+        // sched_yield + memory check every 4 tokens
+        if (i > 0 && i % 4 == 0) {
+            sched_yield();
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            if (i % 16 == 0) {
+                long availPages = sysconf(_SC_AVPHYS_PAGES);
+                long pageSize = sysconf(_SC_PAGE_SIZE);
+                if (availPages > 0 && pageSize > 0) {
+                    long availMB = (availPages * pageSize) / (1024 * 1024);
+                    if (availMB < 48) {
+                        LOGE("Memory critically low during generation: %{public}ldMB, aborting", availMB);
+                        break;
+                    }
+                }
+            }
         }
 
         // Sample next token
@@ -504,7 +534,7 @@ std::string LlamaRunner::generate(
 }
 
 void LlamaRunner::unloadModel() {
-    std::lock_guard<std::mutex> lock(mutex_);
+    [[maybe_unused]] std::lock_guard<std::mutex> lock(mutex_);
     if (context_) {
         llama_free(static_cast<llama_context*>(context_));
         context_ = nullptr;

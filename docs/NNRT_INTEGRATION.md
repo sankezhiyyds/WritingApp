@@ -1,13 +1,21 @@
-# NNRt (Neural Network Runtime) 集成指南
+# NNRt (Neural Network Runtime) NPU 加速集成指南
 
 ## 概述
 
-NNRt (Neural Network Runtime Kit) 是鸿蒙面向 AI 领域的跨芯片推理计算运行时，位于 AI 推理框架和底层加速芯片（NPU、GPU、DSP）之间。接入 NNRt 后，GGUF 模型可以利用设备的 NPU 硬件加速，大幅提升推理速度并降低功耗。
+当前项目使用 llama.cpp 进行 CPU 推理。NNRt (Neural Network Runtime Kit) 是鸿蒙面向 AI 领域的跨芯片推理计算运行时，可利用设备 NPU 硬件加速推理。本文档描述将 NNRt 集成为 ggml backend 插件的方案。
+
+## 设计约束
+
+- **模型格式不限定**：支持任意 GGUF 量化类型（Q4_0 / Q4_K / Q5_K / Q8_0 / F16 / F32 等混合）
+- **SoC 不限定**：不能硬编码特定芯片型号，需通过 NNRt 设备无关接口运行时适配
+- **保持 llama.cpp 自主编译**：NPU 作为 ggml backend 插入，不修改 llama.cpp 核心代码
 
 ## 推荐集成架构
 
 ```
-ArkTS (GGUFService) → NAPI (libgguf.so) → C++ (llama_runner) 
+ArkTS (GGUFService) → NAPI (libgguf.so) → C++ (llama_runner)
+                                           ↓
+                                    ggml backend 插件
                                            ↓
                                     NNRt C API (OH_NNModel / OH_NNCompilation)
                                            ↓
@@ -19,15 +27,28 @@ ArkTS (GGUFService) → NAPI (libgguf.so) → C++ (llama_runner)
 ### 1. 在 C++ 层引入 NNRt 头文件
 
 ```cpp
-// entry/src/main/cpp/llama_runner/nnrt_engine.h
+// entry/src/main/cpp/llama_runner/nnrt_backend.h
 #include <nnrt/neural_network_runtime.h>
 #include <nnrt/neural_network_runtime_type.h>
 ```
 
-### 2. 设备枚举与选择
+### 2. 实现 ggml backend 接口
+
+将 NNRt 封装为 ggml backend，使 llama.cpp 的计算图可自动将支持的算子委托给 NPU：
 
 ```cpp
-// 枚举所有可用的加速设备
+// 注册 NNRt backend
+struct ggml_backend nnrt_backend {
+    // 实现 ggml_backend 接口函数
+    // 支持的算子：matmul, attention, rope, softmax 等
+    // 不支持的算子自动 fallback 到 CPU backend
+};
+```
+
+### 3. 设备枚举与运行时适配
+
+```cpp
+// 枚举所有可用的加速设备（设备无关，不硬编码芯片型号）
 OH_NNDevice_GetAllDevices(&deviceList, &deviceCount);
 // 优先选择 NPU，其次 GPU
 for (uint32_t i = 0; i < deviceCount; i++) {
@@ -36,18 +57,9 @@ for (uint32_t i = 0; i < deviceCount; i++) {
 }
 ```
 
-### 3. 模型编译与推理
-
-NNRt 支持两种模式：
-
-- **在线构图 (Online Model Building)**：逐层添加算子构建模型图
-- **离线模型 (Offline Model)**：加载已编译的 om 模型文件
-
-对于 GGUF 格式，推荐在 `llama_runner` 中将 llama.cpp 的输出通过 NNRt 进行后处理加速，或将注意力机制等计算密集型算子委托给 NNRt 执行。
-
 ### 4. NAPI 暴露接口
 
-在 libgguf.so 中新增以下 NAPI 函数：
+在 `libgguf.so` 中新增：
 
 ```cpp
 napi_value EnableNNRt(napi_env env, napi_callback_info info);
@@ -58,10 +70,9 @@ napi_value SetNNRtDevice(napi_env env, napi_callback_info info);  // "NPU" | "GP
 ### 5. ArkTS 调用
 
 ```typescript
-// GGUFService.ets 新增
+// GGUFService.ets
 import { enableNNRt, isNNRtAvailable, setNNRtDevice } from 'libgguf.so';
 
-// 在设置页面提供开关
 async enableHardwareAcceleration(device: string): Promise<boolean> {
     if (!this.nativeAvailable) return false;
     setNNRtDevice(device);
@@ -73,7 +84,7 @@ async enableHardwareAcceleration(device: string): Promise<boolean> {
 
 | 加速方式 | 推理速度 | 功耗 | 说明 |
 |---------|---------|------|------|
-| CPU only (llama.cpp) | 1x (基准) | 高 | 当前状态 |
+| CPU only (当前) | 1x (基准) | 高 | 2线程 + Q8_0 量化，prefill 约 80s/128token |
 | CPU + GPU (NNRt) | 1.5-3x | 中 | 计算密集型算子卸载 |
 | CPU + NPU (NNRt) | 3-5x | 低 | 推荐方案，量化模型效果最佳 |
 
@@ -87,7 +98,6 @@ async enableHardwareAcceleration(device: string): Promise<boolean> {
 target_link_libraries(libgguf.so
     PRIVATE
         nnrt_ndk    # NNRt C API
-        hiperf      # 性能调优
 )
 ```
 
@@ -96,4 +106,5 @@ target_link_libraries(libgguf.so
 1. NNRt 以 C API 暴露，需在 C++ 层封装
 2. 量化模型（4-bit/8-bit）在 NPU 上推理效果最佳
 3. 首次编译模型耗时较长，建议缓存编译结果
-4. 需要处理 NPU 不支持回退到 CPU 的 fallback 逻辑
+4. 需处理 NPU 不支持算子时回退到 CPU 的 fallback 逻辑
+5. 当前项目为个人开发者手机端，仅 CPU 推理可用；NPU 加速路径需 NNRt + MindSpore Lite

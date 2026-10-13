@@ -29,38 +29,17 @@ export struct FindReplaceDialog {
   /** 提示信息 */
   @State hintText: string = '';
 
-  /** 主题色 */
-  get textColor(): string {
-    return this.isDarkMode ? '#E5E7EB' : '#1A1A2E';
-  }
-  get subTextColor(): string {
-    return this.isDarkMode ? '#9CA3AF' : '#6B7280';
-  }
-  get bgColor(): string {
-    return this.isDarkMode ? '#1F2033' : '#FFFFFF';
-  }
-  get cardBg(): string {
-    return this.isDarkMode ? '#2B2C42' : '#FFFFFF';
-  }
-  get dividerColor(): string {
-    return this.isDarkMode ? '#3A3A4E' : '#E5E7EB';
-  }
-  /** 弹窗卡片结构边框：深色中灰 / 浅色浅灰，与 cardBg 协调 */
-  get cardBorder(): string {
-    return this.isDarkMode ? '#44455E' : '#E5E7EB';
-  }
-  get accentColor(): string {
-    return '#3B82F6';
-  }
-  get warningColor(): string {
-    return '#F59E0B';
-  }
-  get dangerColor(): string {
-    return '#FF2D55';
-  }
-  get buttonTextColor(): string {
-    return '#FFFFFF';
-  }
+  /** 主题色（统一使用资源引用，系统自动切换深浅色） */
+  get textColor(): ResourceColor { return $r('app.color.text_primary'); }
+  get subTextColor(): ResourceColor { return $r('app.color.text_secondary'); }
+  get bgColor(): ResourceColor { return $r('app.color.bg_panel'); }
+  get cardBg(): ResourceColor { return $r('app.color.bg_card'); }
+  get dividerColor(): ResourceColor { return $r('app.color.divider'); }
+  get cardBorder(): ResourceColor { return $r('app.color.border_default'); }
+  get accentColor(): ResourceColor { return $r('app.color.accent_blue'); }
+  get warningColor(): ResourceColor { return $r('app.color.status_warning'); }
+  get dangerColor(): ResourceColor { return $r('app.color.accent_primary'); }
+  get buttonTextColor(): ResourceColor { return $r('app.color.text_on_accent'); }
 
   /** 执行查找 */
   performFind(): void {
@@ -262,7 +241,7 @@ export struct FindReplaceDialog {
       // 分割线
       Divider()
         .width('100%')
-        .color('#E5E7EB')
+        .color($r('app.color.divider'))
         .margin({ top: 0, bottom: 0 })
 
       // 第一行：查找输入 + 匹配计数 + 导航按钮

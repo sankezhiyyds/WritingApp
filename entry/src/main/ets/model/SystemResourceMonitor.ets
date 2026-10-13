@@ -1,4 +1,4 @@
-import { batteryInfo } from '@kit.BasicServicesKit';
+import { batteryInfo, thermal } from '@kit.BasicServicesKit';
 
 /**
  * SystemResourceMonitor
@@ -36,6 +36,34 @@ export interface SystemResourceSnapshot {
 class SystemResourceMonitorClass {
   private lastSnapshot: SystemResourceSnapshot | null = null;
   private sampleIntervalMs: number = 30000; // 每30秒采样一次
+  /** 当前热档位（0=正常, 1~6递增） */
+  private thermalLevel: number = 0;
+  private thermalCallbackRegistered: boolean = false;
+
+  /** 注册热管理回调，监听设备热档位变化 */
+  initThermalMonitor(): void {
+    if (this.thermalCallbackRegistered) return;
+    try {
+      thermal.registerThermalLevelCallback((level: thermal.ThermalLevel) => {
+        this.thermalLevel = level as number;
+        console.info('[SystemResourceMonitor] Thermal level changed: ' + level);
+      });
+      this.thermalCallbackRegistered = true;
+      console.info('[SystemResourceMonitor] Thermal monitor registered');
+    } catch (_e) {
+      console.warn('[SystemResourceMonitor] Thermal register failed');
+    }
+  }
+
+  /** 获取当前热档位 */
+  getThermalLevel(): number {
+    return this.thermalLevel;
+  }
+
+  /** 设备是否过热（thermal level >= 3，对应热保护档位） */
+  isThermalCritical(): boolean {
+    return this.thermalLevel >= 3;
+  }
 
   /** 获取当前资源快照 */
   getCurrentSnapshot(): SystemResourceSnapshot {
@@ -135,8 +163,12 @@ class SystemResourceMonitorClass {
     }
   }
 
-  /** 是否应跳过 AI 推理（极低电量/未充电） */
+  /** 是否应跳过 AI 推理（极低电量/未充电/设备过热） */
   shouldSkipAI(): boolean {
+    if (this.isThermalCritical()) {
+      console.warn('[SystemResourceMonitor] Skip AI: thermal critical (level=' + this.thermalLevel + ')');
+      return true;
+    }
     const snap = this.getCurrentSnapshot();
     return snap.pressure >= ResourcePressure.CRITICAL;
   }

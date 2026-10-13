@@ -1,6 +1,7 @@
 import { settingsManager } from './SettingsManager';
 import fileIo from '@ohos.file.fs';
 import { systemResourceMonitor } from './SystemResourceMonitor';
+import { workManager } from './WorkManager';
 import { loadModel as nativeLoadModel, generate as nativeGenerate,
   generateChat as nativeGenerateChat,
   unloadModel as nativeUnloadModel, isModelLoaded as nativeIsModelLoaded,
@@ -301,6 +302,13 @@ class GGUFServiceClass {
         success: false,
         error: 'AI 正在生成中，请稍候再试'
       };
+    }
+
+    // 推理前强制同步落盘所有用户数据，防设备卡死重启后数据丢失
+    try {
+      workManager.forceSaveToDisk();
+    } catch (_e) {
+      console.warn('[GGUFService] forceSaveToDisk failed before inference');
     }
     this.generateInFlight = true;
 

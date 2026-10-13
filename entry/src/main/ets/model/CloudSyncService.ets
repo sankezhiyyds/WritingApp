@@ -33,7 +33,6 @@ export class CloudSyncService {
   private fileSync: cloudSync.FileSync | null = null;
   private syncStatus: SyncStatus = SyncStatus.IDLE;
   private statusListeners: SyncStatusCallback[] = [];
-  private autoSyncEnabled: boolean = false;
   /** 最近一次同步的真实结果消息 */
   private lastSyncMessage: string = '';
   /** 最近一次云存储操作的错误详情 */
@@ -54,10 +53,6 @@ export class CloudSyncService {
   async init(context: common.UIAbilityContext): Promise<void> {
     this.context = context;
     try {
-      // 读取自动同步设置
-      const prefs = await preferences.getPreferences(context, 'cloud_sync_settings');
-      this.autoSyncEnabled = await prefs.get('auto_sync_enabled', false) as boolean;
-
       // 初始化端云文件协同
       try {
         this.fileSync = new cloudSync.FileSync();
@@ -80,7 +75,7 @@ export class CloudSyncService {
       // 确保云目录存在
       await this.ensureCloudDir();
 
-      console.info('[CloudSyncService] 初始化完成, autoSync=' + this.autoSyncEnabled);
+      console.info('[CloudSyncService] 初始化完成');
     } catch (e) {
       console.error('[CloudSyncService] 初始化失败: ' + JSON.stringify(e));
     }
@@ -117,25 +112,6 @@ export class CloudSyncService {
   /** 获取当前同步状态 */
   getSyncStatus(): SyncStatus {
     return this.syncStatus;
-  }
-
-  /** 是否启用自动同步 */
-  isAutoSyncEnabled(): boolean {
-    return this.autoSyncEnabled;
-  }
-
-  /** 设置自动同步 */
-  async setAutoSync(enabled: boolean): Promise<void> {
-    this.autoSyncEnabled = enabled;
-    if (this.context) {
-      try {
-        const prefs = await preferences.getPreferences(this.context, 'cloud_sync_settings');
-        await prefs.put('auto_sync_enabled', enabled);
-        await prefs.flush();
-      } catch (e) {
-        console.error('[CloudSyncService] 保存自动同步设置失败: ' + JSON.stringify(e));
-      }
-    }
   }
 
   /** 销毁服务，释放资源 */

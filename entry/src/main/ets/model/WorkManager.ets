@@ -1,5 +1,7 @@
 import { preferences } from '@kit.ArkData';
 import { common } from '@kit.AbilityKit';
+import { fileIo } from '@kit.CoreFileKit';
+import { util } from '@kit.ArkTS';
 import { TemplateInfo } from './TemplateModel';
 import { systemResourceMonitor } from './SystemResourceMonitor';
 import { settingsManager } from './SettingsManager';
@@ -110,6 +112,7 @@ export interface RecycleBinItem {
   itemType?: string; // work | inspiration，默认 work
   category?: string; // 灵感分类（itemType=inspiration 时使用）
   fromWidget?: boolean; // 灵感是否来自桌面卡片
+  aiContent?: string; // AI侧栏对话数据（删除时保留，恢复时还原）
 }
 
 /** 灵感池条目（原子化服务卡片快速记录） */
@@ -192,6 +195,8 @@ export class WorkManager {
   private recycleBinKey: string = 'writing_app_recycle_bin';
   private inspirationKey: string = 'writing_app_inspirations';
   private prefs: preferences.Preferences | null = null;
+  /** filesDir 路径，用于同步文件写入（防设备卡死重启丢数据） */
+  private filesDir: string = '';
   private changeListeners: Array<() => void> = [];
   private saveQueue: Promise<void> = Promise.resolve();
   /** LRU 缓存：最近访问的作品 */
@@ -224,52 +229,141 @@ export class WorkManager {
   async init(context: common.UIAbilityContext): Promise<void> {
     try {
       this.prefs = await preferences.getPreferences(context, 'writing_app');
+      this.filesDir = context.filesDir;
+      // 优先从 filesDir 同步文件加载（防设备重启后 preferences 丢数据）
+      this.loadFromFiles();
+      // preferences 作为补充：仅填补 filesDir 中缺失的数据集
       await this.loadFromStorage();
     } catch (e) {
       console.error('[WorkManager] 初始化失败: ' + JSON.stringify(e));
     }
   }
 
+  /** 同步文件路径 */
+  private filePath(name: string): string {
+    return this.filesDir + '/' + name;
+  }
+
+  /** 从 filesDir 同步读取 JSON 文件（跳过0字节/损坏文件，防假性丢失） */
+  private readJsonFile<T>(name: string): T | null {
+    if (!this.filesDir) return null;
+    try {
+      const path = this.filePath(name);
+      if (!fileIo.accessSync(path)) return null;
+      const stat = fileIo.statSync(path);
+      if (stat.size === 0) {
+        console.warn('[WorkManager] ' + name + ' is 0 bytes, skipping (likely crashed during write)');
+        return null;
+      }
+      const file = fileIo.openSync(path, fileIo.OpenMode.READ_ONLY);
+      const buf = new ArrayBuffer(stat.size);
+      fileIo.readSync(file.fd, buf);
+      fileIo.closeSync(file);
+      const textDecoder = util.TextDecoder.create('utf-8');
+      const text = textDecoder.decodeWithStream(new Uint8Array(buf));
+      return JSON.parse(text) as T;
+    } catch (_e) {
+      return null;
+    }
+  }
+
+  /**
+   * 原子写入 JSON 到 filesDir：先写临时文件再 rename，防设备卡死重启产生半截/空文件。
+   * rename 是文件系统原子操作——要么完整新文件，要么完整旧文件，不会出现中间态。
+   */
+  private writeJsonFile(name: string, json: string): void {
+    if (!this.filesDir) return;
+    try {
+      const path = this.filePath(name);
+      const tmpPath = path + '.tmp';
+      // 1. 写入临时文件（TRUNC 截断的是 .tmp，不影响原文件）
+      const file = fileIo.openSync(tmpPath, fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
+      fileIo.writeSync(file.fd, json);
+      fileIo.closeSync(file);
+      // 2. 原子 rename：临时文件 → 目标文件（文件系统保证原子性）
+      fileIo.renameSync(tmpPath, path);
+    } catch (e) {
+      console.error('[WorkManager] writeJsonFile failed: ' + name + ' ' + JSON.stringify(e));
+      // 清理可能残留的临时文件
+      try {
+        const tmpPath = this.filePath(name) + '.tmp';
+        if (fileIo.accessSync(tmpPath)) {
+          fileIo.unlinkSync(tmpPath);
+        }
+      } catch (_e) { /* ignore */ }
+    }
+  }
+
+  /** 从 filesDir 加载所有数据文件 */
+  private loadFromFiles(): void {
+    const works = this.readJsonFile<WorkItem[]>('works.json');
+    if (works && Array.isArray(works)) this.works = works;
+    const folders = this.readJsonFile<BookshelfFolder[]>('folders.json');
+    if (folders && Array.isArray(folders)) this.folders = folders;
+    const archives = this.readJsonFile<ArchiveFolder[]>('archive_folders.json');
+    if (archives && Array.isArray(archives)) this.archiveFolders = archives;
+    const recycle = this.readJsonFile<RecycleBinItem[]>('recycle_bin.json');
+    if (recycle && Array.isArray(recycle)) this.recycleBinItems = recycle;
+    const inspirations = this.readJsonFile<InspirationItem[]>('inspirations.json');
+    if (inspirations && Array.isArray(inspirations)) this.inspirationItems = inspirations;
+  }
+
+  /** 强制同步落盘所有数据到 filesDir（推理前调用，防设备卡死重启丢数据） */
+  forceSaveToDisk(): void {
+    this.writeJsonFile('works.json', JSON.stringify(this.works));
+    this.writeJsonFile('folders.json', JSON.stringify(this.folders));
+    this.writeJsonFile('archive_folders.json', JSON.stringify(this.archiveFolders));
+    this.writeJsonFile('recycle_bin.json', JSON.stringify(this.recycleBinItems));
+    this.writeJsonFile('inspirations.json', JSON.stringify(this.inspirationItems));
+  }
+
   private async loadFromStorage(): Promise<void> {
     if (!this.prefs) return;
     try {
-      const stored = await this.prefs.get(this.storageKey, '') as string;
-      if (stored) {
-        const parsed = JSON.parse(stored) as WorkItem[];
-        if (Array.isArray(parsed)) {
-          this.works = parsed;
+      // 仅填补 filesDir 中缺失的数据集，不覆盖已从文件加载的数据
+      if (this.works.length === 0) {
+        const stored = await this.prefs.get(this.storageKey, '') as string;
+        if (stored) {
+          const parsed = JSON.parse(stored) as WorkItem[];
+          if (Array.isArray(parsed)) {
+            this.works = parsed;
+          }
         }
       }
-      // 加载书架文件夹
-      const folderStored = await this.prefs.get(this.folderKey, '') as string;
-      if (folderStored) {
-        const folderParsed = JSON.parse(folderStored) as BookshelfFolder[];
-        if (Array.isArray(folderParsed)) {
-          this.folders = folderParsed;
+      if (this.folders.length === 0) {
+        const folderStored = await this.prefs.get(this.folderKey, '') as string;
+        if (folderStored) {
+          const folderParsed = JSON.parse(folderStored) as BookshelfFolder[];
+          if (Array.isArray(folderParsed)) {
+            this.folders = folderParsed;
+          }
         }
       }
-      // 加载旧档区文件夹
-      const archiveFolderStored = await this.prefs.get(this.archiveFolderKey, '') as string;
-      if (archiveFolderStored) {
-        const archiveFolderParsed = JSON.parse(archiveFolderStored) as ArchiveFolder[];
-        if (Array.isArray(archiveFolderParsed)) {
-          this.archiveFolders = archiveFolderParsed;
+      if (this.archiveFolders.length === 0) {
+        const archiveFolderStored = await this.prefs.get(this.archiveFolderKey, '') as string;
+        if (archiveFolderStored) {
+          const archiveFolderParsed = JSON.parse(archiveFolderStored) as ArchiveFolder[];
+          if (Array.isArray(archiveFolderParsed)) {
+            this.archiveFolders = archiveFolderParsed;
+          }
         }
       }
-      // 加载回收站
-      const recycleStored = await this.prefs.get(this.recycleBinKey, '') as string;
-      if (recycleStored) {
-        const recycleParsed = JSON.parse(recycleStored) as RecycleBinItem[];
-        if (Array.isArray(recycleParsed)) {
-          this.recycleBinItems = recycleParsed;
+      if (this.recycleBinItems.length === 0) {
+        const recycleStored = await this.prefs.get(this.recycleBinKey, '') as string;
+        if (recycleStored) {
+          const recycleParsed = JSON.parse(recycleStored) as RecycleBinItem[];
+          if (Array.isArray(recycleParsed)) {
+            this.recycleBinItems = recycleParsed;
+          }
         }
       }
-      // 加载灵感池
-      const inspirationStored = await this.prefs.get(this.inspirationKey, '') as string;
-      if (inspirationStored) {
-        const inspirationParsed = JSON.parse(inspirationStored) as InspirationItem[];
-        if (Array.isArray(inspirationParsed)) {
-          this.inspirationItems = inspirationParsed;
+      if (this.inspirationItems.length === 0) {
+        const inspirationStored = await this.prefs.get(this.inspirationKey, '') as string;
+        if (inspirationStored) {
+          const inspirationParsed = JSON.parse(inspirationStored) as InspirationItem[];
+          if (Array.isArray(inspirationParsed)) {
+            this.inspirationItems = inspirationParsed;
+          }
         }
       }
     } catch (e) {
@@ -307,6 +401,8 @@ export class WorkManager {
           this.dirtyInspirations = false;
         }
         await this.prefs.flush();
+        // 同步落盘到 filesDir，确保数据在文件系统中可靠存在
+        this.forceSaveToDisk();
       } catch (e) {
         console.error('[WorkManager] 保存数据失败: ' + JSON.stringify(e));
       }
@@ -951,6 +1047,8 @@ export class WorkManager {
       const total = workCount + folderCount + archiveFolderCount + inspirationCount + recycleCount;
       if (total > 0) {
         this.scheduleSave();
+        // 导入数据立即同步落盘，不等 debounce
+        this.forceSaveToDisk();
       }
       const promptStr = promptImported ? ' 提示词✓' : '';
       return `作品${workCount} 文件夹${folderCount} 旧档${archiveFolderCount} 素材${inspirationCount} 回收站${recycleCount}${promptStr}`;
@@ -1188,7 +1286,8 @@ export class WorkManager {
       deleteTime: this.formatDate(new Date()),
       source: source,
       originalFolderId: work.folderId,
-      itemType: 'work'
+      itemType: 'work',
+      aiContent: work.aiContent
     };
     this.recycleBinItems.push(item);
     // 从works中移除并清理缓存
@@ -1225,7 +1324,8 @@ export class WorkManager {
       content: item.content,
       createTime: this.formatDate(new Date()),
       updateTime: this.formatDate(new Date()),
-      folderId: item.originalFolderId || ''
+      folderId: item.originalFolderId || '',
+      aiContent: item.aiContent
     };
     this.works.push(restoredWork);
     this.recycleBinItems = this.recycleBinItems.filter(r => r.id !== recycleId);

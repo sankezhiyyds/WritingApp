@@ -92,25 +92,24 @@ struct PromptEditorPage {
   }
 
 
-  get bgColor(): string {
-    return this.isDarkMode ? '#1A1A2E' : '#F5F5F5';
+  get bgColor(): ResourceColor {
+    return $r('app.color.bg_page');
   }
 
-  get cardBg(): string {
-    return this.isDarkMode ? '#2D2D44' : '#FFFFFF';
+  get cardBg(): ResourceColor {
+    return $r('app.color.bg_card');
   }
 
-  get buttonTextColor(): string {
-    return '#FFFFFF';
+  get buttonTextColor(): ResourceColor {
+    return $r('app.color.text_on_accent');
   }
 
-  get primaryColor(): string {
-    return '#FF2D55';
+  get primaryColor(): ResourceColor {
+    return $r('app.color.accent_primary');
   }
 
-  /** 弹窗卡片结构边框：深色中灰 / 浅色浅灰，与 cardBg 协调 */
-  get cardBorder(): string {
-    return this.isDarkMode ? '#44455E' : '#E5E7EB';
+  get cardBorder(): ResourceColor {
+    return $r('app.color.border_default');
   }
 
   /** 紧凑模式按钮内边距：有work(更多按钮)时缩小 */
@@ -128,28 +127,20 @@ struct PromptEditorPage {
     return this.work ? 6 : 8;
   }
 
-  get textColor(): string {
-    return this.isDarkMode ? '#E0E0E0' : '#1A1A2E';
+  get textColor(): ResourceColor {
+    return $r('app.color.text_primary');
   }
 
-  get subTextColor(): string {
-    return this.isDarkMode ? '#9CA3AF' : '#6B7280';
+  get subTextColor(): ResourceColor {
+    return $r('app.color.text_secondary');
   }
 
-  get themeBgColor(): string {
-    if (this.isDarkMode) {
-      switch (this.bgTheme) {
-        case 'warm': return '#2D2418';
-        case 'cool': return '#1A2D3D';
-        case 'parchment': return '#2D2418';
-        default: return '#1A1A2E';
-      }
-    }
+  get themeBgColor(): ResourceColor {
     switch (this.bgTheme) {
-      case 'warm': return '#FFF8F0';
-      case 'cool': return '#F0F8FF';
-      case 'parchment': return '#F5E6D3';
-      default: return '#F5F5F5';
+      case 'warm': return $r('app.color.theme_warm_bg');
+      case 'cool': return $r('app.color.theme_cool_bg');
+      case 'parchment': return $r('app.color.theme_parchment_bg');
+      default: return $r('app.color.theme_default_bg');
     }
   }
 
@@ -347,7 +338,7 @@ struct PromptEditorPage {
       Row() {
         Text('←')
           .fontSize(this.sf(20))
-          .fontColor('#FF2D55')
+          .fontColor($r('app.color.accent_primary'))
           .onClick(() => {
             this.getUIContext().getRouter().back();
           })
@@ -444,7 +435,7 @@ struct PromptEditorPage {
                   Button('章节')
                     .fontSize(this.sf(14))
                     .fontWeight(FontWeight.Medium)
-                    .fontColor('#FF2D55')
+                    .fontColor($r('app.color.accent_primary'))
                     .backgroundColor(this.cardBg)
                     .borderRadius(20)
                     .height(36)
@@ -459,7 +450,7 @@ struct PromptEditorPage {
                   Button('历史')
                     .fontSize(this.sf(14))
                     .fontWeight(FontWeight.Medium)
-                    .fontColor('#3B82F6')
+                    .fontColor($r('app.color.text_primary'))
                     .backgroundColor(this.cardBg)
                     .borderRadius(20)
                     .height(36)
@@ -473,8 +464,8 @@ struct PromptEditorPage {
                 Button('导出')
                   .fontSize(this.sf(14))
                   .fontWeight(FontWeight.Medium)
-                  .fontColor('#10B981')
-                  .backgroundColor(this.cardBg)
+                  .fontColor(this.buttonTextColor)
+                  .backgroundColor(this.primaryColor)
                   .borderRadius(20)
                   .height(36)
                   .padding({ left: this.btnPad, right: this.btnPad })
@@ -487,8 +478,8 @@ struct PromptEditorPage {
               Button('查找替换')
                 .fontSize(this.sf(14))
                 .fontWeight(FontWeight.Medium)
-                .fontColor('#3B82F6')
-                .backgroundColor(this.cardBg)
+                .fontColor(this.buttonTextColor)
+                .backgroundColor(this.primaryColor)
                 .borderRadius(20)
                 .height(36)
                 .padding({ left: this.btnPad, right: this.btnPad })
@@ -555,8 +546,8 @@ struct PromptEditorPage {
           })
             .layoutWeight(1)
             .height('100%')
-            .backgroundColor(this.isDarkMode ? '#1E1E2E' : '#F8F9FA')
-            .border({ width: { left: 0.5 }, color: { left: this.isDarkMode ? '#3A3A4E' : '#E0E0E0' } })
+            .backgroundColor($r('app.color.bg_panel'))
+            .border({ width: { left: 0.5 }, color: { left: $r('app.color.divider') } })
         }
       }
       .width('100%')
@@ -588,7 +579,7 @@ struct PromptEditorPage {
           Button('章节')
             .fontSize(this.sf(12))
             .fontWeight(FontWeight.Medium)
-            .fontColor('#FF2D55')
+            .fontColor($r('app.color.accent_primary'))
             .backgroundColor(this.cardBg)
             .borderRadius(14)
             .height(32)
@@ -602,7 +593,7 @@ struct PromptEditorPage {
           Button('历史')
             .fontSize(this.sf(12))
             .fontWeight(FontWeight.Medium)
-            .fontColor('#3B82F6')
+            .fontColor($r('app.color.text_primary'))
             .backgroundColor(this.cardBg)
             .borderRadius(14)
             .height(32)
@@ -615,8 +606,8 @@ struct PromptEditorPage {
         Button('导出')
           .fontSize(this.sf(12))
           .fontWeight(FontWeight.Medium)
-          .fontColor('#10B981')
-          .backgroundColor(this.cardBg)
+          .fontColor(this.buttonTextColor)
+          .backgroundColor(this.primaryColor)
           .borderRadius(14)
           .height(32)
           .width('48%')
@@ -628,8 +619,8 @@ struct PromptEditorPage {
       Button('查找替换')
         .fontSize(this.sf(12))
         .fontWeight(FontWeight.Medium)
-        .fontColor('#3B82F6')
-        .backgroundColor(this.cardBg)
+        .fontColor(this.buttonTextColor)
+        .backgroundColor(this.primaryColor)
         .borderRadius(14)
         .height(32)
         .width('48%')
@@ -858,7 +849,7 @@ struct PromptEditorPage {
             Text('写作提示')
               .fontSize(this.sf(14))
               .fontWeight(FontWeight.Medium)
-              .fontColor('#FF6B35')
+              .fontColor($r('app.color.accent_secondary'))
               .margin({ left: 16, top: 12, bottom: 8 })
               .alignSelf(ItemAlign.Start)
 
@@ -866,7 +857,7 @@ struct PromptEditorPage {
               Row() {
                 Text('•')
                   .fontSize(this.sf(14))
-                  .fontColor('#FF6B35')
+                  .fontColor($r('app.color.accent_secondary'))
                   .margin({ right: 8 })
                 Text(tip)
                   .fontSize(this.sf(13))
@@ -956,7 +947,7 @@ struct PromptEditorPage {
               .width('100%')
               .padding({ left: 16, right: 16, top: 12, bottom: 12 })
 
-              Divider().color('#F3F4F6').strokeWidth(0.5).margin({ left: 16, right: 16 })
+              Divider().color($r('app.color.bg_input')).strokeWidth(0.5).margin({ left: 16, right: 16 })
             }, (field: TemplateField) => field.key)
           }
           .width('100%')
@@ -1310,7 +1301,7 @@ struct PromptEditorPage {
         Blank()
         Text('+')
           .fontSize(this.sf(24))
-          .fontColor('#FF2D55')
+          .fontColor($r('app.color.accent_primary'))
           .margin({ right: 16 })
           .onClick(() => {
             this.showCreateChapterDialog = true;
@@ -1333,7 +1324,7 @@ struct PromptEditorPage {
             Button(category)
               .fontSize(this.sf(13))
               .fontColor(this.selectedCategory === category ? '#FFFFFF' : this.subTextColor)
-              .backgroundColor(this.selectedCategory === category ? '#FF2D55' : (this.isDarkMode ? '#2D2D3A' : '#F3F4F6'))
+              .backgroundColor(this.selectedCategory === category ? $r('app.color.accent_primary') : $r('app.color.bg_input'))
               .borderRadius(16)
               .height(32)
               .padding({ left: 12, right: 12 })
@@ -1365,7 +1356,7 @@ struct PromptEditorPage {
                       .textOverflow({ overflow: TextOverflow.Ellipsis })
                     Text(chapter.category)
                       .fontSize(this.sf(12))
-                      .fontColor('#FF2D55')
+                      .fontColor($r('app.color.accent_primary'))
                       .margin({ top: 4 })
                     Text(chapter.updateTime)
                       .fontSize(this.sf(11))
@@ -1378,7 +1369,7 @@ struct PromptEditorPage {
                   Row() {
                     Text('查看')
                       .fontSize(this.sf(13))
-                      .fontColor('#FF2D55')
+                      .fontColor($r('app.color.accent_primary'))
                       .onClick(() => {
                         this.currentChapter = chapter;
                         this.generatedContent = chapter.content;
@@ -1387,7 +1378,7 @@ struct PromptEditorPage {
                       })
                     Text('编辑')
                       .fontSize(this.sf(13))
-                      .fontColor('#3B82F6')
+                      .fontColor($r('app.color.accent_blue'))
                       .margin({ left: 12 })
                       .onClick(() => {
                         this.editingChapter = chapter;
@@ -1396,7 +1387,7 @@ struct PromptEditorPage {
                       })
                     Text('删除')
                       .fontSize(this.sf(13))
-                      .fontColor('#EF4444')
+                      .fontColor($r('app.color.status_error'))
                       .margin({ left: 12 })
                       .onClick(() => {
                         this.deleteChapter(chapter);
@@ -1642,7 +1633,7 @@ struct PromptEditorPage {
                   Column() {
                     Text('预览')
                       .fontSize(this.sf(13))
-                      .fontColor('#FF2D55')
+                      .fontColor($r('app.color.accent_primary'))
                       .onClick(() => {
                         this.selectedVersion = index;
                         this.originalContent = this.generatedContent;
@@ -1653,7 +1644,7 @@ struct PromptEditorPage {
                     if (this.selectedVersion === index) {
                       Text('恢复')
                         .fontSize(this.sf(13))
-                        .fontColor('#10B981')
+                        .fontColor($r('app.color.accent_green'))
                         .margin({ top: 8 })
                         .onClick(() => {
                           if (this.work) {

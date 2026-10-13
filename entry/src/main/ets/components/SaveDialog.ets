@@ -27,32 +27,15 @@ export struct SaveDialog {
   /** 新建文件夹名称 */
   @State newFolderName: string = '';
 
-  /** 主题色 */
-  get bgColor(): string {
-    return this.isDarkMode ? '#1E1E1E' : '#FFFFFF';
-  }
-  get cardBg(): string {
-    return this.isDarkMode ? '#2D2D2D' : '#F5F5F5';
-  }
-  get textColor(): string {
-    return this.isDarkMode ? '#E0E0E0' : '#333333';
-  }
-  get subTextColor(): string {
-    return this.isDarkMode ? '#9E9E9E' : '#666666';
-  }
-  get dividerColor(): string {
-    return this.isDarkMode ? '#3D3D3D' : '#E0E0E0';
-  }
-  /** 弹窗卡片结构边框：深色中灰 / 浅色浅灰，与 bgColor 协调 */
-  get cardBorder(): string {
-    return this.isDarkMode ? '#4A4A4A' : '#D1D5DB';
-  }
-  get accentColor(): string {
-    return '#3B82F6';
-  }
-  get buttonTextColor(): string {
-    return '#FFFFFF';
-  }
+  /** 主题色（统一使用资源引用，系统自动切换深浅色） */
+  get bgColor(): ResourceColor { return $r('app.color.bg_panel'); }
+  get cardBg(): ResourceColor { return $r('app.color.bg_input'); }
+  get textColor(): ResourceColor { return $r('app.color.text_primary'); }
+  get subTextColor(): ResourceColor { return $r('app.color.text_secondary'); }
+  get dividerColor(): ResourceColor { return $r('app.color.divider'); }
+  get cardBorder(): ResourceColor { return $r('app.color.border_button'); }
+  get accentColor(): ResourceColor { return $r('app.color.accent_blue'); }
+  get buttonTextColor(): ResourceColor { return $r('app.color.text_on_accent'); }
 
   aboutToAppear() {
     this.editTitle = this.defaultTitle;
@@ -212,7 +195,7 @@ export struct SaveDialog {
         }
         .width('85%')
         .padding(24)
-        .backgroundColor($r('app.color.card_bg'))
+        .backgroundColor($r('app.color.bg_card'))
         .border({ width: 1, color: this.cardBorder })
         .borderRadius(16)
         .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))

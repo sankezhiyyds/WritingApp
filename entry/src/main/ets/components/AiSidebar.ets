@@ -96,21 +96,21 @@ export struct AiSidebar {
     return size * (appFontSize / 14);
   }
 
-  /** 主题色 */
-  get textColor(): string {
-    return this.isDarkMode ? '#E5E7EB' : '#1A1A2E';
+  /** 主题色（统一使用资源引用，系统自动切换深浅色） */
+  get textColor(): ResourceColor {
+    return $r('app.color.text_primary');
   }
-  get subTextColor(): string {
-    return this.isDarkMode ? '#9CA3AF' : '#6B7280';
+  get subTextColor(): ResourceColor {
+    return $r('app.color.text_secondary');
   }
-  get bgColor(): string {
-    return this.isDarkMode ? '#1A1A2E' : '#F5F5F5';
+  get bgColor(): ResourceColor {
+    return $r('app.color.bg_page');
   }
-  get cardBg(): string {
-    return this.isDarkMode ? '#252535' : '#FFFFFF';
+  get cardBg(): ResourceColor {
+    return $r('app.color.bg_card');
   }
-  get dividerColor(): string {
-    return this.isDarkMode ? '#3A3A4E' : '#E5E7EB';
+  get dividerColor(): ResourceColor {
+    return $r('app.color.divider');
   }
 
   /** 侧栏宽度 - 根据断点自适应，窄屏使用独立列但不侵占编辑器 */
@@ -411,41 +411,41 @@ export struct AiSidebar {
     }
   }
 
-  /** 获取主题色 */
-  get sidebarBgColor(): string {
-    return this.isDarkMode ? '#1F2033' : '#F8F9FA';
+  /** 获取主题色（统一使用资源引用，系统自动切换深浅色） */
+  get sidebarBgColor(): ResourceColor {
+    return $r('app.color.bg_panel');
   }
 
-  get sidebarTextColor(): string {
-    return this.isDarkMode ? '#F5F5FA' : '#1A1A2E';
+  get sidebarTextColor(): ResourceColor {
+    return $r('app.color.text_primary');
   }
 
-  get sidebarSubTextColor(): string {
-    return this.isDarkMode ? '#C4C6D3' : '#6B7280';
+  get sidebarSubTextColor(): ResourceColor {
+    return $r('app.color.text_secondary');
   }
 
-  get sidebarCardBg(): string {
-    return this.isDarkMode ? '#2B2C42' : '#FFFFFF';
+  get sidebarCardBg(): ResourceColor {
+    return $r('app.color.bg_card');
   }
 
-  get sidebarInputBg(): string {
-    return this.isDarkMode ? '#2B2C42' : '#FFFFFF';
+  get sidebarInputBg(): ResourceColor {
+    return $r('app.color.bg_card');
   }
 
-  get sidebarButtonBg(): string {
-    return '#FF2D55';
+  get sidebarButtonBg(): ResourceColor {
+    return $r('app.color.accent_primary');
   }
 
-  get buttonTextColor(): string {
-    return '#FFFFFF';
+  get buttonTextColor(): ResourceColor {
+    return $r('app.color.text_on_accent');
   }
 
-  get successColor(): string {
-    return '#10B981';
+  get successColor(): ResourceColor {
+    return $r('app.color.status_success');
   }
 
-  get warningColor(): string {
-    return '#F59E0B';
+  get warningColor(): ResourceColor {
+    return $r('app.color.status_warning');
   }
 
   /** 安全弹出 Toast */
@@ -724,9 +724,9 @@ export struct AiSidebar {
         // ── 实时更新 aiConversation，格式包含思考块 ──
         let aiText = '';
         if (streamingThinking.length > 0) {
-          aiText += '【思考】' + streamingThinking.length + '字\n【回复】';
+          aiText += '【思考】' + streamingThinking + '\n【回复】';
         }
-        aiText += streamingThinking + streamingResponse;
+        aiText += streamingResponse;
         // 替换最后一条 AI 回复（从【AI】标记到末尾）
         const aiStartIdx = this.aiConversation.lastIndexOf('【AI】');
         if (aiStartIdx >= 0) {
@@ -755,7 +755,16 @@ export struct AiSidebar {
           } else {
             // 非流式返回：native 返回了文本但未触发 onToken 回调，需手动追加完整响应
             console.warn('[AiSidebar] native返回文本但未触发onToken，手动追加完整响应');
-            this.aiConversation += response.content + '\n\n';
+            // 解析 <think> 标签，分离思考和回复
+            let nonStreamText = response.content;
+            const thinkStart = nonStreamText.indexOf('<think>');
+            const thinkEnd = nonStreamText.indexOf('</think>');
+            if (thinkStart >= 0 && thinkEnd > thinkStart) {
+              const thinkContent = nonStreamText.substring(thinkStart + 7, thinkEnd).trim();
+              const replyContent = (nonStreamText.substring(0, thinkStart) + nonStreamText.substring(thinkEnd + 8)).trim();
+              nonStreamText = '【思考】' + thinkContent + '\n【回复】' + replyContent;
+            }
+            this.aiConversation += nonStreamText + '\n\n';
           }
 
           // 保存对话记录到 WorkManager
@@ -890,7 +899,7 @@ export struct AiSidebar {
         }
         .width('100%')
         .padding({ left: 16, right: 16, top: 8, bottom: 8 })
-        .backgroundColor(this.isDarkMode ? 'rgba(245,158,11,0.1)' : 'rgba(245,158,11,0.08)')
+        .backgroundColor('rgba(245,158,11,0.1)')
       }
 
       // 工作流任务选择器（按模板字段切换任务）
@@ -937,6 +946,29 @@ export struct AiSidebar {
                 .fontSize(this.sf(12))
                 .fontColor(this.sidebarSubTextColor)
                 .textAlign(TextAlign.Center)
+                .margin({ bottom: 12 })
+
+              // 使用说明
+              Column() {
+                Row() {
+                  Text('📌 使用说明')
+                    .fontSize(this.sf(12))
+                    .fontWeight(FontWeight.Bold)
+                    .fontColor(this.sidebarSubTextColor)
+                }
+                .margin({ bottom: 6 })
+
+                Text('• 需在设置中选择GGUF模型文件后才能对话\n• AI参数（线程数、上下文长度等）请根据设备SoC和内存合理设置，过大可能导致卡顿或闪退\n• 可在设置中填写自定义提示词，引导AI按你的风格创作\n• 建议经常导出数据做备份，避免因设备异常导致数据丢失')
+                  .fontSize(this.sf(11))
+                  .fontColor(this.sidebarSubTextColor)
+                  .textAlign(TextAlign.Start)
+                  .lineHeight(18)
+              }
+              .alignItems(HorizontalAlign.Start)
+              .width('100%')
+              .padding(12)
+              .borderRadius(8)
+              .backgroundColor(this.sidebarBgColor)
 
               // 显示工作台内容预览
               if (this.workbenchContent.length > 0) {
@@ -955,12 +987,12 @@ export struct AiSidebar {
               Column() {
                 // ===== 用户消息（左侧气泡） =====
                 Row() {
-                  // 用户头像（无 emoji，使用蓝色圆形+U文字）
+                  // 用户头像
                   Text('U')
                     .width(28)
                     .height(28)
                     .borderRadius(14)
-                    .backgroundColor(this.isDarkMode ? '#455A64' : '#1565C0')
+                    .backgroundColor($r('app.color.bubble_user_avatar'))
                     .textAlign(TextAlign.Center)
                     .fontColor(this.buttonTextColor)
                     .fontSize(this.sf(11))
@@ -970,23 +1002,23 @@ export struct AiSidebar {
                   // 用户气泡
                   Text(round.userMessage)
                     .fontSize(this.sf(13))
-                    .fontColor(this.isDarkMode ? '#E0E0E0' : '#1A1A2E')
+                    .fontColor($r('app.color.text_primary'))
                     .lineHeight(20)
-                    .backgroundColor(this.isDarkMode ? '#37474F' : '#E8F0FE')
+                    .backgroundColor($r('app.color.bubble_user_bg'))
                     .borderRadius(12)
                     .padding({ left: 12, right: 12, top: 8, bottom: 8 })
                     .maxLines(20)
                     .layoutWeight(1)
-                    .margin({ left: 6, right: 6 })
+                    .margin({ left: 6, right: 4 })
 
-                  // 复制按钮
+                  // 复制按钮（气泡右侧外部，底部齐平）
                   Button() {
                     Text('📋')
-                      .fontSize(this.sf(11))
+                      .fontSize(this.sf(10))
                   }
                   .backgroundColor(Color.Transparent)
-                  .width(24)
-                  .height(24)
+                  .width(20)
+                  .height(20)
                   .padding(0)
                   .flexShrink(0)
                   .onClick(() => {
@@ -994,59 +1026,48 @@ export struct AiSidebar {
                   })
                 }
                 .width('100%')
-                .padding({ top: 4, bottom: 4 })
                 .justifyContent(FlexAlign.Start)
+                .alignItems(VerticalAlign.Bottom)
 
-                // ===== AI思考状态（仅显示状态行，不展开内容） =====
+                // ===== AI思考内容（独立展示框，不可复制） =====
                 if (round.thinking && round.thinking.length > 0) {
                   Row() {
-                    Text(this.isGenerating && index === this.cachedRounds.length - 1
-                      ? '💭 思考中…(' + round.thinking + ')'
-                      : '💭 已思考(' + round.thinking + ')')
-                      .fontSize(this.sf(11))
-                      .fontColor(this.isDarkMode ? '#9E9E9E' : '#757575')
-                      .layoutWeight(1)
-                      .margin({ left: 6, right: 6 })
+                    Column() {
+                      Row() {
+                        Text(this.isGenerating && index === this.cachedRounds.length - 1
+                          ? '💭 思考中…'
+                          : '💭 已思考')
+                          .fontSize(this.sf(10))
+                          .fontColor($r('app.color.text_thinking'))
+                      }
+                      .width('100%')
 
-                    // AI头像
-                    Text('AI')
-                      .width(28)
-                      .height(28)
-                      .borderRadius(14)
-                      .backgroundColor(this.isDarkMode ? '#2E4A3A' : '#4CAF50')
-                      .textAlign(TextAlign.Center)
-                      .fontColor(this.buttonTextColor)
-                      .fontSize(this.sf(10))
-                      .fontWeight(FontWeight.Bold)
-                      .flexShrink(0)
+                      Text(round.thinking)
+                        .fontSize(this.sf(11))
+                        .fontColor($r('app.color.text_thinking'))
+                        .lineHeight(18)
+                        .margin({ top: 4 })
+                        .width('100%')
+                    }
+                    .backgroundColor($r('app.color.bubble_ai_bg'))
+                    .borderRadius(10)
+                    .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+                    .layoutWeight(1)
+                    .margin({ left: 6, right: 6 })
                   }
                   .width('100%')
-                  .padding({ top: 4, bottom: 4 })
+                  .padding({ top: 2, bottom: 2 })
                   .justifyContent(FlexAlign.End)
                 }
 
                 // ===== AI回复（独立右侧气泡） =====
                 Row() {
-                  // 复制按钮
-                  Button() {
-                    Text('📋')
-                      .fontSize(this.sf(11))
-                  }
-                  .backgroundColor(Color.Transparent)
-                  .width(24)
-                  .height(24)
-                  .padding(0)
-                  .flexShrink(0)
-                  .onClick(() => {
-                    this.copyToClipboard(round.aiResponse);
-                  })
-
                   // 回复气泡
                   Column() {
                     if (round.aiResponse.length > 0) {
                       Text(round.aiResponse)
                         .fontSize(this.sf(13))
-                        .fontColor(this.isDarkMode ? '#E0E0E0' : '#1A1A2E')
+                        .fontColor($r('app.color.text_primary'))
                         .lineHeight(20)
                     } else if (this.isGenerating && index === this.cachedRounds.length - 1) {
                       if (round.thinking && round.thinking.length > 0) {
@@ -1067,33 +1088,36 @@ export struct AiSidebar {
                       }
                     }
                   }
-                  .backgroundColor(this.isDarkMode ? '#2E4A3A' : '#E8F5E9')
+                  .backgroundColor($r('app.color.bubble_ai_bg'))
                   .borderRadius(12)
                   .padding({ left: 12, right: 12, top: 8, bottom: 8 })
                   .layoutWeight(1)
-                  .margin({ left: 6, right: 6 })
+                  .margin({ left: 6, right: 4 })
 
-                  // AI头像
-                  Text('AI')
-                    .width(28)
-                    .height(28)
-                    .borderRadius(14)
-                    .backgroundColor(this.isDarkMode ? '#2E4A3A' : '#4CAF50')
-                    .textAlign(TextAlign.Center)
-                    .fontColor(this.buttonTextColor)
-                    .fontSize(this.sf(10))
-                    .fontWeight(FontWeight.Bold)
-                    .flexShrink(0)
+                  // 复制按钮（气泡右侧外部，底部齐平）
+                  Button() {
+                    Text('📋')
+                      .fontSize(this.sf(10))
+                  }
+                  .backgroundColor(Color.Transparent)
+                  .width(20)
+                  .height(20)
+                  .padding(0)
+                  .flexShrink(0)
+                  .onClick(() => {
+                    this.copyToClipboard(round.aiResponse);
+                  })
                 }
                 .width('100%')
                 .padding({ top: 4, bottom: 4 })
                 .justifyContent(FlexAlign.End)
+                .alignItems(VerticalAlign.Bottom)
 
                 // 轮次分隔线
                 if (index < this.cachedRounds.length - 1) {
                   Divider()
                     .height(0.5)
-                    .color(this.isDarkMode ? '#3A3A4E' : '#E0E0E0')
+                    .color($r('app.color.divider'))
                     .margin({ top: 4, bottom: 4 })
                 }
               }
@@ -1109,7 +1133,7 @@ export struct AiSidebar {
                 .width(28)
                 .height(28)
                 .borderRadius(14)
-                .backgroundColor(this.isDarkMode ? '#2E4A3A' : '#4CAF50')
+                .backgroundColor($r('app.color.bubble_ai_avatar'))
                 .textAlign(TextAlign.Center)
                 .fontColor(this.buttonTextColor)
                 .fontSize(this.sf(10))
@@ -1117,7 +1141,7 @@ export struct AiSidebar {
                 .flexShrink(0)
               Text('正在思考中...')
                 .fontSize(this.sf(13))
-                .fontColor('#9CA3AF')
+                .fontColor($r('app.color.text_tertiary'))
                 .margin({ left: 8 })
             }
             .width('100%')
