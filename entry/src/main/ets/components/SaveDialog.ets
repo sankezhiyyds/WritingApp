@@ -99,7 +99,7 @@ export struct SaveDialog {
               .fontColor(this.subTextColor)
               .margin({ bottom: 8 })
 
-            // 文件夹列表
+            // 文件夹列表（固定最大高度300vp，超出可滚动）
             Scroll() {
               Column() {
                 // 不指定文件夹选项
@@ -142,7 +142,7 @@ export struct SaveDialog {
               }
               .width('100%')
             }
-            .layoutWeight(1)
+            .constraintSize({ maxHeight: 300 })
             .scrollBar(BarState.Off)
 
             // 新建文件夹按钮
@@ -162,7 +162,6 @@ export struct SaveDialog {
           .width('100%')
           .alignItems(HorizontalAlign.Start)
           .padding({ left: 20, right: 20, top: 16, bottom: 16 })
-          .layoutWeight(1)
 
           // 底部按钮
           Row() {
@@ -199,7 +198,7 @@ export struct SaveDialog {
         .border({ width: 1, color: this.cardBorder })
         .borderRadius(16)
         .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
-        .margin({ top: 40, bottom: 40 })
+        .margin({ top: 16, bottom: 16 })
         .shadow({ radius: 20, color: 'rgba(0,0,0,0.3)', offsetX: 0, offsetY: 4 })
       }
       .width('100%')

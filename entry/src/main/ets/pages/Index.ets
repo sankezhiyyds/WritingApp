@@ -944,7 +944,7 @@ struct Index {
           if (this.onboardingPage > 0) {
             Button('上一步')
               .fontSize(this.sf(14))
-              .fontColor(this.subTextColor)
+              .fontColor($r('app.color.text_primary'))
               .backgroundColor($r('app.color.bg_input'))
               .borderRadius(20)
               .height(40)
@@ -990,12 +990,13 @@ struct Index {
         .margin({ top: 20 })
       }
       .width('90%')
+      .constraintSize({ maxWidth: 420, maxHeight: '85%' })
       .padding(24)
       .backgroundColor($r('app.color.bg_card'))
       .border({ width: 1, color: this.cardBorder })
       .borderRadius(16)
       .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
-      .margin({ top: 40, bottom: 40 })
+      .margin({ top: 16, bottom: 16 })
     }
     .width('100%')
     .height('100%')
@@ -1018,7 +1019,7 @@ struct Index {
           }
         }
         .width('100%')
-        .padding({ bottom: 80 })
+        .padding({ bottom: 100 })
       }
       .width('100%')
       .height('100%')
@@ -1095,7 +1096,7 @@ struct Index {
           }
         }
         .width('100%')
-        .padding({ bottom: 80 })
+        .padding({ bottom: 100 })
       }
       .width('100%')
       .height('100%')
@@ -2655,12 +2656,13 @@ struct Index {
         .margin({ top: 16 })
       }
       .width('80%')
+      .constraintSize({ maxHeight: '85%' })
       .padding(24)
       .backgroundColor($r('app.color.bg_card'))
       .border({ width: 1, color: this.cardBorder })
       .borderRadius(16)
       .clipShape(new RectShape({ width: '100%', height: '100%', radiusWidth: 16, radiusHeight: 16 }))
-      .margin({ top: 40, bottom: 40 })
+      .margin({ top: 16, bottom: 16 })
     }
     .width('100%')
     .height('100%')
@@ -2811,7 +2813,6 @@ struct Index {
           }
           .width('100%')
         }
-        .layoutWeight(1)
         .constraintSize({ maxHeight: 300 })
 
         Button('取消')
