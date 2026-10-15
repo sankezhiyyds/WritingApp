@@ -58,6 +58,13 @@ class LRUCache<T> {
   }
 }
 
+/** AI生成合成内容隐式标识元数据（参照附录E格式） */
+export interface AIGCMetadata {
+  Label: number;           // 生成合成标签：1表示AI生成
+  ContentProducer: string; // 服务提供者名称或编码
+  ProducerID: string;      // 内容制作编号
+}
+
 export interface WorkItem {
   id: string;
   title: string;
@@ -1031,6 +1038,9 @@ export class WorkManager {
 
   /** 导出全部数据（书架+素材区+旧档区+回收站）为JSON字符串 */
   exportAllData(): string {
+    // 逐条检查是否包含AI生成内容
+    const hasAnyAiContent = this.works.some(w => w.aiContent && w.aiContent.length > 0);
+
     const data: Record<string, Object> = {
       'works': this.works,
       'folders': this.folders,
@@ -1041,6 +1051,20 @@ export class WorkManager {
       'exportTime': new Date().toISOString(),
       'version': '2.0'
     };
+
+    // AI生成合成内容标识（仅当存在AI生成内容时添加）
+    if (hasAnyAiContent) {
+      // 显式标识（文件内可见提示）
+      data['aiNotice'] = '本文件包含由人工智能（AI）生成的内容，仅供参考，请审校后使用';
+      // 隐式标识（附录E格式，仅保留一份）
+      const aigcMeta: AIGCMetadata = {
+        Label: 1,
+        ContentProducer: '创意写作（com.creativewriting.ai）',
+        ProducerID: `creativewriting_${Date.now()}`
+      };
+      data['aigc_metadata'] = aigcMeta;
+    }
+
     return JSON.stringify(data);
   }
 

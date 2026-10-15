@@ -1255,9 +1255,21 @@ struct PromptEditorPage {
     exportText += `导出时间：${new Date().toLocaleString()}\n`;
     exportText += `${'='.repeat(40)}\n\n`;
 
+    // 判断是否包含AI生成内容
+    const hasAiContent = !!(this.work.aiContent && this.work.aiContent.length > 0);
+
+    // AI生成内容显式标识（置于文件起始位置）
+    if (hasAiContent) {
+      exportText += `[AI生成] 本文件包含由人工智能（AI）生成的内容，仅供参考，请审校后使用。\n\n`;
+    }
+
     // 添加生成内容
     if (this.generatedContent) {
-      exportText += `【生成内容】\n${this.generatedContent}\n\n`;
+      if (hasAiContent) {
+        exportText += `【生成内容】（含AI生成部分）\n${this.generatedContent}\n\n`;
+      } else {
+        exportText += `【生成内容】\n${this.generatedContent}\n\n`;
+      }
     }
 
     // 添加所有章节
@@ -1267,6 +1279,16 @@ struct PromptEditorPage {
         exportText += `--- ${chapter.category} | ${chapter.title} ---\n`;
         exportText += `${chapter.content}\n\n`;
       }
+    }
+
+    // AI生成合成内容隐式标识（仅当包含AI生成内容时添加）
+    if (hasAiContent) {
+      exportText += `${'='.repeat(40)}\n`;
+      exportText += `[AI生成合成内容标识]\n`;
+      exportText += `Label: 1\n`;
+      exportText += `ContentProducer: 创意写作（com.creativewriting.ai）\n`;
+      exportText += `ProducerID: ${this.work.id}_${Date.now()}\n`;
+      exportText += `生成时间：${new Date().toISOString()}\n`;
     }
 
     // 复制到剪贴板

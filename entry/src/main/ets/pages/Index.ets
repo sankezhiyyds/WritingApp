@@ -8,8 +8,6 @@ import { speechRecognizer } from '@kit.CoreSpeechKit';
 import { audio } from '@kit.AudioKit';
 import { abilityAccessCtrl, common, ConfigurationConstant } from '@kit.AbilityKit';
 import { BusinessError, pasteboard } from '@kit.BasicServicesKit';
-import { huaweiAuthService, HuaweiUserInfo } from '../model/HuaweiAuthService';
-import { cloudSyncService, SyncStatus } from '../model/CloudSyncService';
 import { responsiveManager, BreakpointType } from '../model/ResponsiveManager';
 import { permissionManager, PermissionItem, PermissionResult } from '../model/PermissionManager';
 import picker from '@ohos.file.picker';
@@ -17,7 +15,6 @@ import fileIo from '@ohos.file.fs';
 import { util } from '@kit.ArkTS';
 import formProvider from '@ohos.app.form.formProvider';
 import formBindingData from '@ohos.app.form.formBindingData';
-import { updateManager } from '@kit.AppGalleryKit';
 import { preferences } from '@kit.ArkData';
 
 /** 卡片所需的灵感统计数据 */
@@ -269,27 +266,8 @@ struct Index {
     this.voiceInterimText = '';
   }
 
-  /** 页面每次显示时检查导航目标（如从桌面卡片跳转到灵感池）并尝试静默登录 */
+  /** 页面每次显示时检查导航目标（如从桌面卡片跳转到灵感池） */
   onPageShow(): void {
-    // 始终尝试静默登录（无论是否有缓存，验证 token 是否仍然有效）
-    huaweiAuthService.silentLogin(this.getUIContext().getHostContext() as common.UIAbilityContext).then((userInfo) => {
-      // 静默登录成功后通过 AppStorage 通知 SettingsTab 更新 UI
-      if (userInfo) {
-        console.info('[Index] 静默登录成功，userInfo=' + JSON.stringify(userInfo));
-        AppStorage.setOrCreate('huaweiLoggedIn', true);
-        AppStorage.setOrCreate('huaweiUserInfo', userInfo);
-        // 登录成功后自动触发端云同步
-        cloudSyncService.sync();
-      } else {
-        // 静默登录未成功（未授权/token过期/设备未登录华为账号）→ 清除stale状态，防止伪登录
-        AppStorage.setOrCreate('huaweiLoggedIn', false);
-        AppStorage.setOrCreate('huaweiUserInfo', null);
-      }
-    }).catch((e: Error) => {
-      console.error('[Index] 静默登录异常: ' + e.message);
-      AppStorage.setOrCreate('huaweiLoggedIn', false);
-      AppStorage.setOrCreate('huaweiUserInfo', null);
-    });
     // 1. 内存 flag 通道（onNewWant 高频点击时的实时响应）
     const target = AppStorage.get<string>('appNavTarget');
     if (target === 'inspiration') {
@@ -782,26 +760,26 @@ struct Index {
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
-          Text('• 未登录时数据仅存于本机，不会上传')
+          Text('• 所有数据仅保存在本机，不会上传')
             .fontSize(this.sf(14))
             .fontColor(this.subTextColor)
             .margin({ bottom: 20 })
             .alignSelf(ItemAlign.Start)
 
-          Text('华为账号登录（多设备同步）')
+          Text('纯本地运行')
             .fontSize(this.sf(16))
             .fontWeight(FontWeight.Medium)
             .fontColor(this.textColor)
             .margin({ bottom: 8 })
             .alignSelf(ItemAlign.Start)
 
-          Text('• 一键登录，快速开始创作')
+          Text('• 无需联网，AI推理在设备本地完成')
             .fontSize(this.sf(14))
             .fontColor(this.subTextColor)
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
-          Text('• 登录后自动同步，多设备协同创作')
+          Text('• 建议定期导出数据做备份，避免设备异常导致丢失')
             .fontSize(this.sf(14))
             .fontColor(this.subTextColor)
             .margin({ bottom: 4 })
@@ -857,6 +835,12 @@ struct Index {
                 .fontColor(this.subTextColor)
                 .margin({ bottom: 6 })
                 .alignSelf(ItemAlign.Start)
+
+              Text('• 添加桌面卡片「灵感速记」，无需打开App即可快速记录灵感，自动存入灵感池。')
+                .fontSize(this.sf(13))
+                .fontColor(this.subTextColor)
+                .margin({ bottom: 6 })
+                .alignSelf(ItemAlign.Start)
             }
             .width('100%')
           }
@@ -898,7 +882,7 @@ struct Index {
                 .margin({ bottom: 6 })
                 .alignSelf(ItemAlign.Start)
 
-              Text('1. 所有作品数据仅保存在您的设备上，我们不会收集您的创作内容。\n2. 本应用不会收集您的个人信息、位置、通讯录等隐私数据。\n3. 当您使用华为账号登录时，我们仅会获取必要的用户标识用于登录验证。\n4. 我们不会将您的任何数据分享给第三方。')
+              Text('1. 所有作品数据仅保存在您的设备上，我们不会收集您的创作内容。\n2. 本应用不会收集您的个人信息、位置、通讯录等隐私数据。\n3. AI推理在设备本地完成，不对外传输任何数据。\n4. 我们不会将您的任何数据分享给第三方。')
                 .fontSize(this.sf(12))
                 .fontColor(this.subTextColor)
                 .margin({ bottom: 10 })
@@ -3915,10 +3899,6 @@ struct SettingsTab {
   @State showPermissionPanel: boolean = false;
   @State permissionItems: PermissionItem[] = [];
   @State showHelpPanel: boolean = false;
-  @State showFeedbackPanel: boolean = false;
-  @State feedbackText: string = '';
-  @StorageLink('huaweiLoggedIn') isHuaweiLoggedIn: boolean = false;
-  @StorageLink('huaweiUserInfo') huaweiUserInfo: HuaweiUserInfo | null = null;
   @State localFontPath: string = '';
   @State showFontPicker: boolean = false;
   @State localModelPath: string = '';
@@ -3943,13 +3923,6 @@ struct SettingsTab {
       this.loadSettings();
     }
     this.permissionItems = permissionManager.getPermissionItems();
-
-    // 恢复华为账号登录状态
-    this.isHuaweiLoggedIn = huaweiAuthService.isLoggedIn();
-    if (this.isHuaweiLoggedIn) {
-      this.huaweiUserInfo = huaweiAuthService.getCurrentUser();
-      console.info('[Index] aboutToAppear 恢复登录状态: ' + JSON.stringify(this.huaweiUserInfo));
-    }
   }
 
   // 暗色模式辅助颜色属性（统一使用资源引用，系统自动切换深浅色）
@@ -4306,122 +4279,6 @@ struct SettingsTab {
           this.selectDarkMode();
         })
 
-        // ===== 华为账号与多设备同步 =====
-        ListItem() {
-          this.SectionTitle('华为账号与多设备同步')
-        }
-
-        ListItem() {
-          Row() {
-            // 头像
-            if (this.isHuaweiLoggedIn && this.huaweiUserInfo && this.huaweiUserInfo.picture) {
-              Image(this.huaweiUserInfo.picture)
-                .width(40)
-                .height(40)
-                .borderRadius(20)
-                .margin({ right: 12 })
-            } else if (this.isHuaweiLoggedIn) {
-              // 已登录但无头像 → 显示默认头像占位
-              Row() {
-                Text((this.huaweiUserInfo?.displayName || 'H').charAt(0).toUpperCase())
-                  .fontSize(this.sf(18))
-                  .fontColor($r('app.color.text_on_accent'))
-              }
-              .width(40)
-              .height(40)
-              .borderRadius(20)
-              .backgroundColor('#4A90D9')
-              .margin({ right: 12 })
-              .justifyContent(FlexAlign.Center)
-            }
-
-            Column() {
-              Text(this.isHuaweiLoggedIn && this.huaweiUserInfo
-                ? (this.huaweiUserInfo.displayName
-                  ? this.huaweiUserInfo.displayName
-                  : (this.huaweiUserInfo.openID
-                    ? `${this.huaweiUserInfo.openID.substring(0, 6)}…${this.huaweiUserInfo.openID.slice(-4)}`
-                    : '华为账号已登录'))
-                : '登录华为账号')
-                .fontSize(this.sf(15))
-                .fontColor($r('app.color.text_primary'))
-
-              Text(this.isHuaweiLoggedIn
-                ? '点击退出登录'
-                : '登录后多设备自动同步作品数据')
-                .fontSize(this.sf(12))
-                .fontColor($r('app.color.text_tertiary'))
-                .margin({ top: 2 })
-            }
-            .alignItems(HorizontalAlign.Start)
-            .layoutWeight(1)
-
-            Text('›')
-              .fontSize(this.sf(18))
-              .fontColor($r('app.color.text_tertiary'))
-          }
-          .padding(16)
-          .borderRadius(12)
-          .backgroundColor($r('app.color.bg_card'))
-        }
-        .onClick(async () => {
-          if (this.isHuaweiLoggedIn) {
-            // 已登录 → 弹出确认退出对话框
-            this.getUIContext().getPromptAction().showDialog({
-              title: '退出登录',
-              message: '退出后多设备同步将不可用，确定退出华为账号登录吗？',
-              buttons: [
-                { text: '取消', color: '#6B7280' },
-                { text: '退出', color: '#EF4444' }
-              ]
-            }).then((result: promptAction.ShowDialogSuccessResponse) => {
-              if (result.index === 1) {
-                huaweiAuthService.logout().then(() => {
-                  this.isHuaweiLoggedIn = false;
-                  this.huaweiUserInfo = null;
-                  this.getUIContext().getPromptAction().showToast({ message: '已退出登录', duration: 2000 });
-                }).catch((e: Error) => {
-                  this.getUIContext().getPromptAction().showToast({ message: `退出失败: ${e.message}`, duration: 2000 });
-                });
-              }
-            });
-          } else {
-            // 未登录 → 执行登录
-            try {
-              const userInfo = await huaweiAuthService.login(this.getUIContext().getHostContext() as common.UIAbilityContext);
-              if (userInfo && (userInfo.openID || userInfo.unionID)) {
-                this.isHuaweiLoggedIn = true;
-                this.huaweiUserInfo = userInfo;
-                console.info('[Index] 登录成功，userInfo=' + JSON.stringify(userInfo));
-                this.getUIContext().getPromptAction().showToast({
-                  message: '登录成功: ' + (userInfo.displayName || '已登录'),
-                  duration: 5000
-                });
-                // 登录成功后自动触发端云同步
-                cloudSyncService.sync();
-              } else {
-                this.isHuaweiLoggedIn = false;
-                this.getUIContext().getPromptAction().showToast({ message: '登录返回数据无效', duration: 3000 });
-              }
-            } catch (e) {
-              this.isHuaweiLoggedIn = false;
-              const err = e as BusinessError;
-              const hint = err.code === 1001502003
-                ? '签名证书指纹未在AGC注册或Account Kit未开通，请检查AGC配置'
-                : err.code === 1001502012
-                  ? '用户取消登录'
-                  : `登录失败[${err.code}]: ${err.message}`;
-              this.getUIContext().getPromptAction().showToast({
-                message: hint,
-                duration: 5000
-              });
-            }
-          }
-        })
-
-
-
-
         // ===== 数据管理 =====
         ListItem() {
           this.SectionTitle('数据管理')
@@ -4483,62 +4340,10 @@ struct SettingsTab {
         }
 
         ListItem() {
-          this.SettingRow('应用评分', '前往应用市场评分', true)
-        }
-        .onClick(() => {
-          const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
-          try {
-            context.startAbility({
-              action: 'ohos.want.action.appdetail',
-              uri: 'store://appgallery.huawei.com/app/detail?id=com.creativewriting.ai'
-            }).catch(() => {
-              this.getUIContext().getPromptAction().showToast({ message: '请前往应用市场搜索"创意写作"评分', duration: 3000 });
-            });
-          } catch (e) {
-            this.getUIContext().getPromptAction().showToast({ message: '请前往应用市场搜索"创意写作"评分', duration: 3000 });
-          }
-        })
-
-        ListItem() {
-          this.SettingRow('检查更新', 'v1.2.1', true)
-        }
-        .onClick(() => {
-          // 调用 AppGallery Kit 检查更新
-          const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
-          try {
-            updateManager.checkAppUpdate(context)
-              .then((checkResult: updateManager.CheckUpdateResult) => {
-                if (checkResult.updateAvailable === updateManager.UpdateAvailableCode.LATER_VERSION_EXIST) {
-                  // 有新版本，弹出系统升级对话框
-                  updateManager.showUpdateDialog(context)
-                    .catch(() => {
-                      this.getUIContext().getPromptAction().showToast({ message: '请前往应用市场更新', duration: 2000 });
-                    });
-                } else {
-                  this.getUIContext().getPromptAction().showToast({ message: '当前已是最新版本', duration: 2000 });
-                }
-              })
-              .catch(() => {
-                this.getUIContext().getPromptAction().showToast({ message: '检查更新失败，请稍后重试', duration: 2000 });
-              });
-          } catch (e) {
-            this.getUIContext().getPromptAction().showToast({ message: '检查更新失败，请稍后重试', duration: 2000 });
-          }
-        })
-
-        ListItem() {
           this.SettingRow('帮助中心', '使用教程与常见问题', true)
         }
         .onClick(() => {
           this.showHelpPanel = true;
-        })
-
-        ListItem() {
-          this.SettingRow('联系反馈', '提交问题或建议', true)
-        }
-        .onClick(() => {
-          this.feedbackText = '';
-          this.showFeedbackPanel = true;
         })
 
         ListItem() {
@@ -4590,7 +4395,7 @@ struct SettingsTab {
             }
 
             if (this.privacyPanelMode === 1) {
-              Text('1. 所有作品数据仅保存在您的设备上，我们不会收集您的创作内容。\n2. 本应用不会收集您的个人信息、位置、通讯录等隐私数据。\n3. 当您使用华为账号登录时，我们仅会获取必要的用户标识用于登录验证。\n4. 我们不会将您的任何数据分享给第三方。')
+              Text('1. 所有作品数据仅保存在您的设备上，我们不会收集您的创作内容。\n2. 本应用不会收集您的个人信息、位置、通讯录等隐私数据。\n3. AI推理在设备本地完成，不对外传输任何数据。\n4. 我们不会将您的任何数据分享给第三方。')
                 .fontSize(this.sf(12))
                 .fontColor(this._textSecondary)
                 .margin({ bottom: 16 })
@@ -4651,6 +4456,18 @@ struct SettingsTab {
               .fontColor(this._textSecondary)
               .margin({ bottom: 16 })
 
+            Text('开发者：周鹤')
+              .fontSize(this.sf(13))
+              .fontColor(this._textSecondary)
+              .margin({ bottom: 4 })
+              .alignSelf(ItemAlign.Start)
+
+            Text('联系邮箱：324334820@qq.com')
+              .fontSize(this.sf(13))
+              .fontColor(this._textSecondary)
+              .margin({ bottom: 16 })
+              .alignSelf(ItemAlign.Start)
+
             Text('功能特性：')
               .fontSize(this.sf(14))
               .fontWeight(FontWeight.Bold)
@@ -4658,7 +4475,20 @@ struct SettingsTab {
               .margin({ bottom: 8 })
               .alignSelf(ItemAlign.Start)
 
-            Text('• 短幕剧/中长篇双工作台，独立管理\n• AI对话生成，一键保存思维链路\n• 自动版本归档，修改历史可追溯\n• 书架与旧档区，作品归档一目了然\n• 本地GGUF模型离线推理，无需联网\n• 设备防卡死保护（线程优先级/CPU让出/内存监控）\n• 丰富的模板库，支持自定义提示词\n• 深色模式，保护您的视力')
+            Text('• 短幕剧/中长篇双工作台，独立管理\n• AI对话生成，一键保存思维链路\n• 自动版本归档，修改历史可追溯\n• 书架与旧档区，作品归档一目了然\n• 桌面卡片「灵感速记」，快速记录灵感\n• 本地GGUF模型离线推理，无需联网\n• 设备防卡死保护（线程优先级/CPU让出/内存监控）\n• 丰富的模板库，支持自定义提示词\n• 深色模式，保护您的视力')
+              .fontSize(this.sf(12))
+              .fontColor(this._textSecondary)
+              .margin({ bottom: 16 })
+              .alignSelf(ItemAlign.Start)
+
+            Text('开源声明：')
+              .fontSize(this.sf(13))
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this._textPrimary)
+              .margin({ bottom: 4 })
+              .alignSelf(ItemAlign.Start)
+
+            Text('• llama.cpp (MIT License)\n  https://github.com/ggml-org/llama.cpp\n• HarmonyOS SDK (华为终端许可协议)')
               .fontSize(this.sf(12))
               .fontColor(this._textSecondary)
               .margin({ bottom: 16 })
@@ -5004,70 +4834,6 @@ struct SettingsTab {
         .backgroundColor(Color.Transparent)
         .position({ x: 0, y: 0 })
       }
-
-      // 问题反馈面板
-
-      // 联系反馈面板
-      if (this.showFeedbackPanel) {
-        Stack({ alignContent: Alignment.Center }) {
-          // 半透明遮罩，点击关闭
-          Column()
-            .width('100%')
-            .height('100%')
-            .backgroundColor('rgba(0,0,0,0.4)')
-            .onClick(() => {
-              this.showFeedbackPanel = false;
-            })
-
-          Column() {
-            Row() {
-              Text('联系反馈')
-                .fontSize(this.sf(16))
-                .fontWeight(FontWeight.Bold)
-                .fontColor(this._textPrimary)
-              Blank()
-              Text('✕')
-                .fontSize(this.sf(18))
-                .fontColor($r('app.color.text_tertiary'))
-                .onClick(() => {
-                  this.showFeedbackPanel = false;
-                })
-            }
-            .width('100%')
-            .margin({ bottom: 8 })
-
-            Text('点击下方按钮，可打开系统反馈页面提交问题、截图和日志。反馈内容将在应用市场的用户反馈管理中查看。')
-              .fontSize(this.sf(12))
-              .fontColor($r('app.color.text_tertiary'))
-              .margin({ bottom: 16 })
-            Button('打开反馈页面')
-              .fontSize(this.sf(14))
-              .fontColor($r('app.color.text_on_accent'))
-              .backgroundColor($r('app.color.accent_primary'))
-              .borderRadius(20)
-              .height(44)
-              .width('100%')
-              .onClick(() => {
-                this.submitFeedback();
-              })
-            Text('提示：反馈服务需应用上架后生效，上架前可发送邮件至 support@creativewriting.app')
-              .fontSize(this.sf(11))
-              .fontColor($r('app.color.text_tertiary'))
-              .margin({ top: 12 })
-              .textAlign(TextAlign.Center)
-          }
-          .width('100%')
-          .padding(20)
-          .backgroundColor($r('app.color.bg_card'))
-          .border({ width: 1, color: this.cardBorder })
-          .borderRadius(16)
-          .margin({ left: 24, right: 24, top: 40, bottom: 40 })
-        }
-        .width('100%')
-        .height('100%')
-        .backgroundColor(Color.Transparent)
-        .position({ x: 0, y: 0 })
-      }
     }
     .width('100%')
     .height('100%')
@@ -5258,34 +5024,6 @@ struct SettingsTab {
         this.getUIContext().getPromptAction().showToast({ message: '权限申请被拒绝，可在系统设置中手动开启', duration: 3000 });
       }
     });
-  }
-
-  submitFeedback() {
-    // 调用系统反馈服务（AGC用户反馈管理）
-    const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    try {
-      context.startAbility({
-        bundleName: 'com.huawei.hmos.floatingwindow',
-        abilityName: 'FeedbackAbility'
-      }).then(() => {
-        this.showFeedbackPanel = false;
-      }).catch(() => {
-        // 系统反馈不可用，兜底：复制联系方式到剪贴板
-        const contactInfo = '创意写作App用户反馈\n请发送邮件至: support@creativewriting.app';
-        const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, contactInfo);
-        const systemPasteboard = pasteboard.getSystemPasteboard();
-        systemPasteboard.setData(pasteData).then(() => {
-          this.showFeedbackPanel = false;
-          this.getUIContext().getPromptAction().showToast({ message: '反馈服务暂不可用，联系方式已复制到剪贴板', duration: 3000 });
-        }).catch(() => {
-          this.showFeedbackPanel = false;
-          this.getUIContext().getPromptAction().showToast({ message: '反馈服务暂不可用，请发送邮件至 support@creativewriting.app', duration: 3000 });
-        });
-      });
-    } catch (e) {
-      this.showFeedbackPanel = false;
-      this.getUIContext().getPromptAction().showToast({ message: '反馈服务暂不可用，请发送邮件至 support@creativewriting.app', duration: 3000 });
-    }
   }
 
   clearCache() {

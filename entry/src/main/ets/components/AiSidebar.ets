@@ -1065,6 +1065,16 @@ export struct AiSidebar {
                   // 回复气泡
                   Column() {
                     if (round.aiResponse.length > 0) {
+                      // AI生成显式标识
+                      Text('AI生成')
+                        .fontSize(this.sf(10))
+                        .fontColor($r('app.color.text_tertiary'))
+                        .backgroundColor($r('app.color.divider'))
+                        .borderRadius(4)
+                        .padding({ left: 6, right: 6, top: 1, bottom: 1 })
+                        .margin({ bottom: 4 })
+                        .alignSelf(ItemAlign.Start)
+
                       Text(round.aiResponse)
                         .fontSize(this.sf(13))
                         .fontColor($r('app.color.text_primary'))
@@ -1173,6 +1183,14 @@ export struct AiSidebar {
           .width('100%')
           .margin({ bottom: 4 })
         }
+
+        // AI生成内容提示（持续显示）
+        Text('※ AI生成内容仅供参考，请审校后使用')
+          .fontSize(this.sf(10))
+          .fontColor(this.sidebarSubTextColor)
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .margin({ bottom: 4 })
 
         // 输入框和发送按钮
         Row() {

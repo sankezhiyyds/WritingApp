@@ -15,16 +15,6 @@
     "pages": "$profile:main_pages",
     "requestPermissions": [
       {
-        "name": "ohos.permission.INTERNET",
-        "reason": "$string:permission_reason_internet",
-        "usedScene": {
-          "abilities": [
-            "EntryAbility"
-          ],
-          "when": "always"
-        }
-      },
-      {
         "name": "ohos.permission.MICROPHONE",
         "reason": "$string:permission_reason_microphone",
         "usedScene": {
@@ -32,16 +22,6 @@
             "EntryAbility"
           ],
           "when": "inuse"
-        }
-      },
-      {
-        "name": "ohos.permission.DISTRIBUTED_DATASYNC",
-        "reason": "$string:permission_reason_distributed_sync",
-        "usedScene": {
-          "abilities": [
-            "EntryAbility"
-          ],
-          "when": "always"
         }
       }
     ],

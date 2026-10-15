@@ -8,9 +8,6 @@ import { settingsManager } from '../model/SettingsManager';
 import { responsiveManager } from '../model/ResponsiveManager';
 import { permissionManager } from '../model/PermissionManager';
 import { systemResourceMonitor } from '../model/SystemResourceMonitor';
-import { huaweiAuthService } from '../model/HuaweiAuthService';
-import { cloudSyncService } from '../model/CloudSyncService';
-import { distributedSyncService } from '../model/DistributedSyncService';
 
 export default class EntryAbility extends UIAbility {
   private storedWindowStage: window.WindowStage | null = null;
@@ -50,12 +47,6 @@ export default class EntryAbility extends UIAbility {
     permissionManager.init(this.context);
     // 初始化热管理监控，防止CPU过热导致设备卡死重启
     systemResourceMonitor.initThermalMonitor();
-    // 初始化华为账号认证服务
-    huaweiAuthService.init(this.context);
-    // 初始化云空间同步服务
-    cloudSyncService.init(this.context);
-    // 初始化多端协同服务
-    distributedSyncService.init(this.context);
     // 等待设置从磁盘加载完成后，再初始化全局深色模式到AppStorage并恢复颜色模式
     // 必须在 initPromise 完成后再读 settings，否则会拿到内存默认值（全false），
     // 导致每次冷启动都重置为浅色，手动深色设置丢失
@@ -103,8 +94,6 @@ export default class EntryAbility extends UIAbility {
 
   onDestroy(): void {
     console.info('[EntryAbility] onDestroy');
-    cloudSyncService.destroy();
-    distributedSyncService.destroy();
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
