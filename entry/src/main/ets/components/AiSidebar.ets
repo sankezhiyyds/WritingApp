@@ -958,7 +958,7 @@ export struct AiSidebar {
                 }
                 .margin({ bottom: 6 })
 
-                Text('• 需在设置中选择GGUF模型文件后才能对话\n• AI参数（线程数、上下文长度等）请根据设备SoC和内存合理设置，过大可能导致卡顿或闪退\n• 可在设置中填写自定义提示词，引导AI按你的风格创作\n• 建议经常导出数据做备份，避免因设备异常导致数据丢失')
+                Text('• 需在设置中选择GGUF模型文件后才能对话\n• 模型推荐：4GB内存选0.5B，6~8GB选0.5B~1B，8~12GB选1B~1.7B（Q4_K_M量化），过大易OOM闪退\n• AI参数（线程数、上下文长度等）请根据设备SoC和内存合理设置，过大可能导致卡顿或闪退\n• 可在设置中填写自定义提示词，引导AI按你的风格创作\n• 建议经常导出数据做备份，避免因设备异常导致数据丢失')
                   .fontSize(this.sf(11))
                   .fontColor(this.sidebarSubTextColor)
                   .textAlign(TextAlign.Start)
