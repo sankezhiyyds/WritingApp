@@ -1,6 +1,6 @@
 # 创意写作 - HarmonyOS 本地 AI 写作助手
 
-> 基于 HarmonyOS 的 AI 创意写作应用，支持短剧、中长篇小说等多种创作模板，内置本地 GGUF 大模型离线推理引擎。无需联网、无需 API Key，数据完全本地存储，支持华为云空间自动同步。
+> 基于 HarmonyOS 的 AI 创意写作应用，支持短剧、中长篇小说等多种创作模板，内置本地 GGUF 大模型离线推理引擎。无需联网、无需 API Key，数据完全本地存储。
 
 ## 功能特性
 
@@ -26,12 +26,6 @@
 - 设备防卡死保护：推理线程降优先级（nice +5）、`sched_yield()` + 自适应休眠让出 CPU、每 16 token 检查可用内存（< 48MB 主动中止）
 - 线程数保护：自动检测取逻辑核 75%，手动设置超过逻辑核数时自动 clamp
 
-### 华为账号与云同步
-- 华为账号登录（静默登录 + 普通登录），基于 Account Kit
-- 端云文件协同同步：数据写入 `cloudFileDir`，系统自动同步到华为云空间
-- 同步性能优化：5 秒超时 + fire-and-forget push 模式
-- 使用系统级华为账号，无需 App 内登录即可同步
-
 ### 多端适配
 - 手机（竖屏）
 - 折叠屏（折叠态 / 展开态）
@@ -53,7 +47,7 @@
 ```
 WritingApp/
 ├── AppScope/
-│   └── app.json5                    # 应用配置（bundleName、版本、云同步开关）
+│   └── app.json5                    # 应用配置（bundleName、版本）
 ├── entry/
 │   └── src/main/
 │       ├── ets/
@@ -71,8 +65,6 @@ WritingApp/
 │       │   │   ├── AIService.ets    # AI 服务层
 │       │   │   ├── GGUFService.ets  # GGUF 推理服务（NAPI 桥接）
 │       │   │   ├── SettingsManager.ets  # 设置管理
-│       │   │   ├── HuaweiAuthService.ets  # 华为账号认证
-│       │   │   ├── CloudSyncService.ets  # 端云文件协同同步
 │       │   │   ├── SystemResourceMonitor.ets  # 系统资源监控
 │       │   │   ├── PerformanceOptimizer.ets  # 性能优化
 │       │   │   ├── ResponsiveManager.ets  # 响应式布局
@@ -101,8 +93,6 @@ WritingApp/
 | HarmonyOS API 12+ | 目标 SDK 版本（最低兼容 API 24） |
 | llama.cpp | 本地 GGUF 大模型推理（CPU, ARM NEON） |
 | NAPI | ArkTS 与 C++ 原生桥接 |
-| @kit.AccountKit | 华为账号登录认证 |
-| @kit.CoreFileKit.cloudSync | 端云文件协同同步 |
 | @kit.ArkData.preferences | 本地偏好存储 |
 | @kit.CoreFileKit.fileIo | 文件 I/O（数据落盘） |
 
@@ -142,19 +132,13 @@ WritingApp/
 - `flash_attn` 必须设为 `DISABLED`（AUTO 导致卡死）
 - Debug 构建下使用 `-O2` 优化（避免量化内核性能问题）
 
-## 数据存储与同步
+## 数据存储
 
 ### 本地存储
 - 数据文件存储在 `context.filesDir/writing_app/` 目录
 - 核心文件：`works.json`、`recycle_bin.json`、`inspirations.json`
 - 落盘触发点：编辑时（debounce 500ms）、导入后、推理前、进后台、内存压力时
 - `loadFromStorage` 仅在 filesDir 无数据时补充，不会覆盖文件数据
-
-### 云同步
-- 端云文件协同：数据写入 `context.cloudFileDir/writing_app/`，系统自动同步
-- 使用系统级华为账号，无需 App 内登录
-- 同步超时 5 秒，push 阶段 fire-and-forget
-- 需设备 HarmonyOS 6.0.0.115+，API 21+
 
 ## 安装方式
 
@@ -176,8 +160,7 @@ WritingApp/
 | 包名 | `com.creativewriting.ai` |
 | 版本 | 1.2.1 |
 | 模块类型 | entry（HAP） |
-| 云同步 | 已启用（`cloudFileSyncEnabled: true`） |
 
 ## 开源许可
 
-本项目仅供学习交流使用。
+本项目采用 MIT License 开源，详见 [LICENSE](LICENSE)。

@@ -736,7 +736,7 @@ struct Index {
             .alignSelf(ItemAlign.Start)
         }
 
-        // 第4页：隐私与登录
+        // 第4页：隐私保护
         if (this.onboardingPage === 4) {
           Text('🔒')
             .fontSize(this.sf(60))
@@ -754,7 +754,7 @@ struct Index {
             .margin({ bottom: 4 })
             .alignSelf(ItemAlign.Start)
 
-          Text('• 作品数据本地存储，登录后多设备自动同步')
+          Text('• 作品数据本地存储，建议定期导出备份')
             .fontSize(this.sf(14))
             .fontColor(this.subTextColor)
             .margin({ bottom: 4 })
