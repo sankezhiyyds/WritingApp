@@ -549,7 +549,7 @@ struct Index {
       Column() {
         // 页面指示器
         Row() {
-          ForEach([0, 1, 2, 3, 4, 5, 6], (index: number) => {
+          ForEach([0, 1, 2, 3, 4, 5], (index: number) => {
             Column()
               .width(8)
               .height(8)
@@ -736,58 +736,8 @@ struct Index {
             .alignSelf(ItemAlign.Start)
         }
 
-        // 第4页：隐私保护
+        // 第4页：使用说明
         if (this.onboardingPage === 4) {
-          Text('🔒')
-            .fontSize(this.sf(60))
-            .margin({ bottom: 16 })
-
-          Text('隐私保护')
-            .fontSize(this.sf(24))
-            .fontWeight(FontWeight.Bold)
-            .fontColor(this.textColor)
-            .margin({ bottom: 12 })
-
-          Text('• 所有数据仅保存在本地')
-            .fontSize(this.sf(14))
-            .fontColor(this.subTextColor)
-            .margin({ bottom: 4 })
-            .alignSelf(ItemAlign.Start)
-
-          Text('• 作品数据本地存储，建议定期导出备份')
-            .fontSize(this.sf(14))
-            .fontColor(this.subTextColor)
-            .margin({ bottom: 4 })
-            .alignSelf(ItemAlign.Start)
-
-          Text('• 所有数据仅保存在本机，不会上传')
-            .fontSize(this.sf(14))
-            .fontColor(this.subTextColor)
-            .margin({ bottom: 20 })
-            .alignSelf(ItemAlign.Start)
-
-          Text('纯本地运行')
-            .fontSize(this.sf(16))
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.textColor)
-            .margin({ bottom: 8 })
-            .alignSelf(ItemAlign.Start)
-
-          Text('• 无需联网，AI推理在设备本地完成')
-            .fontSize(this.sf(14))
-            .fontColor(this.subTextColor)
-            .margin({ bottom: 4 })
-            .alignSelf(ItemAlign.Start)
-
-          Text('• 建议定期导出数据做备份，避免设备异常导致丢失')
-            .fontSize(this.sf(14))
-            .fontColor(this.subTextColor)
-            .margin({ bottom: 4 })
-            .alignSelf(ItemAlign.Start)
-        }
-
-        // 第5页：使用说明
-        if (this.onboardingPage === 5) {
           Text('📖')
             .fontSize(this.sf(60))
             .margin({ bottom: 16 })
@@ -848,8 +798,8 @@ struct Index {
           .width('100%')
         }
 
-        // 第6页：免责协议
-        if (this.onboardingPage === 6) {
+        // 第5页：免责协议
+        if (this.onboardingPage === 5) {
           Text('📋')
             .fontSize(this.sf(60))
             .margin({ bottom: 16 })
@@ -939,7 +889,7 @@ struct Index {
               })
           }
 
-          if (this.onboardingPage < 6) {
+          if (this.onboardingPage < 5) {
             Button('下一步')
               .fontSize(this.sf(14))
               .fontColor($r('app.color.text_on_accent'))
