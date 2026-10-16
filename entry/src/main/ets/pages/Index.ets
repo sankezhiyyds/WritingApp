@@ -924,7 +924,7 @@ struct Index {
         .margin({ top: 20 })
       }
       .width('90%')
-      .constraintSize({ maxWidth: 420, maxHeight: '85%' })
+      .constraintSize({ maxWidth: 420, maxHeight: 680 })
       .padding(24)
       .backgroundColor($r('app.color.bg_card'))
       .border({ width: 1, color: this.cardBorder })
@@ -2590,7 +2590,7 @@ struct Index {
         .margin({ top: 16 })
       }
       .width('80%')
-      .constraintSize({ maxHeight: '85%' })
+      .constraintSize({ maxHeight: 500 })
       .padding(24)
       .backgroundColor($r('app.color.bg_card'))
       .border({ width: 1, color: this.cardBorder })
